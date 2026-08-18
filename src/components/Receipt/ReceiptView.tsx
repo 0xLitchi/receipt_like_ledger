@@ -56,25 +56,19 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto">
-      {/* 顶部拟真热敏打印机机头，标头“荔枝牌小票打印机” */}
+      {/* 顶部拟真热敏打印机机头：去除了抬头文字，去除了“就绪”文字，仅保留图标与绿灯 */}
       <div
         className={`w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-pixel relative no-print mb-[-6px] transition-transform ${
           isPrinting ? 'animate-machine-vibrate' : ''
         }`}
       >
-        {/* 打印机品牌标 */}
-        <div className="flex items-center gap-2">
-          <Printer className="w-4.5 h-4.5 text-emerald-400 animate-pulse" />
-          <span className="text-[13px] font-black tracking-widest text-slate-200 uppercase font-pixel">
-            荔枝牌小票打印机
-          </span>
+        {/* 左侧打印机图标 */}
+        <div className="flex items-center">
+          <Printer className="w-4 h-4 text-emerald-400 opacity-90 animate-pulse" />
         </div>
 
-        {/* 打印工作状态指示灯 */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-400 font-pixel font-bold">
-            {isPrinting ? '打印中...' : '就绪'}
-          </span>
+        {/* 右侧只保留指示绿灯 */}
+        <div className="flex items-center">
           <div
             className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
               isPrinting
@@ -90,7 +84,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
       {/* 小票展示区域 */}
       <div className="w-full relative overflow-hidden pt-1 min-h-[300px]">
-        {/* 激光打字高亮光束 (z-50 顶层) */}
+        {/* 激光打字高亮光束 */}
         {isPrinting && (
           <div className="absolute inset-x-0 h-2 bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_25px_#22d3ee,0_0_45px_#10b981] pointer-events-none z-50 animate-laser-scan-slow" />
         )}
