@@ -4,7 +4,7 @@ interface Env {
   ACCESS_TOKEN?: string;
 }
 
-// 辅助函数：彻底去除换行符 (\r, \n)、制表符、多余空格及引号
+// 辅助函数：剥离换行符 (\r, \n)、制表符、多余空格及引号
 const cleanSecretString = (str?: string | null): string => {
   if (!str) return '';
   return str.replace(/[\r\n\t\s"']/g, '').trim();
@@ -30,13 +30,15 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const expectedAdminPassword = cleanSecretString(env.ADMIN_PASSWORD);
   const isAuthorizedAdmin = !!(expectedAdminPassword && authHeader === expectedAdminPassword);
 
-  // 2. 严格从 Cloudflare Pages 环境变量中读取 ACCESS_TOKEN 并彻底清洗换行符
+  // 2. 严格读取 Cloudflare 环境变量 ACCESS_TOKEN
   const cfAccessToken = cleanSecretString(env.ACCESS_TOKEN);
 
-  let hasFullAccess = true;
-
-  // 只要 Cloudflare 环境变量中配置了 ACCESS_TOKEN（非空），即强制触发脱敏校验
-  if (cfAccessToken !== '') {
+  let hasFullAccess = false;
+  if (!cfAccessToken) {
+    // 若服务端未设置 ACCESS_TOKEN，则默认公开访问
+    hasFullAccess = true;
+  } else {
+    // 只要配置了 ACCESS_TOKEN，必须匹配 URL 参数或具有管理员权限
     hasFullAccess = isAuthorizedAdmin || (queryToken !== '' && queryToken === cfAccessToken);
   }
 
