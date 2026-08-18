@@ -22,7 +22,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   const [isPrinting, setIsPrinting] = useState(false);
   const prevMonthRef = useRef(selectedMonth);
 
-  // 2. 放慢打印吐纸与激光打字扫描速度至 1.65s (1650ms)
+  // 当切换月份时触发 1.65s 的激光打字与出纸效果
   useEffect(() => {
     if (prevMonthRef.current !== selectedMonth) {
       prevMonthRef.current = selectedMonth;
@@ -56,7 +56,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto">
-      {/* 1. 顶部拟真热敏打印机机头，修改标头为“荔枝牌小票打印机”，附带马达高频微幅震动 */}
+      {/* 1. 顶部拟真热敏打印机机头，标头“荔枝牌小票打印机”，马达微幅震动 */}
       <div
         className={`w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-mono relative no-print mb-[-6px] transition-transform ${
           isPrinting ? 'animate-machine-vibrate' : ''
@@ -88,14 +88,19 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
         <div className="absolute inset-x-3 bottom-0 h-1 bg-black rounded-full shadow-inner border-t border-slate-900" />
       </div>
 
-      {/* 小票出纸与放慢后的激光打字扫描区域 */}
-      <div className="w-full relative overflow-hidden pt-1">
+      {/* 小票展示区域 (激光打字光束独立置于顶层，确保 100% 可见) */}
+      <div className="w-full relative overflow-hidden pt-1 min-h-[300px]">
+        {/* 激光打字高亮光束：独立置于外层框架的最顶层 (z-50)，从 top:0% -> 100% 扫过 */}
+        {isPrinting && (
+          <div className="absolute inset-x-0 h-2 bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_25px_#22d3ee,0_0_45px_#10b981] pointer-events-none z-50 animate-laser-scan-slow" />
+        )}
+
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
             key={selectedMonth}
             initial={{
               opacity: 0.1,
-              y: -100,
+              y: -90,
               clipPath: 'inset(0% 0% 100% 0%)',
             }}
             animate={{
@@ -107,7 +112,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
               opacity: 0,
               y: 120,
               scale: 0.94,
-              transition: { duration: 0.35, ease: 'easeIn' },
+              transition: { duration: 0.3, ease: 'easeIn' },
             }}
             transition={{
               duration: 1.65,
@@ -115,11 +120,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             }}
             className="receipt-container receipt-paper-box receipt-both-sawtooth font-mono relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
           >
-            {/* 放慢后的激光扫描打字光束 (1.65s 从上至下滑动显影) */}
-            {isPrinting && (
-              <div className="absolute inset-x-0 h-1.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_20px_#34d399,0_0_35px_#10b981] pointer-events-none z-40 animate-laser-scan-slow" />
-            )}
-
             <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
             <ReceiptHeader
