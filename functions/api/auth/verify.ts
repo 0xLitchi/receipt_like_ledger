@@ -7,10 +7,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const body = await context.request.json() as { password?: string };
     const adminPassword = context.env.ADMIN_PASSWORD;
 
-    // 如果未设置 ADMIN_PASSWORD，默认开发密码为 "admin" 或禁止登录（若提供非空密码与默认密码匹配）
-    const targetPassword = adminPassword || 'admin';
+    if (!adminPassword) {
+      return new Response(JSON.stringify({ success: false, message: '服务端未配置 ADMIN_PASSWORD 环境变量' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    if (body.password === targetPassword) {
+    if (body.password && body.password === adminPassword) {
       return new Response(JSON.stringify({ success: true, message: 'Authentication successful' }), {
         headers: { 'Content-Type': 'application/json' },
       });

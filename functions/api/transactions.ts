@@ -9,7 +9,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   if (!env.DB) {
     return new Response(JSON.stringify({
       success: false,
-      message: 'D1 Binding DB not configured in Cloudflare environment',
+      message: 'D1 Binding DB not configured',
       useFallback: true
     }), {
       status: 200,
@@ -36,12 +36,11 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
 
-  // Verify Admin Password from header
   const authHeader = request.headers.get('X-Admin-Password');
-  const expectedPassword = env.ADMIN_PASSWORD || 'admin';
+  const expectedPassword = env.ADMIN_PASSWORD;
 
-  if (authHeader !== expectedPassword) {
-    return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误' }), {
+  if (!expectedPassword || authHeader !== expectedPassword) {
+    return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误或未配置' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });

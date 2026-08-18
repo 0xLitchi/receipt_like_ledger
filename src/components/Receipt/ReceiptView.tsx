@@ -11,7 +11,6 @@ interface ReceiptViewProps {
   stats: SummaryStats;
   theme: ThemeType;
   selectedMonth: string;
-  selectedMember: string;
   isAdmin?: boolean;
   onEditTransaction?: (t: Transaction) => void;
   onDeleteTransaction?: (id: string) => void;
@@ -22,7 +21,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   stats,
   theme,
   selectedMonth,
-  selectedMember,
   isAdmin = false,
   onEditTransaction,
   onDeleteTransaction,
@@ -47,13 +45,12 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
       link.click();
     } catch (err) {
       console.error('Failed to export PNG', err);
-      alert('导出图片失败，请稍后重试');
+      alert('导出图片失败');
     }
   };
 
   return (
-    <div className="flex justify-center my-6 px-2">
-      {/* 拟真购物小票纸张主体 */}
+    <div className="flex justify-center my-4 px-2">
       <div
         ref={receiptRef}
         className={`receipt-container receipt-both-sawtooth theme-${theme} relative w-full max-w-md p-4 sm:p-6 shadow-2xl transition-all duration-300 rounded-sm`}
@@ -61,22 +58,18 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
         }}
       >
-        {/* 顶部微折痕或油墨效果遮罩 */}
-        <div className="absolute inset-x-0 top-0 h-4 bg-gradient-to-b from-black/5 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-black/5 to-transparent pointer-events-none" />
 
-        {/* 页眉 */}
         <ReceiptHeader
           stats={stats}
           selectedMonth={selectedMonth}
-          selectedMember={selectedMember}
         />
 
-        {/* 账单列表明细 */}
-        <div className="my-2 min-h-[160px]">
+        <div className="my-2 min-h-[140px]">
           {transactions.length === 0 ? (
             <div className="py-12 text-center text-xs opacity-50 font-mono flex flex-col items-center gap-2">
-              <PackageOpen className="w-8 h-8 opacity-40" />
-              <span>暂无符合条件的账目明细</span>
+              <PackageOpen className="w-7 h-7 opacity-40" />
+              <span>本月暂无记账明细</span>
             </div>
           ) : (
             transactions.map((t) => (
@@ -91,15 +84,13 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           )}
         </div>
 
-        {/* 页脚 */}
         <ReceiptFooter
           stats={stats}
           onPrint={handlePrint}
           onExport={handleExportPNG}
         />
 
-        {/* 底部折痕 */}
-        <div className="absolute inset-x-0 bottom-0 h-4 bg-gradient-to-t from-black/5 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-3 bg-gradient-to-t from-black/5 to-transparent pointer-events-none" />
       </div>
     </div>
   );

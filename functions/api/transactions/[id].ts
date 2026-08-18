@@ -8,10 +8,10 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
   const id = params.id as string;
 
   const authHeader = request.headers.get('X-Admin-Password');
-  const expectedPassword = env.ADMIN_PASSWORD || 'admin';
+  const expectedPassword = env.ADMIN_PASSWORD;
 
-  if (authHeader !== expectedPassword) {
-    return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误' }), {
+  if (!expectedPassword || authHeader !== expectedPassword) {
+    return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误或未配置' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -56,10 +56,10 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
   const id = params.id as string;
 
   const authHeader = request.headers.get('X-Admin-Password');
-  const expectedPassword = env.ADMIN_PASSWORD || 'admin';
+  const expectedPassword = env.ADMIN_PASSWORD;
 
-  if (authHeader !== expectedPassword) {
-    return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误' }), {
+  if (!expectedPassword || authHeader !== expectedPassword) {
+    return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误或未配置' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
