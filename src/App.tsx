@@ -11,7 +11,7 @@ export function App() {
   const [hasFullAccess, setHasFullAccess] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
 
-  // 白天模式
+  // 强制白天模式
   useEffect(() => {
     document.body.classList.remove('mode-night');
     document.body.classList.add('mode-day');
@@ -21,7 +21,7 @@ export function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
-  // 1. 加载交易数据 (自动透传 URL token 参数校验)
+  // 1. 加载交易数据 (公开页面独立通过 URL ?token=... / ?access_token=... 校验 CF 环境变量 ACCESS_TOKEN)
   const loadData = async () => {
     setLoading(true);
     const result = await storage.getTransactions();
@@ -94,13 +94,11 @@ export function App() {
     };
   }, [filteredTransactions]);
 
-  // 快捷触发后台模式（按 "." 键触发）
+  // 2. 快捷触发后台模式（按 "." 键触发）：
+  // 严格要求校验 ADMIN_PASSWORD 鉴权密码！
   const handleAdminToggle = useCallback(() => {
-    if (storage.getSavedAdminPassword()) {
-      setShowAdminPanel(true);
-    } else {
-      setShowAuthModal(true);
-    }
+    // 每次点击/触发 "." 键时，始终强制打开 AdminAuthModal 校验 ADMIN_PASSWORD 密码
+    setShowAuthModal(true);
   }, []);
 
   // 全局键盘监听 "." 按键触发后台
@@ -145,13 +143,6 @@ export function App() {
         recentMonths={recentMonths}
       />
 
-      {/* 1. 未携带匹配 ACCESS_TOKEN 时的脱敏提醒 */}
-      {!hasFullAccess && (
-        <div className="mb-4 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded text-xs font-mono no-print">
-          🔒 访问未携带匹配的 ACCESS_TOKEN 密钥，金额与备注已被遮罩脱敏
-        </div>
-      )}
-
       {/* 拟物化购物小票展示区 */}
       <main className="w-full max-w-md mx-auto">
         {loading ? (
@@ -168,11 +159,12 @@ export function App() {
         )}
       </main>
 
-      {/* 管理员验证弹窗 (按 "." 键触发) */}
+      {/* 2. 管理员验证弹窗 (按 "." 键触发时强制弹出输入 ADMIN_PASSWORD) */}
       <AdminAuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onSuccess={() => {
+          setShowAuthModal(false);
           setShowAdminPanel(true);
         }}
       />
@@ -180,7 +172,10 @@ export function App() {
       {/* Excel 风格后台数据批量管理面板 */}
       <AdminPanel
         isOpen={showAdminPanel}
-        onClose={() => setShowAdminPanel(false)}
+        onClose={() => {
+          setShowAdminPanel(false);
+          storage.logoutAdmin();
+        }}
         transactions={transactions}
         onBatchSave={handleBatchSave}
         onLogout={handleAdminLogout}
