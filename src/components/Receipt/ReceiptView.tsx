@@ -22,7 +22,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   const [isPrinting, setIsPrinting] = useState(false);
   const prevMonthRef = useRef(selectedMonth);
 
-  // 当切换月份时触发 1.65s 的激光打字、80年代老虎机数字滚轮与出纸效果
+  // 当切换月份时触发 1.65s 拍立得暗房热感显影与出纸效果
   useEffect(() => {
     if (prevMonthRef.current !== selectedMonth) {
       prevMonthRef.current = selectedMonth;
@@ -56,45 +56,42 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto">
-      {/* 顶部拟真热敏打印机机头，马达高频微幅震动 */}
+      {/* 顶部拟真热敏打印机机头 */}
       <div
         className={`w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-pixel relative no-print mb-[-6px] transition-transform ${
           isPrinting ? 'animate-machine-vibrate' : ''
         }`}
       >
-        {/* 左侧打印机图标 */}
         <div className="flex items-center">
-          <Printer className="w-4 h-4 text-emerald-400 opacity-90 animate-pulse" />
+          <Printer className="w-4 h-4 text-rose-400 opacity-90 animate-pulse" />
         </div>
 
-        {/* 右侧只保留指示绿灯 */}
         <div className="flex items-center">
           <div
             className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
               isPrinting
-                ? 'bg-emerald-400 shadow-[0_0_10px_#34d399] animate-ping'
+                ? 'bg-rose-500 shadow-[0_0_12px_#f43f5e] animate-ping'
                 : 'bg-emerald-500/80 shadow-[0_0_6px_#10b981]'
             }`}
           />
         </div>
 
-        {/* 出纸缝隙 */}
         <div className="absolute inset-x-3 bottom-0 h-1 bg-black rounded-full shadow-inner border-t border-slate-900" />
       </div>
 
-      {/* 小票展示区域 */}
+      {/* 小票展示区域 (拍立得暗房热感显影效果) */}
       <div className="w-full relative overflow-hidden pt-1 min-h-[300px]">
-        {/* 激光打字高亮光束 (z-50 顶层) */}
+        {/* 拍立得暗房热感显影激光光束 (暖红+金橙色发光线 z-50 顶层) */}
         {isPrinting && (
-          <div className="absolute inset-x-0 h-2 bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_25px_#22d3ee,0_0_45px_#10b981] pointer-events-none z-50 animate-laser-scan-slow" />
+          <div className="absolute inset-x-0 h-2.5 bg-gradient-to-r from-transparent via-rose-500 to-transparent shadow-[0_0_30px_#f43f5e,0_0_50px_#fb923c] pointer-events-none z-50 animate-polaroid-laser" />
         )}
 
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
             key={selectedMonth}
             initial={{
-              opacity: 0.1,
-              y: -90,
+              opacity: 0.2,
+              y: -80,
               clipPath: 'inset(0% 0% 100% 0%)',
             }}
             animate={{
@@ -116,46 +113,47 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           >
             <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
-            <ReceiptHeader
-              selectedMonth={selectedMonth}
-              transactions={transactions}
-              hasFullAccess={hasFullAccess}
-              isPrinting={isPrinting}
-            />
+            {/* 小票内容区域 (在显影过程中执行由浅入深 animate-ink-develop 墨迹呈现) */}
+            <div className={isPrinting ? 'animate-ink-develop' : ''}>
+              <ReceiptHeader
+                selectedMonth={selectedMonth}
+                transactions={transactions}
+                hasFullAccess={hasFullAccess}
+                isPrinting={isPrinting}
+              />
 
-            <div className="my-2 min-h-[140px]">
-              {dateGroups.length === 0 ? (
-                <div className="py-12 text-center text-xs opacity-50 font-pixel flex flex-col items-center gap-2">
-                  <PackageOpen className="w-7 h-7 opacity-40" />
-                  <span>本月暂无记账明细</span>
-                </div>
-              ) : (
-                dateGroups.map((group) => (
-                  <div key={group.date} className="my-2">
-                    {/* 子抬头 */}
-                    <div className="bg-black/5 py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-dashed border-current/30 text-left tracking-wider">
-                      <span>{group.shortDate}</span>
-                    </div>
-
-                    {/* 行明细 (透传 isPrinting 触发复古老虎机数字滚轮) */}
-                    {group.items.map((t) => (
-                      <ReceiptItem
-                        key={t.id}
-                        transaction={t}
-                        hasFullAccess={hasFullAccess}
-                        isPrinting={isPrinting}
-                      />
-                    ))}
+              <div className="my-2 min-h-[140px]">
+                {dateGroups.length === 0 ? (
+                  <div className="py-12 text-center text-xs opacity-50 font-pixel flex flex-col items-center gap-2">
+                    <PackageOpen className="w-7 h-7 opacity-40" />
+                    <span>本月暂无记账明细</span>
                   </div>
-                ))
-              )}
-            </div>
+                ) : (
+                  dateGroups.map((group) => (
+                    <div key={group.date} className="my-2">
+                      <div className="bg-black/5 py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-dashed border-current/30 text-left tracking-wider">
+                        <span>{group.shortDate}</span>
+                      </div>
 
-            <ReceiptFooter
-              stats={stats}
-              hasFullAccess={hasFullAccess}
-              isPrinting={isPrinting}
-            />
+                      {group.items.map((t) => (
+                        <ReceiptItem
+                          key={t.id}
+                          transaction={t}
+                          hasFullAccess={hasFullAccess}
+                          isPrinting={isPrinting}
+                        />
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <ReceiptFooter
+                stats={stats}
+                hasFullAccess={hasFullAccess}
+                isPrinting={isPrinting}
+              />
+            </div>
 
             <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
           </motion.div>

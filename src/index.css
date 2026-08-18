@@ -102,8 +102,8 @@ body.mode-day .receipt-paper-box {
   animation: machineVibrate 0.12s infinite linear;
 }
 
-/* 放慢后的激光扫描光束线 (1.65 秒) */
-@keyframes laserScanBeamSlow {
+/* 拍立得暗房热感显影激光扫线 (暖红 + 暖橙激光束) */
+@keyframes polaroidLaserScan {
   0% {
     top: 0%;
     opacity: 1;
@@ -117,8 +117,32 @@ body.mode-day .receipt-paper-box {
   }
 }
 
-.animate-laser-scan-slow {
-  animation: laserScanBeamSlow 1.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+.animate-polaroid-laser {
+  animation: polaroidLaserScan 1.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+/* 拍立得相片暗房显影 Keyframes (从纯白底片到墨迹显影加深) */
+@keyframes polaroidInkDevelop {
+  0% {
+    opacity: 0.05;
+    filter: blur(3px) sepia(100%) hue-rotate(-20deg) brightness(1.5);
+  }
+  30% {
+    opacity: 0.3;
+    filter: blur(1.5px) sepia(80%) hue-rotate(-10deg) brightness(1.2);
+  }
+  70% {
+    opacity: 0.85;
+    filter: blur(0.5px) sepia(30%) brightness(1.05);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0) sepia(0%) brightness(1);
+  }
+}
+
+.animate-ink-develop {
+  animation: polaroidInkDevelop 1.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 .thermal-dashed-line {
