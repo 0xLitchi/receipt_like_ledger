@@ -82,7 +82,7 @@ body.mode-day .receipt-paper-box {
     0 30px 40px -10px rgba(0, 0, 0, 0.6);
 }
 
-/* 热敏打印机头部金属槽与激光扫描效果 */
+/* 热敏打印机头部金属槽 */
 .printer-slot-head {
   background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
   box-shadow: 
@@ -90,8 +90,20 @@ body.mode-day .receipt-paper-box {
     0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
-/* 激光扫描光束线 */
-@keyframes laserScanBeam {
+/* 机器齿轮与打字马达高频微幅震动 */
+@keyframes machineVibrate {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-0.8px) rotate(-0.1deg); }
+  50% { transform: translateY(0.8px) rotate(0.1deg); }
+  75% { transform: translateY(-0.4px); }
+}
+
+.animate-machine-vibrate {
+  animation: machineVibrate 0.12s infinite linear;
+}
+
+/* 放慢后的激光扫描光束线 (1.65 秒) */
+@keyframes laserScanBeamSlow {
   0% {
     top: 0%;
     opacity: 1;
@@ -105,8 +117,8 @@ body.mode-day .receipt-paper-box {
   }
 }
 
-.animate-laser-scan {
-  animation: laserScanBeam 0.85s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+.animate-laser-scan-slow {
+  animation: laserScanBeamSlow 1.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 .thermal-dashed-line {

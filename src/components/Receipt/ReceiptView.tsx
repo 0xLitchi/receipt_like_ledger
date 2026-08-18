@@ -22,14 +22,14 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   const [isPrinting, setIsPrinting] = useState(false);
   const prevMonthRef = useRef(selectedMonth);
 
-  // 当月份改变时，触发拟真热敏打印头激光逐行扫描吐纸动画
+  // 2. 放慢打印吐纸与激光打字扫描速度至 1.65s (1650ms)
   useEffect(() => {
     if (prevMonthRef.current !== selectedMonth) {
       prevMonthRef.current = selectedMonth;
       setIsPrinting(true);
       const timer = setTimeout(() => {
         setIsPrinting(false);
-      }, 950);
+      }, 1650);
       return () => clearTimeout(timer);
     }
   }, [selectedMonth]);
@@ -56,20 +56,24 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto">
-      {/* 顶部拟真热敏打印机机头 (Metallic Thermal Printer Machine Head) */}
-      <div className="w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-mono relative no-print mb-[-6px]">
-        {/* 打印机品牌标与机头图标 */}
+      {/* 1. 顶部拟真热敏打印机机头，修改标头为“荔枝牌小票打印机”，附带马达高频微幅震动 */}
+      <div
+        className={`w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-mono relative no-print mb-[-6px] transition-transform ${
+          isPrinting ? 'animate-machine-vibrate' : ''
+        }`}
+      >
+        {/* 打印机品牌标 */}
         <div className="flex items-center gap-2">
-          <Printer className="w-4 h-4 text-emerald-400 animate-pulse" />
-          <span className="text-[11px] font-bold tracking-widest text-slate-300 uppercase">
-            THERMAL PRINT HEAD
+          <Printer className="w-4.5 h-4.5 text-emerald-400 animate-pulse" />
+          <span className="text-[12px] font-black tracking-widest text-slate-200 uppercase font-mono">
+            荔枝牌小票打印机
           </span>
         </div>
 
-        {/* 热敏打印机运行/工作指示灯 */}
+        {/* 打印工作状态指示灯 */}
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-slate-400 font-mono">
-            {isPrinting ? 'PRINTING...' : 'READY'}
+          <span className="text-[10px] text-slate-400 font-mono font-bold">
+            {isPrinting ? '打印中...' : '就绪'}
           </span>
           <div
             className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
@@ -80,18 +84,18 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           />
         </div>
 
-        {/* 机头底部出纸口细缝 */}
+        {/* 出纸缝隙 */}
         <div className="absolute inset-x-3 bottom-0 h-1 bg-black rounded-full shadow-inner border-t border-slate-900" />
       </div>
 
-      {/* 小票展示区域（带有 Framer Motion 逐行吐纸与激光打字扫描效果） */}
+      {/* 小票出纸与放慢后的激光打字扫描区域 */}
       <div className="w-full relative overflow-hidden pt-1">
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
             key={selectedMonth}
             initial={{
-              opacity: 0.2,
-              y: -80,
+              opacity: 0.1,
+              y: -100,
               clipPath: 'inset(0% 0% 100% 0%)',
             }}
             animate={{
@@ -101,21 +105,19 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             }}
             exit={{
               opacity: 0,
-              y: 100,
-              scale: 0.95,
-              transition: { duration: 0.25 },
+              y: 120,
+              scale: 0.94,
+              transition: { duration: 0.35, ease: 'easeIn' },
             }}
             transition={{
-              type: 'spring',
-              stiffness: 180,
-              damping: 22,
-              mass: 0.8,
+              duration: 1.65,
+              ease: [0.25, 1, 0.5, 1],
             }}
             className="receipt-container receipt-paper-box receipt-both-sawtooth font-mono relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
           >
-            {/* 激光扫描打字光束 (仅在打印出纸过程中显现) */}
+            {/* 放慢后的激光扫描打字光束 (1.65s 从上至下滑动显影) */}
             {isPrinting && (
-              <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_#34d399,0_0_30px_#10b981] pointer-events-none z-40 animate-laser-scan" />
+              <div className="absolute inset-x-0 h-1.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_20px_#34d399,0_0_35px_#10b981] pointer-events-none z-40 animate-laser-scan-slow" />
             )}
 
             <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
