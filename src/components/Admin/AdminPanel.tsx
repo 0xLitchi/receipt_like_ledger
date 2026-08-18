@@ -10,7 +10,7 @@ interface AdminPanelProps {
   onLogout: () => void;
 }
 
-// 4. 解析文本数据解析器
+// 4. 解析文本数据解析器 (支持 \t 或 2个以上空格拆分)
 const parseRawLedgerText = (text: string): Transaction[] => {
   const lines = text.split('\n');
   const results: Transaction[] = [];
@@ -19,7 +19,6 @@ const parseRawLedgerText = (text: string): Transaction[] => {
     const trimmed = line.trim();
     if (!trimmed) return;
 
-    // 尝试以 \t 或多个连续空格拆分
     const parts = line.split('\t').map((p) => p.trim());
     const fields = parts.length >= 3 ? parts : line.split(/\s{2,}/).map((p) => p.trim());
 
@@ -32,7 +31,7 @@ const parseRawLedgerText = (text: string): Transaction[] => {
     let categoryFull = fields[4] || '其它';
     let ledger = fields[5] || 'Default';
 
-    // 若第 0 列为日期格式，则为无备注情况
+    // 若第 0 列即为 YYYY-MM-DD 日期格式，则为无备注说明情况
     if (/^\d{4}-\d{2}-\d{2}$/.test(fields[0])) {
       title = '';
       dateStr = fields[0];
@@ -54,7 +53,7 @@ const parseRawLedgerText = (text: string): Transaction[] => {
     }
 
     results.push({
-      id: `parse_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 5)}`,
+      id: `parse_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
       title,
       date: dateStr || new Date().toISOString().split('T')[0],
       amount,
@@ -75,17 +74,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onBatchSave,
   onLogout,
 }) => {
-  // 本地 Excel 可编辑数组
   const [rows, setRows] = useState<Transaction[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 4. 解析文本弹窗状态
   const [showParseModal, setShowParseModal] = useState(false);
   const [rawText, setRawText] = useState('');
 
-  // 弹窗打开时深拷贝同步
   useEffect(() => {
     if (isOpen) {
       setRows(JSON.parse(JSON.stringify(transactions)));
@@ -96,7 +92,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   if (!isOpen) return null;
 
-  // 单元格数据更动
   const handleCellChange = (index: number, field: keyof Transaction, value: any) => {
     setRows((prev) => {
       const copy = [...prev];
@@ -108,7 +103,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
-  // 添加空行
   const handleAddRow = () => {
     const newRow: Transaction = {
       id: `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -123,7 +117,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setRows((prev) => [newRow, ...prev]);
   };
 
-  // 删除某一行
   const handleDeleteRow = (index: number) => {
     const target = rows[index];
     if (target.id && !target.id.startsWith('new_') && !target.id.startsWith('parse_')) {
@@ -132,8 +125,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setRows((prev) => prev.filter((_, idx) => idx !== index));
   };
 
-  // 4. 应用解析文本数据 (追加 或 覆盖)
-  const handleApplyParsedData = (mode: 'append' | 'overwrite') => {
+  // 4. 完全修复：点击“追加”或“全额覆盖”立即提交数据保存到 Cloudflare D1
+  const handleApplyParsedData = async (mode: 'append' | 'overwrite') => {
     if (!rawText.trim()) {
       alert('请先粘贴需要解析的账单文本数据');
       return;
@@ -145,30 +138,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
+    setSaving(true);
+    setStatusMsg(null);
+
+    let nextRows: Transaction[] = [];
+    let nextDeletedIds: string[] = [...deletedIds];
+
     if (mode === 'overwrite') {
-      // 标记现有数据库 ID 均为待删除
       const currentDbIds = rows
         .map((r) => r.id)
         .filter((id) => id && !id.startsWith('new_') && !id.startsWith('parse_'));
-      setDeletedIds((prev) => Array.from(new Set([...prev, ...currentDbIds])));
-      setRows(parsed);
-      setStatusMsg({ type: 'success', text: `已全部覆盖！共成功解析并替换 ${parsed.length} 条账目数据。` });
+      nextDeletedIds = Array.from(new Set([...nextDeletedIds, ...currentDbIds]));
+      nextRows = parsed;
     } else {
-      // 追加到现有数据前
-      setRows((prev) => [...parsed, ...prev]);
-      setStatusMsg({ type: 'success', text: `已成功追加 ${parsed.length} 条解析数据到表格顶部！` });
+      nextRows = [...parsed, ...rows];
     }
 
-    setRawText('');
-    setShowParseModal(false);
+    try {
+      await onBatchSave(nextRows, nextDeletedIds);
+      setRows(nextRows);
+      setDeletedIds([]);
+      setRawText('');
+      setShowParseModal(false);
+      setStatusMsg({
+        type: 'success',
+        text: mode === 'overwrite'
+          ? `已成功覆盖并保存 ${parsed.length} 条账目数据到 D1 数据库！`
+          : `已成功追加并保存 ${parsed.length} 条账目数据到 D1 数据库！`,
+      });
+      setTimeout(() => setStatusMsg(null), 3500);
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: '数据保存失败: ' + (err.message || '请检查密码或后端 API') });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // 批量保存所有修改到 Cloudflare D1
+  // 批量保存当前表格内容
   const handleSaveAll = async () => {
     setSaving(true);
     setStatusMsg(null);
     try {
       await onBatchSave(rows, deletedIds);
+      setDeletedIds([]);
       setStatusMsg({ type: 'success', text: '已成功批量保存所有数据更改！' });
       setTimeout(() => setStatusMsg(null), 3000);
     } catch (err: any) {
@@ -237,7 +249,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
-        {/* 状态消息 */}
+        {/* 状态通知 */}
         {statusMsg && (
           <div
             className={`p-2.5 text-xs flex items-center gap-2 border-b font-mono ${
@@ -277,7 +289,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {idx + 1}
                   </td>
 
-                  {/* 3. 日期使用标准的 YYYY-MM-DD 文本输入格式 */}
+                  {/* 日期 YYYY-MM-DD */}
                   <td className="p-0 border-r border-slate-800/80">
                     <input
                       type="text"
@@ -359,7 +371,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {/* 4. 解析文本导入弹窗 */}
+      {/* 解析文本导入弹窗 */}
       {showParseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl p-6 shadow-2xl text-slate-100 relative">
@@ -375,7 +387,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               解析文本数据增加到数据库
             </h3>
             <p className="text-xs text-slate-400 mb-3 font-mono">
-              请在下方粘贴 Tab 制表符分隔的账单文本，格式示例如下：<br />
+              在下方粘贴文本，点击确认按钮即可自动提交保存：<br />
               <code className="text-emerald-400 bg-slate-950 px-1.5 py-0.5 rounded block my-1">
                 工会费	2026-08-13	￥-117.82	扶正	杂项/其它	Default
               </code>
@@ -391,23 +403,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800">
               <span className="text-xs text-slate-400 font-mono">
-                预览解析: {rawText.trim() ? `${parseRawLedgerText(rawText).length} 条` : '0 条'}
+                预计解析: {rawText.trim() ? `${parseRawLedgerText(rawText).length} 条记录` : '0 条'}
               </span>
 
               <div className="flex gap-2">
                 <button
                   type="button"
+                  disabled={saving}
                   onClick={() => handleApplyParsedData('append')}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-mono font-bold shadow"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-mono font-bold shadow disabled:opacity-50"
                 >
-                  追加到现有数据
+                  {saving ? '正在提交保存...' : '追加到现有数据并保存'}
                 </button>
                 <button
                   type="button"
+                  disabled={saving}
                   onClick={() => handleApplyParsedData('overwrite')}
-                  className="px-4 py-2 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-xs font-mono font-bold shadow"
+                  className="px-4 py-2 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-xs font-mono font-bold shadow disabled:opacity-50"
                 >
-                  全部覆盖现有数据
+                  {saving ? '正在提交保存...' : '全部覆盖现有数据并保存'}
                 </button>
               </div>
             </div>

@@ -59,12 +59,13 @@ export const storage = {
     localStorage.removeItem(AUTH_PASSWORD_KEY);
   },
 
-  // 5. Excel 批量保存接口逻辑
+  // Excel 批量保存接口逻辑 (完全修复 new_ 与 parse_ 标识判定)
   async batchSaveTransactions(items: Transaction[], deletedIds: string[]): Promise<boolean> {
     const adminPassword = this.getSavedAdminPassword() || '';
 
-    // 逐条保存/新增与删除
+    // 1. 先安全删除待删记录
     for (const delId of deletedIds) {
+      if (!delId || delId.startsWith('new_') || delId.startsWith('parse_')) continue;
       try {
         await fetch(`/api/transactions/${delId}`, {
           method: 'DELETE',
@@ -75,9 +76,12 @@ export const storage = {
       }
     }
 
+    // 2. 遍历保存所有行
     for (const item of items) {
-      if (item.id.startsWith('new_')) {
-        // 新行：POST 新增
+      const isNewItem = !item.id || item.id.startsWith('new_') || item.id.startsWith('parse_');
+
+      if (isNewItem) {
+        // 新行 / 解析行：POST 新增
         try {
           await fetch('/api/transactions', {
             method: 'POST',
@@ -107,7 +111,7 @@ export const storage = {
       }
     }
 
-    // 更新 LocalStorage 兜底
+    // 同步更新 LocalStorage 兜底
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
     return true;
   }
