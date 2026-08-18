@@ -82,61 +82,44 @@ body.mode-day .receipt-paper-box {
     0 30px 40px -10px rgba(0, 0, 0, 0.6);
 }
 
-/* 真实锯齿裂口纸张撕裂与重组 Keyframes 动画 */
-@keyframes paperRipTop {
+/* 2. 火烧小票、灼烧发红化为灰烬再打印重组动画 (Thermal Paper Burning & Reassemble Animation) */
+@keyframes paperBurn {
   0% {
-    transform: translate(0, 0) rotate(0deg);
-    clip-path: polygon(0% 0%, 100% 0%, 100% 48%, 85% 44%, 70% 51%, 55% 45%, 40% 52%, 25% 46%, 10% 53%, 0% 47%);
-    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+    filter: none;
   }
-  35% {
-    transform: translate(-25px, -35px) rotate(-8deg);
-    clip-path: polygon(0% 0%, 100% 0%, 100% 48%, 85% 42%, 70% 53%, 55% 43%, 40% 54%, 25% 44%, 10% 55%, 0% 45%);
-    opacity: 0.65;
-    filter: drop-shadow(0 16px 14px rgba(0,0,0,0.6));
+  25% {
+    /* 阶段一：火焰边缘起火，橙黄火焰强光与焦黑效果 */
+    transform: translateY(-5px) scale(0.99) rotate(-1deg);
+    filter: sepia(90%) contrast(150%) brightness(0.75) hue-rotate(-25deg);
+    box-shadow: 
+      0 0 45px #f97316, 
+      0 0 90px #ef4444, 
+      inset 0 -50px 70px #f59e0b, 
+      inset 0 50px 70px #ef4444;
   }
-  70% {
-    transform: translate(4px, 3px) rotate(1deg);
-    opacity: 0.95;
+  50% {
+    /* 阶段二：烧成黑灰烬散去 */
+    transform: translateY(12px) scale(0.88) rotate(2deg);
+    filter: contrast(220%) brightness(0.15) grayscale(100%);
+    opacity: 0.1;
+    box-shadow: 0 0 60px #ef4444, inset 0 0 90px #b91c1c;
+  }
+  75% {
+    /* 阶段三：新月份小票重新打印生成 */
+    transform: translateY(-10px) scale(0.98);
+    filter: brightness(1.15);
+    opacity: 0.75;
   }
   100% {
-    transform: translate(0, 0) rotate(0deg);
-    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+    transform: translateY(0) scale(1) rotate(0deg);
+    filter: none;
     opacity: 1;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
   }
 }
 
-@keyframes paperRipBottom {
-  0% {
-    transform: translate(0, 0) rotate(0deg);
-    clip-path: polygon(0% 47%, 10% 53%, 25% 46%, 40% 52%, 55% 45%, 70% 51%, 85% 44%, 100% 48%, 100% 100%, 0% 100%);
-    opacity: 1;
-  }
-  35% {
-    transform: translate(30px, 40px) rotate(10deg);
-    clip-path: polygon(0% 45%, 10% 55%, 25% 44%, 40% 54%, 55% 43%, 70% 53%, 85% 42%, 100% 48%, 100% 100%, 0% 100%);
-    opacity: 0.65;
-    filter: drop-shadow(0 20px 18px rgba(0,0,0,0.7));
-  }
-  70% {
-    transform: translate(-4px, -3px) rotate(-1deg);
-    opacity: 0.95;
-  }
-  100% {
-    transform: translate(0, 0) rotate(0deg);
-    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
-    opacity: 1;
-    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
-  }
-}
-
-.animate-rip-top {
-  animation: paperRipTop 0.75s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-}
-
-.animate-rip-bottom {
-  animation: paperRipBottom 0.75s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+.animate-paper-burn {
+  animation: paperBurn 0.85s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 .thermal-dashed-line {

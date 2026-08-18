@@ -8,21 +8,27 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
 
-  // 读取 URL 查询参数中的 token 或 access_token
-  const queryToken = url.searchParams.get('token') || url.searchParams.get('access_token');
-  const authHeader = request.headers.get('X-Admin-Password');
+  // 1. 支持各种 Query 参数格式 (token / access_token, 大小写兼容)
+  let queryToken = '';
+  for (const [key, value] of url.searchParams.entries()) {
+    const k = key.toLowerCase();
+    if (k === 'token' || k === 'access_token') {
+      queryToken = (value || '').trim();
+      break;
+    }
+  }
 
-  // 1. ADMIN_PASSWORD 校验 (独立用于管理员鉴权)
+  const authHeader = request.headers.get('X-Admin-Password');
   const isAuthorizedAdmin = !!(env.ADMIN_PASSWORD && authHeader === env.ADMIN_PASSWORD);
 
-  // 2. ACCESS_TOKEN 校验 (独立用于公开页面访问脱敏控制)
-  // 严格从 Cloudflare 环境变量 env.ACCESS_TOKEN 读取，绝不使用固定的静态字符串
-  const cfAccessToken = env.ACCESS_TOKEN ? env.ACCESS_TOKEN.trim() : '';
+  // 2. 严格读取 Cloudflare 控制台中配置的环境变量 ACCESS_TOKEN
+  const cfAccessToken = (env.ACCESS_TOKEN || '').trim();
 
   let hasFullAccess = true;
+
+  // 只要 Cloudflare 环境变量中配置了 ACCESS_TOKEN（非空），即强制触发脱敏校验
   if (cfAccessToken !== '') {
-    // 只有在 CF 中配置了 ACCESS_TOKEN 变量时，才要求 URL 中的 token 与其精确匹配（或具备管理员权限）
-    hasFullAccess = isAuthorizedAdmin || (!!queryToken && queryToken === cfAccessToken);
+    hasFullAccess = isAuthorizedAdmin || (queryToken !== '' && queryToken === cfAccessToken);
   }
 
   if (!env.DB) {
@@ -42,7 +48,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
     ).all();
 
-    // 若无 fullAccess 权限，则将备注与金额置为脱敏数据
+    // 根据 hasFullAccess 决定返回真实数据还是脱敏数据
     const data = (results || []).map((t: any) => {
       if (hasFullAccess) return t;
       return {
