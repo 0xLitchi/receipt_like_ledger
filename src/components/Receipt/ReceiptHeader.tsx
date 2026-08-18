@@ -40,7 +40,7 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
   }, [transactions, hasFullAccess]);
 
   return (
-    <div className="text-left pt-1 pb-1 select-none font-pixel tracking-wider">
+    <div className="text-center pt-1 pb-1 select-none font-pixel tracking-wider">
       {/* 抬头图标 */}
       <div className="flex items-center justify-center my-1">
         <div className="p-1 border-2 border-current rounded-full opacity-85">
@@ -66,12 +66,12 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
         </div>
       )}
 
-      {/* 左对齐 4 列表头：备注 | 金额 | 成员 | 分类 */}
-      <div className="grid grid-cols-4 text-left text-xs font-black border-b-2 border-current pb-1 mt-2 opacity-95 font-pixel tracking-widest uppercase">
-        <div className="pl-1">备注</div>
-        <div className="pl-1">金额</div>
-        <div className="pl-1">成员</div>
-        <div className="pl-1">分类</div>
+      {/* 1. 表头改回居中对齐 (text-center)：备注 | 金额 | 成员 | 分类 */}
+      <div className="grid grid-cols-4 text-center text-xs font-black border-b-2 border-current pb-1 mt-2 opacity-95 font-pixel tracking-widest uppercase">
+        <div>备注</div>
+        <div>金额</div>
+        <div>成员</div>
+        <div>分类</div>
       </div>
     </div>
   );
