@@ -4,25 +4,34 @@ interface Env {
   ACCESS_TOKEN?: string;
 }
 
+// 辅助函数：彻底去除换行符 (\r, \n)、制表符、多余空格及引号
+const cleanSecretString = (str?: string | null): string => {
+  if (!str) return '';
+  return str.replace(/[\r\n\t\s"']/g, '').trim();
+};
+
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
 
-  // 1. 支持各种 Query 参数格式 (token / access_token, 大小写兼容)
-  let queryToken = '';
+  // 1. 支持各类 Query 参数 (token / access_token)
+  let rawQueryToken = '';
   for (const [key, value] of url.searchParams.entries()) {
     const k = key.toLowerCase();
     if (k === 'token' || k === 'access_token') {
-      queryToken = (value || '').trim();
+      rawQueryToken = value;
       break;
     }
   }
 
-  const authHeader = request.headers.get('X-Admin-Password');
-  const isAuthorizedAdmin = !!(env.ADMIN_PASSWORD && authHeader === env.ADMIN_PASSWORD);
+  const queryToken = cleanSecretString(rawQueryToken);
+  const authHeader = cleanSecretString(request.headers.get('X-Admin-Password'));
 
-  // 2. 严格读取 Cloudflare 控制台中配置的环境变量 ACCESS_TOKEN
-  const cfAccessToken = (env.ACCESS_TOKEN || '').trim();
+  const expectedAdminPassword = cleanSecretString(env.ADMIN_PASSWORD);
+  const isAuthorizedAdmin = !!(expectedAdminPassword && authHeader === expectedAdminPassword);
+
+  // 2. 严格从 Cloudflare Pages 环境变量中读取 ACCESS_TOKEN 并彻底清洗换行符
+  const cfAccessToken = cleanSecretString(env.ACCESS_TOKEN);
 
   let hasFullAccess = true;
 
@@ -73,8 +82,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
 
-  const authHeader = request.headers.get('X-Admin-Password');
-  const expectedPassword = env.ADMIN_PASSWORD;
+  const authHeader = cleanSecretString(request.headers.get('X-Admin-Password'));
+  const expectedPassword = cleanSecretString(env.ADMIN_PASSWORD);
 
   if (!expectedPassword || authHeader !== expectedPassword) {
     return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误或未配置 ADMIN_PASSWORD' }), {
