@@ -1,0 +1,12 @@
+name = "receipt-like-ledger"
+compatibility_date = "2026-08-01"
+pages_build_output_dir = "./dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "receipt_ledger_db"
+database_id = "YOUR_D1_DATABASE_ID" # 用户在 Cloudflare 控制台创建 D1 后的 ID
+
+[vars]
+# 在 Cloudflare Pages 设置中建议配置 ADMIN_PASSWORD
+DEFAULT_LEDGER_TITLE = "小票记账本 (Receipt Ledger)"

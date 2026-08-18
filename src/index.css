@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=VT323&display=swap');
+@import "tailwindcss";
+
+@layer utilities {
+  /* 锯齿边缘 - 购物小票顶部与底部切口 */
+  .receipt-sawtooth-top {
+    clip-path: polygon(
+      0% 12px, 2.5% 0px, 5% 12px, 7.5% 0px, 10% 12px, 12.5% 0px, 15% 12px, 17.5% 0px, 20% 12px,
+      22.5% 0px, 25% 12px, 27.5% 0px, 30% 12px, 32.5% 0px, 35% 12px, 37.5% 0px, 40% 12px,
+      42.5% 0px, 45% 12px, 47.5% 0px, 50% 12px, 52.5% 0px, 55% 12px, 57.5% 0px, 60% 12px,
+      62.5% 0px, 65% 12px, 67.5% 0px, 70% 12px, 72.5% 0px, 75% 12px, 77.5% 0px, 80% 12px,
+      82.5% 0px, 85% 12px, 87.5% 0px, 90% 12px, 92.5% 0px, 95% 12px, 97.5% 0px, 100% 12px,
+      100% 100%, 0% 100%
+    );
+  }
+
+  .receipt-sawtooth-bottom {
+    clip-path: polygon(
+      0% 0%, 100% 0%, 100% calc(100% - 12px),
+      97.5% 100%, 95% calc(100% - 12px), 92.5% 100%, 90% calc(100% - 12px), 87.5% 100%, 85% calc(100% - 12px),
+      82.5% 100%, 80% calc(100% - 12px), 77.5% 100%, 75% calc(100% - 12px), 72.5% 100%, 70% calc(100% - 12px),
+      67.5% 100%, 65% calc(100% - 12px), 62.5% 100%, 60% calc(100% - 12px), 57.5% 100%, 55% calc(100% - 12px),
+      52.5% 100%, 50% calc(100% - 12px), 47.5% 100%, 45% calc(100% - 12px), 42.5% 100%, 40% calc(100% - 12px),
+      37.5% 100%, 35% calc(100% - 12px), 32.5% 100%, 30% calc(100% - 12px), 27.5% 100%, 25% calc(100% - 12px),
+      22.5% 100%, 20% calc(100% - 12px), 17.5% 100%, 15% calc(100% - 12px), 12.5% 100%, 10% calc(100% - 12px),
+      7.5% 100%, 5% calc(100% - 12px), 2.5% 100%, 0% calc(100% - 12px)
+    );
+  }
+
+  .receipt-both-sawtooth {
+    clip-path: polygon(
+      0% 10px, 2.5% 0px, 5% 10px, 7.5% 0px, 10% 10px, 12.5% 0px, 15% 10px, 17.5% 0px, 20% 10px,
+      22.5% 0px, 25% 10px, 27.5% 0px, 30% 10px, 32.5% 0px, 35% 10px, 37.5% 0px, 40% 10px,
+      42.5% 0px, 45% 10px, 47.5% 0px, 50% 10px, 52.5% 0px, 55% 10px, 57.5% 0px, 60% 10px,
+      62.5% 0px, 65% 10px, 67.5% 0px, 70% 10px, 72.5% 0px, 75% 10px, 77.5% 0px, 80% 10px,
+      82.5% 0px, 85% 10px, 87.5% 0px, 90% 10px, 92.5% 0px, 95% 10px, 97.5% 0px, 100% 10px,
+      100% calc(100% - 10px), 97.5% 100%, 95% calc(100% - 10px), 92.5% 100%, 90% calc(100% - 10px),
+      87.5% 100%, 85% calc(100% - 10px), 82.5% 100%, 80% calc(100% - 10px), 77.5% 100%, 75% calc(100% - 10px),
+      72.5% 100%, 70% calc(100% - 10px), 67.5% 100%, 65% calc(100% - 10px), 62.5% 100%, 60% calc(100% - 10px),
+      57.5% 100%, 55% calc(100% - 10px), 52.5% 100%, 50% calc(100% - 10px), 47.5% 100%, 45% calc(100% - 10px),
+      42.5% 100%, 40% calc(100% - 10px), 37.5% 100%, 35% calc(100% - 10px), 32.5% 100%, 30% calc(100% - 10px),
+      27.5% 100%, 25% calc(100% - 10px), 22.5% 100%, 20% calc(100% - 10px), 17.5% 100%, 15% calc(100% - 10px),
+      12.5% 100%, 10% calc(100% - 10px), 7.5% 100%, 5% calc(100% - 10px), 2.5% 100%, 0% calc(100% - 10px)
+    );
+  }
+}
+
+:root {
+  font-family: 'Space Mono', 'Courier Prime', 'Noto Sans SC', monospace, sans-serif;
+}
+
+body {
+  background-color: #0f172a;
+  color: #f8fafc;
+  min-height: 100vh;
+  margin: 0;
+}
+
+/* 热敏小票印章效果 */
+.receipt-stamp {
+  border: 3px double currentColor;
+  padding: 4px 12px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: 2px;
+  transform: rotate(-12deg);
+  display: inline-block;
+  opacity: 0.85;
+  box-shadow: 0 0 0 1px currentColor;
+}
+
+/* 热敏小票折痕线与虚线 */
+.thermal-dashed-line {
+  border-bottom: 2px dashed dashed;
+  opacity: 0.4;
+  margin: 12px 0;
+}
+
+.thermal-double-line {
+  border-bottom: 3px double currentColor;
+  opacity: 0.6;
+  margin: 12px 0;
+}
+
+/* 主题 CSS Variables */
+.theme-paper-white {
+  background-color: #faf9f6;
+  color: #1a1a1a;
+}
+.theme-paper-vintage {
+  background-color: #f4ecd8;
+  color: #3b2a1a;
+}
+.theme-paper-dark {
+  background-color: #18181b;
+  color: #22c55e;
+}
+.theme-paper-receipt-blue {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+/* 打印优化 */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .receipt-container {
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 80mm !important; /* 80mm 宽经典热敏打印纸规格 */
+  }
+}
