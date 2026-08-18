@@ -82,46 +82,6 @@ body.mode-day .receipt-paper-box {
     0 30px 40px -10px rgba(0, 0, 0, 0.6);
 }
 
-/* 2. 火烧小票、灼烧发红化为灰烬再打印重组动画 (Thermal Paper Burning & Reassemble Animation) */
-@keyframes paperBurn {
-  0% {
-    transform: translateY(0) scale(1) rotate(0deg);
-    filter: none;
-  }
-  25% {
-    /* 阶段一：火焰边缘起火，橙黄火焰强光与焦黑效果 */
-    transform: translateY(-5px) scale(0.99) rotate(-1deg);
-    filter: sepia(90%) contrast(150%) brightness(0.75) hue-rotate(-25deg);
-    box-shadow: 
-      0 0 45px #f97316, 
-      0 0 90px #ef4444, 
-      inset 0 -50px 70px #f59e0b, 
-      inset 0 50px 70px #ef4444;
-  }
-  50% {
-    /* 阶段二：烧成黑灰烬散去 */
-    transform: translateY(12px) scale(0.88) rotate(2deg);
-    filter: contrast(220%) brightness(0.15) grayscale(100%);
-    opacity: 0.1;
-    box-shadow: 0 0 60px #ef4444, inset 0 0 90px #b91c1c;
-  }
-  75% {
-    /* 阶段三：新月份小票重新打印生成 */
-    transform: translateY(-10px) scale(0.98);
-    filter: brightness(1.15);
-    opacity: 0.75;
-  }
-  100% {
-    transform: translateY(0) scale(1) rotate(0deg);
-    filter: none;
-    opacity: 1;
-  }
-}
-
-.animate-paper-burn {
-  animation: paperBurn 0.85s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
 .thermal-dashed-line {
   border-bottom: 2px dashed currentColor;
   opacity: 0.35;
