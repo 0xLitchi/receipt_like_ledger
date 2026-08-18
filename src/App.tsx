@@ -1,16 +1,28 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Transaction, ThemeType, SummaryStats } from './types';
+import type { Transaction, SummaryStats } from './types';
 import { storage } from './utils/storage';
 import { ReceiptView } from './components/Receipt/ReceiptView';
 import { FilterBar } from './components/FilterBar';
 import { AdminAuthModal } from './components/Admin/AdminAuthModal';
 import { AdminPanel } from './components/Admin/AdminPanel';
 import { TransactionFormModal } from './components/Admin/TransactionFormModal';
+import { Sun, Moon } from 'lucide-react';
 
 export function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const theme: ThemeType = 'paper-white';
+  const [isNightMode, setIsNightMode] = useState(false);
+
+  // 8. 切换 Day / Night 模式样式应用到 body
+  useEffect(() => {
+    if (isNightMode) {
+      document.body.classList.remove('mode-day');
+      document.body.classList.add('mode-night');
+    } else {
+      document.body.classList.remove('mode-night');
+      document.body.classList.add('mode-day');
+    }
+  }, [isNightMode]);
 
   // 弹窗控制
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -30,7 +42,7 @@ export function App() {
     loadData();
   }, []);
 
-  // 动态提取最近三个月 (如 ["2026-08", "2026-07", "2026-06"])
+  // 动态提取最近三个月 YYYY-MM
   const recentMonths = useMemo(() => {
     const monthSet = new Set<string>();
 
@@ -145,26 +157,37 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start py-6 px-3 font-mono selection:bg-slate-700 selection:text-white">
-      {/* 机械滑块月份切换器 */}
+    <div className="min-h-screen flex flex-col items-center justify-start py-6 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
+      {/* 8. Day / Night 模式切换按钮 (右上角) */}
+      <div className="fixed top-4 right-4 z-40 no-print">
+        <button
+          onClick={() => setIsNightMode(!isNightMode)}
+          className="p-2 rounded-full bg-slate-900/80 border border-slate-700/80 text-slate-200 hover:text-amber-400 backdrop-blur-md shadow-lg transition-all duration-200"
+          title={isNightMode ? '切换为白天模式' : '切换为夜间模式'}
+        >
+          {isNightMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-300" />}
+        </button>
+      </div>
+
+      {/* 3. 机械滑块月份切换器 */}
       <FilterBar
         selectedMonth={selectedMonth || (recentMonths[0] || '')}
         onSelectMonth={setSelectedMonth}
         recentMonths={recentMonths}
       />
 
-      {/* 购物小票展示区 */}
+      {/* 7. 拟物化购物小票展示区 */}
       <main className="w-full max-w-md mx-auto">
         {loading ? (
           <div className="py-20 text-center font-mono text-slate-500 text-xs">
-            加载中...
+            加载小票中...
           </div>
         ) : (
           <ReceiptView
             transactions={filteredTransactions}
             stats={stats}
-            theme={theme}
             selectedMonth={selectedMonth || (recentMonths[0] || '')}
+            isNightMode={isNightMode}
           />
         )}
       </main>

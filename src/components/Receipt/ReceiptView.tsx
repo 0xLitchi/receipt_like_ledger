@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import type { Transaction, SummaryStats, ThemeType } from '../../types';
+import type { Transaction, SummaryStats } from '../../types';
 import { ReceiptHeader } from './ReceiptHeader';
 import { ReceiptItem } from './ReceiptItem';
 import { ReceiptFooter } from './ReceiptFooter';
@@ -9,15 +9,15 @@ import { PackageOpen } from 'lucide-react';
 interface ReceiptViewProps {
   transactions: Transaction[];
   stats: SummaryStats;
-  theme: ThemeType;
   selectedMonth: string;
+  isNightMode?: boolean;
 }
 
 export const ReceiptView: React.FC<ReceiptViewProps> = ({
   transactions,
   stats,
-  theme,
   selectedMonth,
+  isNightMode = false,
 }) => {
   const receiptRef = useRef<HTMLDivElement>(null);
 
@@ -27,7 +27,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
       const dataUrl = await toPng(receiptRef.current, {
         cacheBust: true,
         quality: 0.95,
-        backgroundColor: theme === 'paper-white' ? '#faf9f6' : '#18181b',
+        backgroundColor: isNightMode ? '#121418' : '#faf7f0',
       });
       const link = document.createElement('a');
       link.download = `receipt_${selectedMonth}_${Date.now()}.png`;
@@ -41,18 +41,18 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex justify-center my-2 px-1">
+      {/* 拟物化热敏小票外壳 */}
       <div
         ref={receiptRef}
-        className={`receipt-container receipt-both-sawtooth theme-${theme} font-mono relative w-full max-w-md p-4 sm:p-5 shadow-2xl transition-all duration-300 rounded-sm`}
-        style={{
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
-        }}
+        className="receipt-container receipt-paper-box receipt-both-sawtooth font-mono relative w-full max-w-md p-4 sm:p-6 transition-all duration-300 rounded-sm"
       >
-        <div className="absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-black/5 to-transparent pointer-events-none" />
+        {/* 顶部自然纸张撕口微光影 */}
+        <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
         <ReceiptHeader
           stats={stats}
           selectedMonth={selectedMonth}
+          transactions={transactions}
         />
 
         <div className="my-2 min-h-[140px]">
@@ -76,7 +76,8 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           onExport={handleExportPNG}
         />
 
-        <div className="absolute inset-x-0 bottom-0 h-3 bg-gradient-to-t from-black/5 to-transparent pointer-events-none" />
+        {/* 底部小票卷角折痕 */}
+        <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
       </div>
     </div>
   );
