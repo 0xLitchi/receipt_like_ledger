@@ -21,7 +21,7 @@ export function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
-  // 1. 加载交易数据 (公开页面独立通过 URL ?token=... / ?access_token=... 校验 CF 环境变量 ACCESS_TOKEN)
+  // 1. 加载交易数据 (自动透传已验证的管理员 Header 或 URL Token)
   const loadData = async () => {
     setLoading(true);
     const result = await storage.getTransactions();
@@ -94,11 +94,13 @@ export function App() {
     };
   }, [filteredTransactions]);
 
-  // 2. 快捷触发后台模式（按 "." 键触发）：
-  // 严格要求校验 ADMIN_PASSWORD 鉴权密码！
+  // 2. 快捷触发后台模式（按 "." 键触发）
   const handleAdminToggle = useCallback(() => {
-    // 每次点击/触发 "." 键时，始终强制打开 AdminAuthModal 校验 ADMIN_PASSWORD 密码
-    setShowAuthModal(true);
+    if (storage.getSavedAdminPassword()) {
+      setShowAdminPanel(true);
+    } else {
+      setShowAuthModal(true);
+    }
   }, []);
 
   // 全局键盘监听 "." 按键触发后台
@@ -132,6 +134,7 @@ export function App() {
   const handleAdminLogout = () => {
     storage.logoutAdmin();
     setShowAdminPanel(false);
+    loadData();
   };
 
   return (
@@ -159,23 +162,23 @@ export function App() {
         )}
       </main>
 
-      {/* 2. 管理员验证弹窗 (按 "." 键触发时强制弹出输入 ADMIN_PASSWORD) */}
+      {/* 管理员验证弹窗 (按 "." 键触发) */}
       <AdminAuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
-        onSuccess={() => {
+        onSuccess={async () => {
           setShowAuthModal(false);
           setShowAdminPanel(true);
+
+          // 核心优化 2：管理员验证成功后，自动重新加载数据，全额解密明细与金额！
+          await loadData();
         }}
       />
 
       {/* Excel 风格后台数据批量管理面板 */}
       <AdminPanel
         isOpen={showAdminPanel}
-        onClose={() => {
-          setShowAdminPanel(false);
-          storage.logoutAdmin();
-        }}
+        onClose={() => setShowAdminPanel(false)}
         transactions={transactions}
         onBatchSave={handleBatchSave}
         onLogout={handleAdminLogout}

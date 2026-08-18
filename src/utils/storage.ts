@@ -4,17 +4,24 @@ const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
 const AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
 
 export const storage = {
-  // 获取所有交易数据 (带着当前 URL 的 token / access_token 参数)
+  // 获取所有交易数据 (同时透传 URL 参数与已验证的 X-Admin-Password 管理员 Header)
   async getTransactions(): Promise<{ data: Transaction[]; hasFullAccess: boolean }> {
     const search = window.location.search;
+    const adminPassword = this.getSavedAdminPassword() || '';
 
     try {
-      const res = await fetch(`/api/transactions${search}`);
+      const res = await fetch(`/api/transactions${search}`, {
+        headers: {
+          'X-Admin-Password': adminPassword,
+        },
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
           return {
             data: json.data,
+
+            // 核心优化 2：只要验证通过了管理员模式（或具备正确 URL Token），自动解除脱敏，无需再次校验 ACCESS_TOKEN！
             hasFullAccess: json.hasFullAccess !== false,
           };
         }
@@ -69,7 +76,6 @@ export const storage = {
   async batchSaveTransactions(items: Transaction[], deletedIds: string[]): Promise<boolean> {
     const adminPassword = this.getSavedAdminPassword() || '';
 
-    // 1. 先安全删除待删记录
     for (const delId of deletedIds) {
       if (!delId || delId.startsWith('new_') || delId.startsWith('parse_')) continue;
       try {
@@ -82,7 +88,6 @@ export const storage = {
       }
     }
 
-    // 2. 遍历保存所有行
     for (const item of items) {
       const isNewItem = !item.id || item.id.startsWith('new_') || item.id.startsWith('parse_');
 
