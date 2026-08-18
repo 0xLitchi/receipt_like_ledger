@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@tanstack/react-table": "^9.1.2",
     "@types/jsbarcode": "^3.11.4",
     "framer-motion": "^13.1.0",
     "jsbarcode": "^3.12.3",

@@ -1,6 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Transaction } from '../../types';
-import { X, Plus, Trash2, Save, LogOut, Table, Check, AlertCircle, FileCode } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Trash2,
+  Save,
+  LogOut,
+  Search,
+  FileCode,
+  Download,
+  Check,
+  AlertCircle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Sparkles,
+} from 'lucide-react';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -10,7 +25,7 @@ interface AdminPanelProps {
   onLogout: () => void;
 }
 
-// 4. 解析文本数据解析器 (支持 \t 或 2个以上空格拆分)
+// 文本数据解析器 (支持制表符 \t 或多空格拆分)
 const parseRawLedgerText = (text: string): Transaction[] => {
   const lines = text.split('\n');
   const results: Transaction[] = [];
@@ -31,7 +46,6 @@ const parseRawLedgerText = (text: string): Transaction[] => {
     let categoryFull = fields[4] || '其它';
     let ledger = fields[5] || 'Default';
 
-    // 若第 0 列即为 YYYY-MM-DD 日期格式，则为无备注说明情况
     if (/^\d{4}-\d{2}-\d{2}$/.test(fields[0])) {
       title = '';
       dateStr = fields[0];
@@ -76,33 +90,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 }) => {
   const [rows, setRows] = useState<Transaction[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortField, setSortField] = useState<keyof Transaction | ''>('');
+  const [sortAsc, setSortAsc] = useState(true);
+
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [showParseModal, setShowParseModal] = useState(false);
   const [rawText, setRawText] = useState('');
 
+  // 初始化数据加载
   useEffect(() => {
     if (isOpen) {
       setRows(JSON.parse(JSON.stringify(transactions)));
       setDeletedIds([]);
+      setSelectedIds(new Set());
       setStatusMsg(null);
     }
   }, [isOpen, transactions]);
 
-  if (!isOpen) return null;
+  // 修改单元格
+  const handleCellChange = useCallback((id: string, field: keyof Transaction, value: any) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id === id) {
+          return {
+            ...r,
+            [field]: field === 'amount' ? (value === '' ? 0 : parseFloat(value) || 0) : value,
+          };
+        }
+        return r;
+      })
+    );
+  }, []);
 
-  const handleCellChange = (index: number, field: keyof Transaction, value: any) => {
-    setRows((prev) => {
-      const copy = [...prev];
-      copy[index] = {
-        ...copy[index],
-        [field]: field === 'amount' ? (value === '' ? 0 : parseFloat(value) || 0) : value,
-      };
-      return copy;
-    });
-  };
-
+  // 添加新行
   const handleAddRow = () => {
     const newRow: Transaction = {
       id: `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -117,15 +141,114 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setRows((prev) => [newRow, ...prev]);
   };
 
-  const handleDeleteRow = (index: number) => {
-    const target = rows[index];
-    if (target.id && !target.id.startsWith('new_') && !target.id.startsWith('parse_')) {
-      setDeletedIds((prev) => [...prev, target.id]);
+  // 单行删除
+  const handleDeleteRow = (id: string) => {
+    if (id && !id.startsWith('new_') && !id.startsWith('parse_')) {
+      setDeletedIds((prev) => [...prev, id]);
     }
-    setRows((prev) => prev.filter((_, idx) => idx !== index));
+    setRows((prev) => prev.filter((r) => r.id !== id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
-  // 4. 完全修复：点击“追加”或“全额覆盖”立即提交数据保存到 Cloudflare D1
+  // 全选/反选处理
+  const handleToggleSelectAll = (filteredRows: Transaction[]) => {
+    const allFilteredIds = filteredRows.map((r) => r.id);
+    const isAllSelected = allFilteredIds.every((id) => selectedIds.has(id));
+
+    if (isAllSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        allFilteredIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        allFilteredIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const handleToggleSelectRow = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // 批量删除选中行
+  const handleBulkDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+
+    const toDeleteDbIds = Array.from(selectedIds).filter(
+      (id) => id && !id.startsWith('new_') && !id.startsWith('parse_')
+    );
+
+    setDeletedIds((prev) => Array.from(new Set([...prev, ...toDeleteDbIds])));
+    setRows((prev) => prev.filter((r) => !selectedIds.has(r.id)));
+    setSelectedIds(new Set());
+  };
+
+  // 排序切换处理
+  const handleSort = (field: keyof Transaction) => {
+    if (sortField === field) {
+      if (sortAsc) {
+        setSortAsc(false);
+      } else {
+        setSortField('');
+        setSortAsc(true);
+      }
+    } else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  };
+
+  // 过滤与排序后的行数据
+  const processedRows = useMemo(() => {
+    let result = [...rows];
+
+    // 全局多维过滤检索
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (r) =>
+          (r.title || '').toLowerCase().includes(q) ||
+          (r.member || '').toLowerCase().includes(q) ||
+          (r.category || '').toLowerCase().includes(q) ||
+          (r.subcategory || '').toLowerCase().includes(q) ||
+          (r.date || '').toLowerCase().includes(q) ||
+          String(r.amount).includes(q)
+      );
+    }
+
+    // 排序
+    if (sortField) {
+      result.sort((a: any, b: any) => {
+        const valA = a[sortField] ?? '';
+        const valB = b[sortField] ?? '';
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortAsc ? valA - valB : valB - valA;
+        }
+
+        return sortAsc
+          ? String(valA).localeCompare(String(valB), 'zh-CN')
+          : String(valB).localeCompare(String(valA), 'zh-CN');
+      });
+    }
+
+    return result;
+  }, [rows, searchQuery, sortField, sortAsc]);
+
+  // 文本解析器保存逻辑
   const handleApplyParsedData = async (mode: 'append' | 'overwrite') => {
     if (!rawText.trim()) {
       alert('请先粘贴需要解析的账单文本数据');
@@ -163,25 +286,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setStatusMsg({
         type: 'success',
         text: mode === 'overwrite'
-          ? `已成功覆盖并保存 ${parsed.length} 条账目数据到 D1 数据库！`
-          : `已成功追加并保存 ${parsed.length} 条账目数据到 D1 数据库！`,
+          ? `已成功覆盖并保存 ${parsed.length} 条账目数据到数据库！`
+          : `已成功追加并保存 ${parsed.length} 条账目数据到数据库！`,
       });
       setTimeout(() => setStatusMsg(null), 3500);
     } catch (err: any) {
-      setStatusMsg({ type: 'error', text: '数据保存失败: ' + (err.message || '请检查密码或后端 API') });
+      setStatusMsg({ type: 'error', text: '保存失败: ' + (err.message || '网络或密码错误') });
     } finally {
       setSaving(false);
     }
   };
 
-  // 批量保存当前表格内容
+  // 导出 CSV
+  const handleExportCSV = () => {
+    const headers = ['id', 'date', 'title', 'amount', 'member', 'category', 'subcategory'];
+    const csvLines = [headers.join(',')];
+
+    processedRows.forEach((r) => {
+      const line = [
+        r.id,
+        r.date,
+        `"${(r.title || '').replace(/"/g, '""')}"`,
+        r.amount,
+        `"${(r.member || '').replace(/"/g, '""')}"`,
+        `"${(r.category || '').replace(/"/g, '""')}"`,
+        `"${(r.subcategory || '').replace(/"/g, '""')}"`,
+      ].join(',');
+      csvLines.push(line);
+    });
+
+    const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `receipt_ledger_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  // 保存全部更改
   const handleSaveAll = async () => {
     setSaving(true);
     setStatusMsg(null);
     try {
       await onBatchSave(rows, deletedIds);
       setDeletedIds([]);
-      setStatusMsg({ type: 'success', text: '已成功批量保存所有数据更改！' });
+      setStatusMsg({ type: 'success', text: '已成功批量保存所有更改！' });
       setTimeout(() => setStatusMsg(null), 3000);
     } catch (err: any) {
       setStatusMsg({ type: 'error', text: '保存失败: ' + (err.message || '请检查密码或后端服务') });
@@ -190,22 +339,54 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
+  const isAllFilteredSelected =
+    processedRows.length > 0 && processedRows.every((r) => selectedIds.has(r.id));
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-5 bg-black/85 backdrop-blur-md no-print select-none">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl text-slate-100 relative overflow-hidden">
-        {/* 页眉 Header */}
-        <div className="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-950/80">
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl w-full max-w-7xl h-[92vh] flex flex-col shadow-2xl text-slate-100 relative overflow-hidden">
+        {/* 顶部绚丽彩带 */}
+        <div className="h-1 w-full bg-gradient-to-r from-emerald-500 via-indigo-500 to-rose-500" />
+
+        {/* Header 导航工具栏 */}
+        <div className="p-4 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 bg-slate-950/80">
+          {/* 左侧：标题与指标 Token */}
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
-              <Table className="w-5 h-5" />
+            <div className="p-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+              <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold flex items-center gap-2">
-                Excel 风格数据批量编辑
+              <h2 className="text-base font-bold font-mono tracking-tight flex items-center gap-2">
+                Notion / Linear 科技感数据工作台
               </h2>
+              <div className="flex items-center gap-2 text-xs font-mono text-slate-400 mt-0.5">
+                <span>共 <strong className="text-slate-200">{rows.length}</strong> 行</span>
+                <span>•</span>
+                {selectedIds.size > 0 && (
+                  <span className="text-emerald-400 font-bold">已选 {selectedIds.size} 行</span>
+                )}
+                {deletedIds.length > 0 && (
+                  <span className="text-rose-400">待删 {deletedIds.length} 行</span>
+                )}
+              </div>
             </div>
           </div>
 
+          {/* 中间：全局检索过滤输入框 */}
+          <div className="flex-1 max-w-xs relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索备注、成员、分类、日期..."
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+
+          {/* 右侧：功能按钮矩阵 */}
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setShowParseModal(true)}
@@ -216,25 +397,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </button>
 
             <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-mono transition-colors"
+              title="导出当前表格为 CSV"
+            >
+              <Download className="w-4 h-4 text-slate-400" />
+              导出 CSV
+            </button>
+
+            <button
               onClick={handleAddRow}
               className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-mono font-bold border border-slate-700 transition-colors"
             >
               <Plus className="w-4 h-4 text-emerald-400" />
-              添加新行
+              加行
             </button>
+
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleBulkDeleteSelected}
+                className="flex items-center gap-1 px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 border border-rose-500/40 rounded-lg text-xs font-mono font-bold transition-colors"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                删除选中({selectedIds.size})
+              </button>
+            )}
 
             <button
               onClick={handleSaveAll}
               disabled={saving}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold shadow transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold shadow-lg shadow-emerald-600/20 transition-colors disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              {saving ? '正在保存...' : '批量保存修改'}
+              {saving ? '保存中...' : '保存修改'}
             </button>
 
             <button
               onClick={onLogout}
-              className="flex items-center gap-1 px-3 py-1.5 bg-rose-500/20 border border-rose-500/30 text-rose-300 hover:bg-rose-500/30 rounded-lg text-xs font-mono font-bold transition-colors ml-2"
+              className="flex items-center gap-1 px-3 py-1.5 bg-rose-500/20 border border-rose-500/30 text-rose-300 hover:bg-rose-500/30 rounded-lg text-xs font-mono font-bold transition-colors ml-1"
             >
               <LogOut className="w-4 h-4" />
               退出
@@ -242,7 +442,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white p-1 ml-1"
+              className="text-slate-400 hover:text-white p-1 ml-1 rounded hover:bg-slate-800"
             >
               <X className="w-5 h-5" />
             </button>
@@ -267,105 +467,217 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         )}
 
-        {/* Excel 可编辑数据表格 */}
+        {/* 数据工作台表格区 */}
         <div className="flex-1 overflow-auto p-2 font-mono text-xs">
           <table className="w-full text-left border-collapse border border-slate-800">
             <thead>
-              <tr className="bg-slate-950 text-slate-400 uppercase text-[11px] border-b border-slate-800 sticky top-0 z-10 shadow-sm">
-                <th className="py-2.5 px-2 border-r border-slate-800 w-10 text-center">#</th>
-                <th className="py-2.5 px-3 border-r border-slate-800 w-36">日期 (YYYY-MM-DD)</th>
-                <th className="py-2.5 px-3 border-r border-slate-800 w-28">成员</th>
-                <th className="py-2.5 px-3 border-r border-slate-800 w-28">主分类</th>
+              <tr className="bg-slate-950 text-slate-400 uppercase text-[11px] border-b border-slate-800 sticky top-0 z-10 shadow-sm font-bold tracking-wider">
+                {/* 勾选列 */}
+                <th className="py-2.5 px-3 border-r border-slate-800 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllFilteredSelected}
+                    onChange={() => handleToggleSelectAll(processedRows)}
+                    className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500/20 bg-slate-900 cursor-pointer"
+                  />
+                </th>
+
+                {/* 序号 */}
+                <th className="py-2.5 px-2 border-r border-slate-800 w-12 text-center opacity-60">
+                  #
+                </th>
+
+                {/* 日期 (可排序) */}
+                <th className="py-2.5 px-3 border-r border-slate-800 w-36">
+                  <button
+                    onClick={() => handleSort('date')}
+                    className="flex items-center gap-1 hover:text-white transition-colors"
+                  >
+                    日期 (YYYY-MM-DD)
+                    {sortField === 'date' ? (
+                      sortAsc ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                    )}
+                  </button>
+                </th>
+
+                {/* 成员 (可排序) */}
+                <th className="py-2.5 px-3 border-r border-slate-800 w-28">
+                  <button
+                    onClick={() => handleSort('member')}
+                    className="flex items-center gap-1 hover:text-white transition-colors"
+                  >
+                    成员
+                    {sortField === 'member' ? (
+                      sortAsc ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                    )}
+                  </button>
+                </th>
+
+                {/* 主分类 */}
+                <th className="py-2.5 px-3 border-r border-slate-800 w-28">
+                  <button
+                    onClick={() => handleSort('category')}
+                    className="flex items-center gap-1 hover:text-white transition-colors"
+                  >
+                    主分类
+                    {sortField === 'category' ? (
+                      sortAsc ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                    )}
+                  </button>
+                </th>
+
+                {/* 子分类 */}
                 <th className="py-2.5 px-3 border-r border-slate-800 w-28">子分类</th>
-                <th className="py-2.5 px-3 border-r border-slate-800 min-w-[140px]">备注/名称</th>
-                <th className="py-2.5 px-3 border-r border-slate-800 w-32 text-right">金额 (正收/负支)</th>
+
+                {/* 备注/说明 */}
+                <th className="py-2.5 px-3 border-r border-slate-800 min-w-[140px]">备注/说明</th>
+
+                {/* 金额 (可排序) */}
+                <th className="py-2.5 px-3 border-r border-slate-800 w-36 text-right">
+                  <button
+                    onClick={() => handleSort('amount')}
+                    className="flex items-center gap-1 hover:text-white transition-colors ml-auto"
+                  >
+                    金额 (正收/负支)
+                    {sortField === 'amount' ? (
+                      sortAsc ? (
+                        <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <ArrowDown className="w-3.5 h-3.5 text-emerald-400" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                    )}
+                  </button>
+                </th>
+
+                {/* 操作 */}
                 <th className="py-2.5 px-2 text-center w-14">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
-              {rows.map((row, idx) => (
-                <tr key={row.id || idx} className="hover:bg-slate-800/50 transition-colors">
-                  <td className="py-1 px-2 border-r border-slate-800/80 text-center opacity-50 bg-slate-950/40">
-                    {idx + 1}
-                  </td>
+            <tbody className="divide-y divide-slate-800/80">
+              {processedRows.map((row, idx) => {
+                const isSelected = selectedIds.has(row.id);
+                return (
+                  <tr
+                    key={row.id}
+                    className={`transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-500/10 hover:bg-emerald-500/15'
+                        : 'hover:bg-slate-800/60'
+                    }`}
+                  >
+                    {/* 复选框 */}
+                    <td className="py-1 px-3 border-r border-slate-800/80 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelectRow(row.id)}
+                        className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500/20 bg-slate-900 cursor-pointer"
+                      />
+                    </td>
 
-                  {/* 日期 YYYY-MM-DD */}
-                  <td className="p-0 border-r border-slate-800/80">
-                    <input
-                      type="text"
-                      placeholder="YYYY-MM-DD"
-                      value={row.date}
-                      onChange={(e) => handleCellChange(idx, 'date', e.target.value)}
-                      className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800 focus:outline-none font-mono"
-                    />
-                  </td>
+                    {/* 序号 */}
+                    <td className="py-1 px-2 border-r border-slate-800/80 text-center opacity-40 bg-slate-950/40">
+                      {idx + 1}
+                    </td>
 
-                  {/* 成员 */}
-                  <td className="p-0 border-r border-slate-800/80">
-                    <input
-                      type="text"
-                      value={row.member}
-                      onChange={(e) => handleCellChange(idx, 'member', e.target.value)}
-                      className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800 focus:outline-none font-bold"
-                    />
-                  </td>
+                    {/* 日期 */}
+                    <td className="p-0 border-r border-slate-800/80">
+                      <input
+                        type="text"
+                        placeholder="YYYY-MM-DD"
+                        value={row.date || ''}
+                        onChange={(e) => handleCellChange(row.id, 'date', e.target.value)}
+                        className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800/80 focus:ring-1 focus:ring-emerald-500/40 rounded focus:outline-none font-mono"
+                      />
+                    </td>
 
-                  {/* 主分类 */}
-                  <td className="p-0 border-r border-slate-800/80">
-                    <input
-                      type="text"
-                      value={row.category}
-                      onChange={(e) => handleCellChange(idx, 'category', e.target.value)}
-                      className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800 focus:outline-none"
-                    />
-                  </td>
+                    {/* 成员 */}
+                    <td className="p-0 border-r border-slate-800/80">
+                      <input
+                        type="text"
+                        value={row.member || ''}
+                        onChange={(e) => handleCellChange(row.id, 'member', e.target.value)}
+                        className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800/80 focus:ring-1 focus:ring-emerald-500/40 rounded focus:outline-none font-bold"
+                      />
+                    </td>
 
-                  {/* 子分类 */}
-                  <td className="p-0 border-r border-slate-800/80">
-                    <input
-                      type="text"
-                      value={row.subcategory}
-                      onChange={(e) => handleCellChange(idx, 'subcategory', e.target.value)}
-                      className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800 focus:outline-none"
-                    />
-                  </td>
+                    {/* 主分类 */}
+                    <td className="p-0 border-r border-slate-800/80">
+                      <input
+                        type="text"
+                        value={row.category || ''}
+                        onChange={(e) => handleCellChange(row.id, 'category', e.target.value)}
+                        className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800/80 focus:ring-1 focus:ring-emerald-500/40 rounded focus:outline-none"
+                      />
+                    </td>
 
-                  {/* 备注 */}
-                  <td className="p-0 border-r border-slate-800/80">
-                    <input
-                      type="text"
-                      placeholder="选填"
-                      value={row.title}
-                      onChange={(e) => handleCellChange(idx, 'title', e.target.value)}
-                      className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800 focus:outline-none"
-                    />
-                  </td>
+                    {/* 子分类 */}
+                    <td className="p-0 border-r border-slate-800/80">
+                      <input
+                        type="text"
+                        value={row.subcategory || ''}
+                        onChange={(e) => handleCellChange(row.id, 'subcategory', e.target.value)}
+                        className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800/80 focus:ring-1 focus:ring-emerald-500/40 rounded focus:outline-none"
+                      />
+                    </td>
 
-                  {/* 金额 */}
-                  <td className="p-0 border-r border-slate-800/80">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={row.amount}
-                      onChange={(e) => handleCellChange(idx, 'amount', e.target.value)}
-                      className={`w-full h-full px-2 py-1.5 bg-transparent text-right font-mono font-bold focus:bg-slate-800 focus:outline-none ${
-                        row.amount > 0 ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    />
-                  </td>
+                    {/* 备注 */}
+                    <td className="p-0 border-r border-slate-800/80">
+                      <input
+                        type="text"
+                        placeholder="选填"
+                        value={row.title || ''}
+                        onChange={(e) => handleCellChange(row.id, 'title', e.target.value)}
+                        className="w-full h-full px-2 py-1.5 bg-transparent text-slate-200 focus:bg-slate-800/80 focus:ring-1 focus:ring-emerald-500/40 rounded focus:outline-none"
+                      />
+                    </td>
 
-                  {/* 删除 */}
-                  <td className="py-1 px-2 text-center">
-                    <button
-                      onClick={() => handleDeleteRow(idx)}
-                      className="p-1 text-slate-500 hover:text-rose-400 transition-colors"
-                      title="删除行"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    {/* 金额 */}
+                    <td className="p-0 border-r border-slate-800/80">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={row.amount}
+                        onChange={(e) => handleCellChange(row.id, 'amount', e.target.value)}
+                        className={`w-full h-full px-2 py-1.5 bg-transparent text-right font-mono font-bold focus:bg-slate-800/80 focus:ring-1 focus:ring-emerald-500/40 rounded focus:outline-none ${
+                          row.amount > 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      />
+                    </td>
+
+                    {/* 删除 */}
+                    <td className="py-1 px-2 text-center">
+                      <button
+                        onClick={() => handleDeleteRow(row.id)}
+                        className="p-1 text-slate-500 hover:text-rose-400 transition-colors rounded hover:bg-slate-800"
+                        title="删除行"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -373,7 +685,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       {/* 解析文本导入弹窗 */}
       {showParseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl p-6 shadow-2xl text-slate-100 relative">
             <button
               onClick={() => setShowParseModal(false)}
@@ -382,7 +694,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-base font-bold flex items-center gap-2 mb-2">
+            <h3 className="text-base font-bold flex items-center gap-2 mb-2 font-mono">
               <FileCode className="w-5 h-5 text-indigo-400" />
               解析文本数据增加到数据库
             </h3>
@@ -401,7 +713,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               className="w-full p-3 bg-slate-950 border border-slate-800 rounded-lg font-mono text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 mb-4"
             />
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800 font-mono">
               <span className="text-xs text-slate-400 font-mono">
                 预计解析: {rawText.trim() ? `${parseRawLedgerText(rawText).length} 条记录` : '0 条'}
               </span>
