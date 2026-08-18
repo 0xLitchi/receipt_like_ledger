@@ -5,30 +5,20 @@ import { ReceiptView } from './components/Receipt/ReceiptView';
 import { FilterBar } from './components/FilterBar';
 import { AdminAuthModal } from './components/Admin/AdminAuthModal';
 import { AdminPanel } from './components/Admin/AdminPanel';
-import { TransactionFormModal } from './components/Admin/TransactionFormModal';
-import { Sun, Moon } from 'lucide-react';
 
 export function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isNightMode, setIsNightMode] = useState(false);
 
-  // 8. 切换 Day / Night 模式样式应用到 body
+  // 6. 强制设置白天模式
   useEffect(() => {
-    if (isNightMode) {
-      document.body.classList.remove('mode-day');
-      document.body.classList.add('mode-night');
-    } else {
-      document.body.classList.remove('mode-night');
-      document.body.classList.add('mode-day');
-    }
-  }, [isNightMode]);
+    document.body.classList.remove('mode-night');
+    document.body.classList.add('mode-day');
+  }, []);
 
   // 弹窗控制
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [showFormModal, setShowFormModal] = useState(false);
-  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
 
   // 加载交易数据
   const loadData = async () => {
@@ -133,22 +123,10 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleAdminToggle]);
 
-  // 新增/修改交易
-  const handleSaveTransaction = async (txData: Transaction | Omit<Transaction, 'id'>) => {
-    if ('id' in txData) {
-      await storage.updateTransaction(txData);
-    } else {
-      await storage.addTransaction(txData);
-    }
+  // 5. Excel 批量保存处理
+  const handleBatchSave = async (items: Transaction[], deletedIds: string[]) => {
+    await storage.batchSaveTransactions(items, deletedIds);
     await loadData();
-  };
-
-  // 删除交易
-  const handleDeleteTransaction = async (id: string) => {
-    if (confirm('确定要删除该条记录吗？')) {
-      await storage.deleteTransaction(id);
-      await loadData();
-    }
   };
 
   const handleAdminLogout = () => {
@@ -158,17 +136,6 @@ export function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start py-6 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
-      {/* 8. Day / Night 模式切换按钮 (右上角) */}
-      <div className="fixed top-4 right-4 z-40 no-print">
-        <button
-          onClick={() => setIsNightMode(!isNightMode)}
-          className="p-2 rounded-full bg-slate-900/80 border border-slate-700/80 text-slate-200 hover:text-amber-400 backdrop-blur-md shadow-lg transition-all duration-200"
-          title={isNightMode ? '切换为白天模式' : '切换为夜间模式'}
-        >
-          {isNightMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-300" />}
-        </button>
-      </div>
-
       {/* 3. 机械滑块月份切换器 */}
       <FilterBar
         selectedMonth={selectedMonth || (recentMonths[0] || '')}
@@ -176,7 +143,7 @@ export function App() {
         recentMonths={recentMonths}
       />
 
-      {/* 7. 拟物化购物小票展示区 */}
+      {/* 拟物化购物小票展示区 */}
       <main className="w-full max-w-md mx-auto">
         {loading ? (
           <div className="py-20 text-center font-mono text-slate-500 text-xs">
@@ -187,7 +154,6 @@ export function App() {
             transactions={filteredTransactions}
             stats={stats}
             selectedMonth={selectedMonth || (recentMonths[0] || '')}
-            isNightMode={isNightMode}
           />
         )}
       </main>
@@ -201,32 +167,13 @@ export function App() {
         }}
       />
 
-      {/* 后台数据管理面板 */}
+      {/* 5. Excel 风格后台数据批量管理面板 */}
       <AdminPanel
         isOpen={showAdminPanel}
         onClose={() => setShowAdminPanel(false)}
         transactions={transactions}
-        onAdd={() => {
-          setEditingTx(null);
-          setShowFormModal(true);
-        }}
-        onEdit={(t) => {
-          setEditingTx(t);
-          setShowFormModal(true);
-        }}
-        onDelete={handleDeleteTransaction}
+        onBatchSave={handleBatchSave}
         onLogout={handleAdminLogout}
-      />
-
-      {/* 交易编辑/新增弹窗 */}
-      <TransactionFormModal
-        isOpen={showFormModal}
-        onClose={() => {
-          setShowFormModal(false);
-          setEditingTx(null);
-        }}
-        onSave={handleSaveTransaction}
-        initialData={editingTx}
       />
     </div>
   );

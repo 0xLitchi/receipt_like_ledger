@@ -30,7 +30,7 @@ export const storage = {
     return [];
   },
 
-  // 验证管理员密码（必须由 CF API 校验）
+  // 验证管理员密码
   async verifyAdminPassword(password: string): Promise<boolean> {
     try {
       const res = await fetch('/api/auth/verify', {
@@ -59,92 +59,56 @@ export const storage = {
     localStorage.removeItem(AUTH_PASSWORD_KEY);
   },
 
-  // 新增交易
-  async addTransaction(item: Omit<Transaction, 'id'>): Promise<Transaction> {
-    const newTx: Transaction = {
-      ...item,
-      id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    };
-
+  // 5. Excel 批量保存接口逻辑
+  async batchSaveTransactions(items: Transaction[], deletedIds: string[]): Promise<boolean> {
     const adminPassword = this.getSavedAdminPassword() || '';
 
-    try {
-      const res = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Password': adminPassword,
-        },
-        body: JSON.stringify(newTx),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success) {
-          return json.data;
+    // 逐条保存/新增与删除
+    for (const delId of deletedIds) {
+      try {
+        await fetch(`/api/transactions/${delId}`, {
+          method: 'DELETE',
+          headers: { 'X-Admin-Password': adminPassword },
+        });
+      } catch (e) {
+        console.warn('Failed to delete transaction ID', delId, e);
+      }
+    }
+
+    for (const item of items) {
+      if (item.id.startsWith('new_')) {
+        // 新行：POST 新增
+        try {
+          await fetch('/api/transactions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Admin-Password': adminPassword,
+            },
+            body: JSON.stringify({ ...item, id: undefined }),
+          });
+        } catch (e) {
+          console.warn('Failed to insert new item', e);
+        }
+      } else {
+        // 已有行：PUT 更新
+        try {
+          await fetch(`/api/transactions/${item.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Admin-Password': adminPassword,
+            },
+            body: JSON.stringify(item),
+          });
+        } catch (e) {
+          console.warn('Failed to update item', item.id, e);
         }
       }
-    } catch (e) {
-      console.warn('API save transaction error', e);
     }
 
-    // LocalStorage Fallback
-    const current = await this.getTransactions();
-    const updated = [newTx, ...current];
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-    return newTx;
-  },
-
-  // 更新交易
-  async updateTransaction(item: Transaction): Promise<boolean> {
-    const adminPassword = this.getSavedAdminPassword() || '';
-
-    try {
-      const res = await fetch(`/api/transactions/${item.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Password': adminPassword,
-        },
-        body: JSON.stringify(item),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success) return true;
-      }
-    } catch (e) {
-      console.warn('API update failed', e);
-    }
-
-    // LocalStorage Fallback
-    const current = await this.getTransactions();
-    const updated = current.map((t) => (t.id === item.id ? item : t));
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-    return true;
-  },
-
-  // 删除交易
-  async deleteTransaction(id: string): Promise<boolean> {
-    const adminPassword = this.getSavedAdminPassword() || '';
-
-    try {
-      const res = await fetch(`/api/transactions/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'X-Admin-Password': adminPassword,
-        },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success) return true;
-      }
-    } catch (e) {
-      console.warn('API delete failed', e);
-    }
-
-    // LocalStorage Fallback
-    const current = await this.getTransactions();
-    const updated = current.filter((t) => t.id !== id);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+    // 更新 LocalStorage 兜底
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
     return true;
   }
 };
