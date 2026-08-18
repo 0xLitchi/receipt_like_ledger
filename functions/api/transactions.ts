@@ -1,16 +1,28 @@
 interface Env {
   DB?: D1Database;
   ADMIN_PASSWORD?: string;
+  ACCESS_TOKEN?: string;
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const { env } = context;
+  const { request, env } = context;
+  const url = new URL(request.url);
+
+  // 校验 URL 中的 token / access_token 参数
+  const queryToken = url.searchParams.get('token') || url.searchParams.get('access_token');
+  const authHeader = request.headers.get('X-Admin-Password');
+
+  const isAuthorizedAdmin = !!(env.ADMIN_PASSWORD && authHeader === env.ADMIN_PASSWORD);
+  const isValidToken = !env.ACCESS_TOKEN || queryToken === env.ACCESS_TOKEN;
+
+  const hasFullAccess = isAuthorizedAdmin || isValidToken;
 
   if (!env.DB) {
     return new Response(JSON.stringify({
       success: false,
       message: 'D1 Binding DB not configured',
-      useFallback: true
+      useFallback: true,
+      hasFullAccess,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -22,7 +34,18 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
     ).all();
 
-    return new Response(JSON.stringify({ success: true, data: results }), {
+    // 若无权限查看具体金额与备注，则在服务端或返回中将备注与金额置为脱敏数据
+    const data = (results || []).map((t: any) => {
+      if (hasFullAccess) return t;
+      return {
+        ...t,
+        title: '***',
+        amount: 0,
+        isMasked: true,
+      };
+    });
+
+    return new Response(JSON.stringify({ success: true, data, hasFullAccess }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {

@@ -4,14 +4,19 @@ const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
 const AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
 
 export const storage = {
-  // 获取所有交易数据
-  async getTransactions(): Promise<Transaction[]> {
+  // 获取所有交易数据 (带着当前 URL 的 token / access_token 参数)
+  async getTransactions(): Promise<{ data: Transaction[]; hasFullAccess: boolean }> {
+    const search = window.location.search;
+
     try {
-      const res = await fetch('/api/transactions');
+      const res = await fetch(`/api/transactions${search}`);
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
-          return json.data;
+          return {
+            data: json.data,
+            hasFullAccess: json.hasFullAccess !== false,
+          };
         }
       }
     } catch (e) {
@@ -22,12 +27,13 @@ export const storage = {
     const local = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed = JSON.parse(local);
+        return { data: parsed, hasFullAccess: true };
       } catch (err) {
         console.error('Failed to parse local storage', err);
       }
     }
-    return [];
+    return { data: [], hasFullAccess: true };
   },
 
   // 验证管理员密码
@@ -59,7 +65,7 @@ export const storage = {
     localStorage.removeItem(AUTH_PASSWORD_KEY);
   },
 
-  // Excel 批量保存接口逻辑 (完全修复 new_ 与 parse_ 标识判定)
+  // Excel 批量保存接口逻辑
   async batchSaveTransactions(items: Transaction[], deletedIds: string[]): Promise<boolean> {
     const adminPassword = this.getSavedAdminPassword() || '';
 
@@ -81,7 +87,6 @@ export const storage = {
       const isNewItem = !item.id || item.id.startsWith('new_') || item.id.startsWith('parse_');
 
       if (isNewItem) {
-        // 新行 / 解析行：POST 新增
         try {
           await fetch('/api/transactions', {
             method: 'POST',
@@ -95,7 +100,6 @@ export const storage = {
           console.warn('Failed to insert new item', e);
         }
       } else {
-        // 已有行：PUT 更新
         try {
           await fetch(`/api/transactions/${item.id}`, {
             method: 'PUT',
@@ -111,7 +115,6 @@ export const storage = {
       }
     }
 
-    // 同步更新 LocalStorage 兜底
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
     return true;
   }

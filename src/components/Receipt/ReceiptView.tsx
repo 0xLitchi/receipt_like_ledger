@@ -9,40 +9,81 @@ interface ReceiptViewProps {
   transactions: Transaction[];
   stats: SummaryStats;
   selectedMonth: string;
+  hasFullAccess?: boolean;
 }
 
 export const ReceiptView: React.FC<ReceiptViewProps> = ({
   transactions,
   stats,
   selectedMonth,
+  hasFullAccess = true,
 }) => {
+  // 2. 将交易记录按日期分组并按日期倒序排列 (Reverse Chronological Order)
+  const dateGroups = React.useMemo(() => {
+    const map = new Map<string, Transaction[]>();
+
+    transactions.forEach((t) => {
+      const d = t.date || '未知日期';
+      const list = map.get(d) || [];
+      list.push(t);
+      map.set(d, list);
+    });
+
+    // 日期倒序 (从最新日期到最早日期)
+    const sortedDates = Array.from(map.keys()).sort().reverse();
+
+    return sortedDates.map((d) => ({
+      date: d,
+      // 简短日期显示 MM-DD
+      shortDate: d.length >= 10 ? d.substring(5) : d,
+      items: map.get(d) || [],
+    }));
+  }, [transactions]);
+
   return (
     <div className="flex justify-center my-2 px-1">
+      {/* 拟物化小票主体 */}
       <div className="receipt-container receipt-paper-box receipt-both-sawtooth font-mono relative w-full max-w-md p-4 sm:p-5 transition-all duration-300 rounded-sm">
         <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
         <ReceiptHeader
           selectedMonth={selectedMonth}
           transactions={transactions}
+          hasFullAccess={hasFullAccess}
         />
 
         <div className="my-2 min-h-[140px]">
-          {transactions.length === 0 ? (
+          {dateGroups.length === 0 ? (
             <div className="py-12 text-center text-xs opacity-50 font-mono flex flex-col items-center gap-2">
               <PackageOpen className="w-7 h-7 opacity-40" />
               <span>本月暂无记账明细</span>
             </div>
           ) : (
-            transactions.map((t) => (
-              <ReceiptItem
-                key={t.id}
-                transaction={t}
-              />
+            dateGroups.map((group) => (
+              <div key={group.date} className="my-2">
+                {/* 2. 抽出日期作为子抬头 */}
+                <div className="bg-black/5 py-0.5 px-2 my-1 font-mono text-[11px] font-black border-y border-dashed border-current/30 flex items-center justify-between text-left tracking-wider">
+                  <span>{group.shortDate}</span>
+                  <span className="opacity-50 text-[10px] font-normal">{group.items.length} 笔</span>
+                </div>
+
+                {/* 行数据 */}
+                {group.items.map((t) => (
+                  <ReceiptItem
+                    key={t.id}
+                    transaction={t}
+                    hasFullAccess={hasFullAccess}
+                  />
+                ))}
+              </div>
             ))
           )}
         </div>
 
-        <ReceiptFooter stats={stats} />
+        <ReceiptFooter
+          stats={stats}
+          hasFullAccess={hasFullAccess}
+        />
 
         <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
       </div>

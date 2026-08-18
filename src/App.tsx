@@ -8,9 +8,10 @@ import { AdminPanel } from './components/Admin/AdminPanel';
 
 export function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [hasFullAccess, setHasFullAccess] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
 
-  // 6. 强制设置白天模式
+  // 白天模式
   useEffect(() => {
     document.body.classList.remove('mode-night');
     document.body.classList.add('mode-day');
@@ -20,11 +21,12 @@ export function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
-  // 加载交易数据
+  // 1. 加载交易数据 (自动透传 URL token 参数校验)
   const loadData = async () => {
     setLoading(true);
-    const data = await storage.getTransactions();
-    setTransactions(data);
+    const result = await storage.getTransactions();
+    setTransactions(result.data);
+    setHasFullAccess(result.hasFullAccess);
     setLoading(false);
   };
 
@@ -123,7 +125,7 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleAdminToggle]);
 
-  // 5. Excel 批量保存处理
+  // Excel 批量保存处理
   const handleBatchSave = async (items: Transaction[], deletedIds: string[]) => {
     await storage.batchSaveTransactions(items, deletedIds);
     await loadData();
@@ -136,12 +138,19 @@ export function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start py-6 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
-      {/* 3. 机械滑块月份切换器 */}
+      {/* 机械滑块月份切换器 */}
       <FilterBar
         selectedMonth={selectedMonth || (recentMonths[0] || '')}
         onSelectMonth={setSelectedMonth}
         recentMonths={recentMonths}
       />
+
+      {/* 1. 未携带匹配 ACCESS_TOKEN 时的脱敏提醒 */}
+      {!hasFullAccess && (
+        <div className="mb-4 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded text-xs font-mono no-print">
+          🔒 访问未携带匹配的 ACCESS_TOKEN 密钥，金额与备注已被遮罩脱敏
+        </div>
+      )}
 
       {/* 拟物化购物小票展示区 */}
       <main className="w-full max-w-md mx-auto">
@@ -154,6 +163,7 @@ export function App() {
             transactions={filteredTransactions}
             stats={stats}
             selectedMonth={selectedMonth || (recentMonths[0] || '')}
+            hasFullAccess={hasFullAccess}
           />
         )}
       </main>
@@ -167,7 +177,7 @@ export function App() {
         }}
       />
 
-      {/* 5. Excel 风格后台数据批量管理面板 */}
+      {/* Excel 风格后台数据批量管理面板 */}
       <AdminPanel
         isOpen={showAdminPanel}
         onClose={() => setShowAdminPanel(false)}

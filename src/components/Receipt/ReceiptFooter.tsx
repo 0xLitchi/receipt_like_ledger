@@ -4,10 +4,12 @@ import { formatCurrency } from '../../utils/formatters';
 
 interface ReceiptFooterProps {
   stats: SummaryStats;
+  hasFullAccess?: boolean;
 }
 
 export const ReceiptFooter: React.FC<ReceiptFooterProps> = ({
   stats,
+  hasFullAccess = true,
 }) => {
   return (
     <div className="pt-2 pb-3 px-3 font-mono text-xs select-none">
@@ -23,7 +25,7 @@ export const ReceiptFooter: React.FC<ReceiptFooterProps> = ({
         <div className="flex justify-between text-base font-black pt-1.5 border-t border-dashed border-current/30 mt-2 font-mono">
           <span>净计:</span>
           <span className={stats.netBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-            {formatCurrency(stats.netBalance)}
+            {hasFullAccess ? formatCurrency(stats.netBalance) : '￥***.**'}
           </span>
         </div>
       </div>
