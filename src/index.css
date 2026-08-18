@@ -82,41 +82,61 @@ body.mode-day .receipt-paper-box {
     0 30px 40px -10px rgba(0, 0, 0, 0.6);
 }
 
-/* 4. 纸张撕裂粉碎再拼接重组动画 (Paper Tear & Reassemble Animation) */
-@keyframes paperShredReassemble {
+/* 真实锯齿裂口纸张撕裂与重组 Keyframes 动画 */
+@keyframes paperRipTop {
   0% {
-    transform: translateY(0) scale(1) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg);
+    clip-path: polygon(0% 0%, 100% 0%, 100% 48%, 85% 44%, 70% 51%, 55% 45%, 40% 52%, 25% 46%, 10% 53%, 0% 47%);
     opacity: 1;
-    filter: contrast(100%);
   }
-  20% {
-    transform: translateY(-10px) scale(0.96) rotate(-2deg);
-    filter: blur(1px) contrast(130%);
-    opacity: 0.7;
-  }
-  45% {
-    transform: translateY(14px) scale(0.93) rotate(2.5deg);
-    opacity: 0.3;
-    filter: blur(2.5px);
+  35% {
+    transform: translate(-25px, -35px) rotate(-8deg);
+    clip-path: polygon(0% 0%, 100% 0%, 100% 48%, 85% 42%, 70% 53%, 55% 43%, 40% 54%, 25% 44%, 10% 55%, 0% 45%);
+    opacity: 0.65;
+    filter: drop-shadow(0 16px 14px rgba(0,0,0,0.6));
   }
   70% {
-    transform: translateY(-4px) scale(0.99) rotate(-0.5deg);
-    opacity: 0.85;
-    filter: blur(0.5px);
-  }
-  85% {
-    transform: translateY(2px) scale(1.01) rotate(0.2deg);
-    opacity: 0.98;
+    transform: translate(4px, 3px) rotate(1deg);
+    opacity: 0.95;
   }
   100% {
-    transform: translateY(0) scale(1) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg);
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
     opacity: 1;
-    filter: blur(0);
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
   }
 }
 
-.animate-paper-shred {
-  animation: paperShredReassemble 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+@keyframes paperRipBottom {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    clip-path: polygon(0% 47%, 10% 53%, 25% 46%, 40% 52%, 55% 45%, 70% 51%, 85% 44%, 100% 48%, 100% 100%, 0% 100%);
+    opacity: 1;
+  }
+  35% {
+    transform: translate(30px, 40px) rotate(10deg);
+    clip-path: polygon(0% 45%, 10% 55%, 25% 44%, 40% 54%, 55% 43%, 70% 53%, 85% 42%, 100% 48%, 100% 100%, 0% 100%);
+    opacity: 0.65;
+    filter: drop-shadow(0 20px 18px rgba(0,0,0,0.7));
+  }
+  70% {
+    transform: translate(-4px, -3px) rotate(-1deg);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+    opacity: 1;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
+  }
+}
+
+.animate-rip-top {
+  animation: paperRipTop 0.75s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.animate-rip-bottom {
+  animation: paperRipBottom 0.75s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 .thermal-dashed-line {
