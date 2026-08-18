@@ -18,12 +18,10 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 }) => {
   return (
     <div className="flex justify-center my-2 px-1">
-      {/* 拟物化小票主体 */}
       <div className="receipt-container receipt-paper-box receipt-both-sawtooth font-mono relative w-full max-w-md p-4 sm:p-5 transition-all duration-300 rounded-sm">
         <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
         <ReceiptHeader
-          stats={stats}
           selectedMonth={selectedMonth}
           transactions={transactions}
         />
