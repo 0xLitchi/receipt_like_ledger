@@ -82,6 +82,37 @@ body.mode-day .receipt-paper-box {
     0 30px 40px -10px rgba(0, 0, 0, 0.6);
 }
 
+/* 6. 美化极简科技感 Webkit 滚动条 (替换浏览器原生滚动条) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.8);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
+}
+
+/* Day 模式下的精美滚动条 */
+.day-admin-workbench ::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.8);
+}
+.day-admin-workbench ::-webkit-scrollbar-thumb {
+  background: rgba(203, 213, 225, 0.9);
+}
+.day-admin-workbench ::-webkit-scrollbar-thumb:hover {
+  background: #059669;
+}
+
 /* 热敏打印机头部金属槽 */
 .printer-slot-head {
   background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
@@ -102,7 +133,7 @@ body.mode-day .receipt-paper-box {
   animation: machineVibrate 0.12s infinite linear;
 }
 
-/* 拍立得暗房热感显影激光扫线 (暖红 + 暖橙激光束) */
+/* 拍立得暗房热感显影激光扫线 */
 @keyframes polaroidLaserScan {
   0% {
     top: 0%;
@@ -121,7 +152,7 @@ body.mode-day .receipt-paper-box {
   animation: polaroidLaserScan 1.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
-/* 拍立得相片暗房显影 Keyframes (从纯白底片到墨迹显影加深) */
+/* 拍立得相片暗房显影 Keyframes */
 @keyframes polaroidInkDevelop {
   0% {
     opacity: 0.05;
