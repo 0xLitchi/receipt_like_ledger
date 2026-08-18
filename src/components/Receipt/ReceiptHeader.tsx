@@ -10,7 +10,6 @@ interface ReceiptHeaderProps {
 }
 
 export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
-  selectedMonth,
   transactions,
   hasFullAccess = true,
 }) => {
@@ -41,30 +40,25 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
   }, [transactions, hasFullAccess]);
 
   return (
-    <div className="text-center pt-2 pb-1 select-none font-mono">
+    <div className="text-center pt-1 pb-1 select-none font-pixel tracking-wider">
       {/* 抬头图标 */}
       <div className="flex items-center justify-center my-1">
-        <div className="p-1.5 border-2 border-current rounded-full opacity-85">
+        <div className="p-1 border-2 border-current rounded-full opacity-85">
           <Receipt className="w-5 h-5 stroke-[2.5]" />
         </div>
       </div>
 
-      {/* 月份 YYYY-MM */}
-      <div className="text-xs font-bold opacity-90 flex justify-center font-mono my-2 tracking-widest border-y border-dashed border-current/25 py-1">
-        <span>{selectedMonth || 'YYYY-MM'}</span>
-      </div>
-
-      {/* 分类汇总 (从小到大升序) */}
+      {/* 1. 分类汇总 (去除了顶部的 YYYY-MM，风格更贴合复古像素小票) */}
       {categoryStats.length > 0 && (
-        <div className="my-3 py-2 border-y border-dashed border-current/25 text-left font-mono text-[11px] space-y-1 bg-black/[0.02] px-2 rounded">
-          <div className="text-[10px] font-black opacity-60 uppercase tracking-wider mb-1.5 border-b border-current/10 pb-0.5 flex justify-between">
+        <div className="my-2 py-2 border-y-2 border-dashed border-current/30 text-left font-pixel text-xs space-y-1 bg-black/[0.02] px-2.5 rounded-sm">
+          <div className="text-[11px] font-black opacity-70 uppercase tracking-widest mb-1 border-b border-current/15 pb-0.5 flex justify-between">
             <span>分类汇总</span>
             <span>小计</span>
           </div>
           {categoryStats.map((item) => (
-            <div key={item.name} className="flex justify-between items-center opacity-90 font-mono">
-              <span className="font-bold">{item.name} <span className="opacity-50 text-[10px]">({item.count})</span></span>
-              <span className={`font-black ${item.total > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+            <div key={item.name} className="flex justify-between items-center opacity-95 font-pixel text-xs">
+              <span className="font-bold">{item.name} <span className="opacity-60 text-[10px]">({item.count})</span></span>
+              <span className={`font-black tracking-tight ${item.total > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                 {hasFullAccess ? formatCurrency(item.total, true) : '￥***.**'}
               </span>
             </div>
@@ -72,8 +66,8 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
         </div>
       )}
 
-      {/* 2. 抽出日期作为子抬头，明细表改为 4 列等宽居中：备注 | 金额 | 成员 | 分类 */}
-      <div className="grid grid-cols-4 text-center text-xs font-black border-b-2 border-current pb-1.5 mt-3 opacity-90 font-mono">
+      {/* 2. 像素风 4 列居中表头：备注 | 金额 | 成员 | 分类 */}
+      <div className="grid grid-cols-4 text-center text-xs font-black border-b-2 border-current pb-1 mt-2 opacity-95 font-pixel tracking-widest uppercase">
         <div>备注</div>
         <div>金额</div>
         <div>成员</div>

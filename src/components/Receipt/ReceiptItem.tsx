@@ -18,26 +18,24 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
       : transaction.category
     : '';
 
-  // 2. 备注为空时留空，不用 "-" 占位
   const rawTitle = transaction.title ? transaction.title.trim() : '';
   const titleText = hasFullAccess ? rawTitle : '***';
 
-  // 脱敏校验金额文本
   const amountText = hasFullAccess
     ? formatCurrency(transaction.amount, true)
     : '￥***.**';
 
   return (
-    <div className="py-1.5 border-b border-dashed border-current/15 font-mono text-xs select-none hover:bg-black/[0.02] transition-colors">
+    <div className="py-1 border-b border-dashed border-current/20 font-pixel text-xs select-none hover:bg-black/[0.03] transition-colors leading-snug">
       <div className="grid grid-cols-4 text-center items-center">
-        {/* 1. 备注 (若为空则留空) */}
-        <div className="font-bold text-[11px] opacity-95 truncate px-1" title={titleText}>
+        {/* 1. 备注 */}
+        <div className="font-bold text-[12px] opacity-95 truncate px-1 font-pixel" title={titleText}>
           {titleText}
         </div>
 
-        {/* 2. 金额 */}
+        {/* 2. 像素风金额 */}
         <div
-          className={`font-black text-xs font-mono tracking-tighter px-1 ${
+          className={`font-black text-xs font-pixel tracking-tighter px-1 ${
             !hasFullAccess
               ? 'opacity-60'
               : isIncome
@@ -49,12 +47,12 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
         </div>
 
         {/* 3. 成员 */}
-        <div className="font-bold opacity-85 text-[11px] truncate px-1">
+        <div className="font-bold opacity-90 text-[12px] truncate px-1 font-pixel">
           {transaction.member || ''}
         </div>
 
         {/* 4. 分类 */}
-        <div className="font-bold text-[10px] opacity-80 truncate px-1" title={categoryLabel}>
+        <div className="font-bold text-[11px] opacity-80 truncate px-1 font-pixel" title={categoryLabel}>
           {categoryLabel}
         </div>
       </div>

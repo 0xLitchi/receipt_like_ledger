@@ -56,23 +56,23 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto">
-      {/* 1. 顶部拟真热敏打印机机头，标头“荔枝牌小票打印机”，马达微幅震动 */}
+      {/* 顶部拟真热敏打印机机头，标头“荔枝牌小票打印机” */}
       <div
-        className={`w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-mono relative no-print mb-[-6px] transition-transform ${
+        className={`w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-pixel relative no-print mb-[-6px] transition-transform ${
           isPrinting ? 'animate-machine-vibrate' : ''
         }`}
       >
         {/* 打印机品牌标 */}
         <div className="flex items-center gap-2">
           <Printer className="w-4.5 h-4.5 text-emerald-400 animate-pulse" />
-          <span className="text-[12px] font-black tracking-widest text-slate-200 uppercase font-mono">
+          <span className="text-[13px] font-black tracking-widest text-slate-200 uppercase font-pixel">
             荔枝牌小票打印机
           </span>
         </div>
 
         {/* 打印工作状态指示灯 */}
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-slate-400 font-mono font-bold">
+          <span className="text-[11px] text-slate-400 font-pixel font-bold">
             {isPrinting ? '打印中...' : '就绪'}
           </span>
           <div
@@ -88,9 +88,9 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
         <div className="absolute inset-x-3 bottom-0 h-1 bg-black rounded-full shadow-inner border-t border-slate-900" />
       </div>
 
-      {/* 小票展示区域 (激光打字光束独立置于顶层，确保 100% 可见) */}
+      {/* 小票展示区域 */}
       <div className="w-full relative overflow-hidden pt-1 min-h-[300px]">
-        {/* 激光打字高亮光束：独立置于外层框架的最顶层 (z-50)，从 top:0% -> 100% 扫过 */}
+        {/* 激光打字高亮光束 (z-50 顶层) */}
         {isPrinting && (
           <div className="absolute inset-x-0 h-2 bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_25px_#22d3ee,0_0_45px_#10b981] pointer-events-none z-50 animate-laser-scan-slow" />
         )}
@@ -118,7 +118,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
               duration: 1.65,
               ease: [0.25, 1, 0.5, 1],
             }}
-            className="receipt-container receipt-paper-box receipt-both-sawtooth font-mono relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
+            className="receipt-container receipt-paper-box receipt-both-sawtooth font-pixel relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
           >
             <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
@@ -130,7 +130,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
             <div className="my-2 min-h-[140px]">
               {dateGroups.length === 0 ? (
-                <div className="py-12 text-center text-xs opacity-50 font-mono flex flex-col items-center gap-2">
+                <div className="py-12 text-center text-xs opacity-50 font-pixel flex flex-col items-center gap-2">
                   <PackageOpen className="w-7 h-7 opacity-40" />
                   <span>本月暂无记账明细</span>
                 </div>
@@ -138,7 +138,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 dateGroups.map((group) => (
                   <div key={group.date} className="my-2">
                     {/* 子抬头 */}
-                    <div className="bg-black/5 py-0.5 px-2 my-1 font-mono text-[11px] font-black border-y border-dashed border-current/30 text-left tracking-wider">
+                    <div className="bg-black/5 py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-dashed border-current/30 text-left tracking-wider">
                       <span>{group.shortDate}</span>
                     </div>
 
