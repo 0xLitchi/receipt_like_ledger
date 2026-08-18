@@ -27,13 +27,13 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
 
   return (
     <div className="py-1 border-b border-dashed border-current/20 font-pixel text-xs select-none hover:bg-black/[0.03] transition-colors leading-snug">
-      <div className="grid grid-cols-4 text-center items-center">
-        {/* 1. 备注 */}
+      <div className="grid grid-cols-4 text-left items-center">
+        {/* 1. 备注 (左对齐) */}
         <div className="font-bold text-[12px] opacity-95 truncate px-1 font-pixel" title={titleText}>
           {titleText}
         </div>
 
-        {/* 2. 像素风金额 */}
+        {/* 2. 金额 (左对齐) */}
         <div
           className={`font-black text-xs font-pixel tracking-tighter px-1 ${
             !hasFullAccess
@@ -46,12 +46,12 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
           {amountText}
         </div>
 
-        {/* 3. 成员 */}
+        {/* 3. 成员 (左对齐) */}
         <div className="font-bold opacity-90 text-[12px] truncate px-1 font-pixel">
           {transaction.member || ''}
         </div>
 
-        {/* 4. 分类 */}
+        {/* 4. 分类 (左对齐) */}
         <div className="font-bold text-[11px] opacity-80 truncate px-1 font-pixel" title={categoryLabel}>
           {categoryLabel}
         </div>
