@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Transaction, SummaryStats } from '../../types';
 import { ReceiptHeader } from './ReceiptHeader';
 import { ReceiptItem } from './ReceiptItem';
@@ -18,7 +18,22 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   selectedMonth,
   hasFullAccess = true,
 }) => {
-  // 2. 将交易记录按日期分组并按日期倒序排列 (Reverse Chronological Order)
+  const [isAnimating, setIsAnimating] = useState(false);
+  const prevMonthRef = useRef(selectedMonth);
+
+  // 4. 当切换月份时触发纸张撕裂碎裂再重组拼装动画
+  useEffect(() => {
+    if (prevMonthRef.current !== selectedMonth) {
+      prevMonthRef.current = selectedMonth;
+      setIsAnimating(true);
+      const timer = setTimeout(() => {
+        setIsAnimating(false);
+      }, 650);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedMonth]);
+
+  // 将交易记录按日期分组倒序排列
   const dateGroups = React.useMemo(() => {
     const map = new Map<string, Transaction[]>();
 
@@ -29,12 +44,10 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
       map.set(d, list);
     });
 
-    // 日期倒序 (从最新日期到最早日期)
     const sortedDates = Array.from(map.keys()).sort().reverse();
 
     return sortedDates.map((d) => ({
       date: d,
-      // 简短日期显示 MM-DD
       shortDate: d.length >= 10 ? d.substring(5) : d,
       items: map.get(d) || [],
     }));
@@ -42,8 +55,12 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex justify-center my-2 px-1">
-      {/* 拟物化小票主体 */}
-      <div className="receipt-container receipt-paper-box receipt-both-sawtooth font-mono relative w-full max-w-md p-4 sm:p-5 transition-all duration-300 rounded-sm">
+      {/* 拟物化小票主体 (附带纸张撕裂粉碎重组动画 animate-paper-shred) */}
+      <div
+        className={`receipt-container receipt-paper-box receipt-both-sawtooth font-mono relative w-full max-w-md p-4 sm:p-5 transition-all duration-300 rounded-sm ${
+          isAnimating ? 'animate-paper-shred' : ''
+        }`}
+      >
         <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
         <ReceiptHeader
@@ -61,13 +78,12 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           ) : (
             dateGroups.map((group) => (
               <div key={group.date} className="my-2">
-                {/* 2. 抽出日期作为子抬头 */}
-                <div className="bg-black/5 py-0.5 px-2 my-1 font-mono text-[11px] font-black border-y border-dashed border-current/30 flex items-center justify-between text-left tracking-wider">
+                {/* 1. 子抬头仅保留日期，去除了数据条数 */}
+                <div className="bg-black/5 py-0.5 px-2 my-1 font-mono text-[11px] font-black border-y border-dashed border-current/30 text-left tracking-wider">
                   <span>{group.shortDate}</span>
-                  <span className="opacity-50 text-[10px] font-normal">{group.items.length} 笔</span>
                 </div>
 
-                {/* 行数据 */}
+                {/* 行明细 */}
                 {group.items.map((t) => (
                   <ReceiptItem
                     key={t.id}

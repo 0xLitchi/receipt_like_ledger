@@ -16,12 +16,13 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
     ? transaction.subcategory
       ? `${transaction.category}/${transaction.subcategory}`
       : transaction.category
-    : '-';
+    : '';
 
-  const titleText = hasFullAccess
-    ? transaction.title || '-'
-    : '***';
+  // 2. 备注为空时留空，不用 "-" 占位
+  const rawTitle = transaction.title ? transaction.title.trim() : '';
+  const titleText = hasFullAccess ? rawTitle : '***';
 
+  // 脱敏校验金额文本
   const amountText = hasFullAccess
     ? formatCurrency(transaction.amount, true)
     : '￥***.**';
@@ -29,7 +30,7 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
   return (
     <div className="py-1.5 border-b border-dashed border-current/15 font-mono text-xs select-none hover:bg-black/[0.02] transition-colors">
       <div className="grid grid-cols-4 text-center items-center">
-        {/* 1. 备注 */}
+        {/* 1. 备注 (若为空则留空) */}
         <div className="font-bold text-[11px] opacity-95 truncate px-1" title={titleText}>
           {titleText}
         </div>
@@ -49,7 +50,7 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
 
         {/* 3. 成员 */}
         <div className="font-bold opacity-85 text-[11px] truncate px-1">
-          {transaction.member || '-'}
+          {transaction.member || ''}
         </div>
 
         {/* 4. 分类 */}
