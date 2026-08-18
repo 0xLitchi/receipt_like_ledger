@@ -11,9 +11,6 @@ interface ReceiptViewProps {
   stats: SummaryStats;
   theme: ThemeType;
   selectedMonth: string;
-  isAdmin?: boolean;
-  onEditTransaction?: (t: Transaction) => void;
-  onDeleteTransaction?: (id: string) => void;
 }
 
 export const ReceiptView: React.FC<ReceiptViewProps> = ({
@@ -21,15 +18,8 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   stats,
   theme,
   selectedMonth,
-  isAdmin = false,
-  onEditTransaction,
-  onDeleteTransaction,
 }) => {
   const receiptRef = useRef<HTMLDivElement>(null);
-
-  const handlePrint = () => {
-    window.print();
-  };
 
   const handleExportPNG = async () => {
     if (!receiptRef.current) return;
@@ -37,7 +27,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
       const dataUrl = await toPng(receiptRef.current, {
         cacheBust: true,
         quality: 0.95,
-        backgroundColor: theme === 'paper-white' ? '#faf9f6' : theme === 'paper-vintage' ? '#f4ecd8' : theme === 'paper-receipt-blue' ? '#e0f2fe' : '#18181b',
+        backgroundColor: theme === 'paper-white' ? '#faf9f6' : '#18181b',
       });
       const link = document.createElement('a');
       link.download = `receipt_${selectedMonth}_${Date.now()}.png`;
@@ -50,10 +40,10 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   };
 
   return (
-    <div className="flex justify-center my-4 px-2">
+    <div className="flex justify-center my-2 px-1">
       <div
         ref={receiptRef}
-        className={`receipt-container receipt-both-sawtooth theme-${theme} relative w-full max-w-md p-4 sm:p-6 shadow-2xl transition-all duration-300 rounded-sm`}
+        className={`receipt-container receipt-both-sawtooth theme-${theme} font-mono relative w-full max-w-md p-4 sm:p-5 shadow-2xl transition-all duration-300 rounded-sm`}
         style={{
           boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
         }}
@@ -76,9 +66,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
               <ReceiptItem
                 key={t.id}
                 transaction={t}
-                isAdmin={isAdmin}
-                onEdit={onEditTransaction}
-                onDelete={onDeleteTransaction}
               />
             ))
           )}
@@ -86,7 +73,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
         <ReceiptFooter
           stats={stats}
-          onPrint={handlePrint}
           onExport={handleExportPNG}
         />
 

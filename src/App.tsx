@@ -11,7 +11,6 @@ export function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const theme: ThemeType = 'paper-white';
-  const [isAdmin, setIsAdmin] = useState(false);
 
   // 弹窗控制
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -29,16 +28,12 @@ export function App() {
 
   useEffect(() => {
     loadData();
-    if (storage.getSavedAdminPassword()) {
-      setIsAdmin(true);
-    }
   }, []);
 
-  // 动态提取最近三个月 (例如 "2026-08", "2026-07", "2026-06")
+  // 动态提取最近三个月 (如 ["2026-08", "2026-07", "2026-06"])
   const recentMonths = useMemo(() => {
     const monthSet = new Set<string>();
 
-    // 先加入当前月份
     const now = new Date();
     const curYear = now.getFullYear();
     const curMonth = now.getMonth() + 1;
@@ -50,18 +45,16 @@ export function App() {
       monthSet.add(`${y}-${m}`);
     }
 
-    // 从交易数据中也有可能包含更多最近月份
     transactions.forEach((t) => {
       if (t.date && t.date.length >= 7) {
         monthSet.add(t.date.substring(0, 7));
       }
     });
 
-    // 排序后截取最新的 3 个月份
     return Array.from(monthSet).sort().reverse().slice(0, 3);
   }, [transactions]);
 
-  // 选中的月份，默认选中最近的一个月
+  // 选中的月份
   const [selectedMonth, setSelectedMonth] = useState<string>('');
 
   useEffect(() => {
@@ -70,7 +63,7 @@ export function App() {
     }
   }, [recentMonths, selectedMonth]);
 
-  // 按选中月份过滤交易记录
+  // 按选中月份过滤
   const filteredTransactions = useMemo(() => {
     if (!selectedMonth) return transactions;
     return transactions.filter((t) => t.date && t.date.startsWith(selectedMonth));
@@ -100,7 +93,6 @@ export function App() {
   // 快捷触发后台模式（按 "." 键触发）
   const handleAdminToggle = useCallback(() => {
     if (storage.getSavedAdminPassword()) {
-      setIsAdmin(true);
       setShowAdminPanel(true);
     } else {
       setShowAuthModal(true);
@@ -149,13 +141,12 @@ export function App() {
 
   const handleAdminLogout = () => {
     storage.logoutAdmin();
-    setIsAdmin(false);
     setShowAdminPanel(false);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start py-6 px-4 font-sans selection:bg-slate-700 selection:text-white">
-      {/* 极简筛选：仅保留最近三个月切换按钮 */}
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start py-6 px-3 font-mono selection:bg-slate-700 selection:text-white">
+      {/* 机械滑块月份切换器 */}
       <FilterBar
         selectedMonth={selectedMonth || (recentMonths[0] || '')}
         onSelectMonth={setSelectedMonth}
@@ -166,7 +157,7 @@ export function App() {
       <main className="w-full max-w-md mx-auto">
         {loading ? (
           <div className="py-20 text-center font-mono text-slate-500 text-xs">
-            加载小票中...
+            加载中...
           </div>
         ) : (
           <ReceiptView
@@ -174,22 +165,15 @@ export function App() {
             stats={stats}
             theme={theme}
             selectedMonth={selectedMonth || (recentMonths[0] || '')}
-            isAdmin={isAdmin}
-            onEditTransaction={(t) => {
-              setEditingTx(t);
-              setShowFormModal(true);
-            }}
-            onDeleteTransaction={handleDeleteTransaction}
           />
         )}
       </main>
 
-      {/* 管理员验证弹窗 (按 "." 键后触发) */}
+      {/* 管理员验证弹窗 (按 "." 键触发) */}
       <AdminAuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onSuccess={() => {
-          setIsAdmin(true);
           setShowAdminPanel(true);
         }}
       />
