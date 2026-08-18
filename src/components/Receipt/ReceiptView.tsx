@@ -22,7 +22,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   const [isPrinting, setIsPrinting] = useState(false);
   const prevMonthRef = useRef(selectedMonth);
 
-  // 当切换月份时触发 1.65s 的激光打字与出纸效果
+  // 当切换月份时触发 1.65s 的激光打字、80年代老虎机数字滚轮与出纸效果
   useEffect(() => {
     if (prevMonthRef.current !== selectedMonth) {
       prevMonthRef.current = selectedMonth;
@@ -56,7 +56,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto">
-      {/* 顶部拟真热敏打印机机头：去除了抬头文字，去除了“就绪”文字，仅保留图标与绿灯 */}
+      {/* 顶部拟真热敏打印机机头，马达高频微幅震动 */}
       <div
         className={`w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-pixel relative no-print mb-[-6px] transition-transform ${
           isPrinting ? 'animate-machine-vibrate' : ''
@@ -84,7 +84,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
       {/* 小票展示区域 */}
       <div className="w-full relative overflow-hidden pt-1 min-h-[300px]">
-        {/* 激光打字高亮光束 */}
+        {/* 激光打字高亮光束 (z-50 顶层) */}
         {isPrinting && (
           <div className="absolute inset-x-0 h-2 bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_25px_#22d3ee,0_0_45px_#10b981] pointer-events-none z-50 animate-laser-scan-slow" />
         )}
@@ -120,6 +120,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
               selectedMonth={selectedMonth}
               transactions={transactions}
               hasFullAccess={hasFullAccess}
+              isPrinting={isPrinting}
             />
 
             <div className="my-2 min-h-[140px]">
@@ -136,12 +137,13 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                       <span>{group.shortDate}</span>
                     </div>
 
-                    {/* 行明细 */}
+                    {/* 行明细 (透传 isPrinting 触发复古老虎机数字滚轮) */}
                     {group.items.map((t) => (
                       <ReceiptItem
                         key={t.id}
                         transaction={t}
                         hasFullAccess={hasFullAccess}
+                        isPrinting={isPrinting}
                       />
                     ))}
                   </div>
@@ -152,6 +154,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             <ReceiptFooter
               stats={stats}
               hasFullAccess={hasFullAccess}
+              isPrinting={isPrinting}
             />
 
             <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />

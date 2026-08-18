@@ -1,17 +1,19 @@
 import React from 'react';
 import type { Transaction } from '../../types';
-import { formatCurrency } from '../../utils/formatters';
+import { AnimatedNumber } from './AnimatedNumber';
 import { Receipt } from 'lucide-react';
 
 interface ReceiptHeaderProps {
   selectedMonth: string;
   transactions: Transaction[];
   hasFullAccess?: boolean;
+  isPrinting?: boolean;
 }
 
 export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
   transactions,
   hasFullAccess = true,
+  isPrinting = false,
 }) => {
   // 分类汇总：按数值从小到大 (Ascending) 排序
   const categoryStats = React.useMemo(() => {
@@ -58,15 +60,20 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
           {categoryStats.map((item) => (
             <div key={item.name} className="flex justify-between items-center opacity-95 font-pixel text-xs">
               <span className="font-bold">{item.name} <span className="opacity-60 text-[10px]">({item.count})</span></span>
-              <span className={`font-black tracking-tight ${item.total > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {hasFullAccess ? formatCurrency(item.total, true) : '￥***.**'}
+              <span className="font-black tracking-tight">
+                <AnimatedNumber
+                  value={item.total}
+                  hasFullAccess={hasFullAccess}
+                  isPrinting={isPrinting}
+                  className={item.total > 0 ? 'text-emerald-700' : 'text-rose-700'}
+                />
               </span>
             </div>
           ))}
         </div>
       )}
 
-      {/* 1. 表头改回居中对齐 (text-center)：备注 | 金额 | 成员 | 分类 */}
+      {/* 表头居中对齐：备注 | 金额 | 成员 | 分类 */}
       <div className="grid grid-cols-4 text-center text-xs font-black border-b-2 border-current pb-1 mt-2 opacity-95 font-pixel tracking-widest uppercase">
         <div>备注</div>
         <div>金额</div>

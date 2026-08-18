@@ -1,15 +1,17 @@
 import React from 'react';
 import type { SummaryStats } from '../../types';
-import { formatCurrency } from '../../utils/formatters';
+import { AnimatedNumber } from './AnimatedNumber';
 
 interface ReceiptFooterProps {
   stats: SummaryStats;
   hasFullAccess?: boolean;
+  isPrinting?: boolean;
 }
 
 export const ReceiptFooter: React.FC<ReceiptFooterProps> = ({
   stats,
   hasFullAccess = true,
+  isPrinting = false,
 }) => {
   return (
     <div className="pt-2 pb-2 px-2 font-pixel text-xs select-none tracking-wider">
@@ -24,9 +26,12 @@ export const ReceiptFooter: React.FC<ReceiptFooterProps> = ({
 
         <div className="flex justify-between text-sm font-black pt-1 border-t border-dashed border-current/30 mt-1.5 font-pixel">
           <span>净计:</span>
-          <span className={stats.netBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
-            {hasFullAccess ? formatCurrency(stats.netBalance) : '￥***.**'}
-          </span>
+          <AnimatedNumber
+            value={stats.netBalance}
+            hasFullAccess={hasFullAccess}
+            isPrinting={isPrinting}
+            className={stats.netBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}
+          />
         </div>
       </div>
     </div>
