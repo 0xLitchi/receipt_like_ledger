@@ -4,14 +4,20 @@ const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
 const AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
 
 export const storage = {
-  // 获取所有交易数据 (拼接时间戳 _t 防止浏览器 HTTP 缓存脱敏 Response)
+  // 获取所有交易数据 (同时通过 URL Query 参数与 Header 传递 admin_password，彻底避免鉴权丢失)
   async getTransactions(): Promise<{ data: Transaction[]; hasFullAccess: boolean }> {
-    const search = window.location.search;
     const adminPassword = this.getSavedAdminPassword() || '';
 
-    // 拼接防缓存时间戳参数 _t
-    const sep = search ? '&' : '?';
-    const fetchUrl = `/api/transactions${search}${sep}_t=${Date.now()}`;
+    // 构造请求 URL，同时带上防缓存 _t 与 admin_password
+    const urlObj = new URL(window.location.href);
+    const searchParams = new URLSearchParams(urlObj.search);
+
+    searchParams.set('_t', String(Date.now()));
+    if (adminPassword) {
+      searchParams.set('admin_password', adminPassword);
+    }
+
+    const fetchUrl = `/api/transactions?${searchParams.toString()}`;
 
     try {
       const res = await fetch(fetchUrl, {
@@ -23,11 +29,10 @@ export const storage = {
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
-          // 只要具备有效的管理员密码，或者后端返回 hasFullAccess === true，均为解密状态！
-          const hasAccess = !!adminPassword || json.hasFullAccess !== false;
           return {
             data: json.data,
-            hasFullAccess: hasAccess,
+            // 服务端鉴权成功返回 true 时即可全面解锁解密数据
+            hasFullAccess: json.hasFullAccess === true,
           };
         }
       }
@@ -84,7 +89,7 @@ export const storage = {
     for (const delId of deletedIds) {
       if (!delId || delId.startsWith('new_') || delId.startsWith('parse_')) continue;
       try {
-        await fetch(`/api/transactions/${delId}`, {
+        await fetch(`/api/transactions/${delId}?admin_password=${encodeURIComponent(adminPassword)}`, {
           method: 'DELETE',
           headers: { 'X-Admin-Password': adminPassword },
         });
@@ -98,7 +103,7 @@ export const storage = {
 
       if (isNewItem) {
         try {
-          await fetch('/api/transactions', {
+          await fetch(`/api/transactions?admin_password=${encodeURIComponent(adminPassword)}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -111,7 +116,7 @@ export const storage = {
         }
       } else {
         try {
-          await fetch(`/api/transactions/${item.id}`, {
+          await fetch(`/api/transactions/${item.id}?admin_password=${encodeURIComponent(adminPassword)}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',

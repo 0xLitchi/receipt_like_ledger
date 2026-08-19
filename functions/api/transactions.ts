@@ -25,8 +25,15 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   const queryToken = cleanSecretString(rawQueryToken);
-  const authHeader = cleanSecretString(request.headers.get('X-Admin-Password'));
 
+  // 支持 Header 或 Query 参数 (admin_password / password / X-Admin-Password) 校验管理员身份
+  const rawAdminPass =
+    request.headers.get('X-Admin-Password') ||
+    request.headers.get('x-admin-password') ||
+    url.searchParams.get('admin_password') ||
+    url.searchParams.get('password');
+
+  const authHeader = cleanSecretString(rawAdminPass);
   const expectedAdminPassword = cleanSecretString(env.ADMIN_PASSWORD);
   const isAuthorizedAdmin = !!(expectedAdminPassword && authHeader === expectedAdminPassword);
 
