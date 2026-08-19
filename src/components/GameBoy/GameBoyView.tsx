@@ -45,7 +45,7 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
       <div className="w-full bg-[#d0d0d7] border-4 border-[#b0b0b8] rounded-[36px] p-5 shadow-2xl relative overflow-hidden flex flex-col items-center">
         {/* 顶部左侧斜切纹路装饰 */}
         <div className="w-full flex justify-between items-center mb-3 px-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-pixel font-bold text-slate-600 tracking-widest uppercase">
+          <div className="flex items-center gap-1.5 text-[11px] font-pixel font-bold text-slate-700 tracking-widest uppercase">
             <Gamepad2 className="w-4 h-4 text-rose-600" />
             <span>GAMEBOY LEDGER</span>
           </div>
@@ -69,20 +69,20 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
             </div>
           </div>
 
-          {/* 🕹️ GameBoy LCD 绿光点阵屏幕 */}
-          <div className="w-full bg-[#9bbc0f] text-[#0f380f] font-pixel p-3.5 rounded-lg border-4 border-[#306230] gameboy-lcd-shadow relative overflow-hidden min-h-[360px]">
-            {/* 屏幕 Scanline 微粒感 */ }
+          {/* 🕹️ GameBoy LCD 高清清爽绿光屏幕 */}
+          <div className="w-full bg-[#e2f4c7] text-[#082008] font-pixel p-3.5 rounded-lg border-4 border-[#2b582b] gameboy-lcd-shadow relative overflow-hidden min-h-[360px]">
+            {/* 屏幕 Scanline 微粒感 */}
             <div className="absolute inset-0 gameboy-scanline pointer-events-none z-10" />
 
             {/* 屏幕顶端模式 Token Badge */}
-            <div className="flex justify-between items-center border-b-2 border-[#306230] pb-1 mb-2 text-xs font-black tracking-widest">
-              <span>★ 8-BIT LEDGER ★</span>
-              <span className="px-1.5 py-0.5 bg-[#8bac0f] border border-[#306230] rounded text-[10px]">
+            <div className="flex justify-between items-center border-b-2 border-[#2b582b] pb-1.5 mb-2.5 text-xs font-black tracking-widest">
+              <span className="text-[#082008] font-bold">★ 8-BIT LEDGER ★</span>
+              <span className="px-2 py-0.5 bg-[#c8e6a4] border border-[#2b582b] rounded text-[10px] font-bold text-[#082008]">
                 {currentMode}
               </span>
             </div>
 
-            {/* 账单内容（复用通用账单组件，完美呈现点阵绿屏） */}
+            {/* 账单内容（在高对比度清爽屏幕下无比清晰） */}
             <ReceiptHeader
               selectedMonth={selectedMonth}
               transactions={transactions}
@@ -91,14 +91,14 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
 
             <div className="my-2 min-h-[140px]">
               {dateGroups.length === 0 ? (
-                <div className="py-12 text-center text-xs opacity-75 font-pixel flex flex-col items-center gap-2">
-                  <PackageOpen className="w-7 h-7 text-[#306230]" />
-                  <span>NO DATA THIS MONTH</span>
+                <div className="py-12 text-center text-xs font-pixel flex flex-col items-center gap-2 text-[#2b582b]">
+                  <PackageOpen className="w-7 h-7 text-[#2b582b]" />
+                  <span className="font-bold">NO DATA THIS MONTH</span>
                 </div>
               ) : (
                 dateGroups.map((group) => (
                   <div key={group.date} className="my-2">
-                    <div className="bg-[#8bac0f] py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-[#306230] text-left tracking-wider">
+                    <div className="bg-[#c8e6a4] py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-[#2b582b] text-[#082008] text-left tracking-wider">
                       <span>{group.shortDate}</span>
                     </div>
 
