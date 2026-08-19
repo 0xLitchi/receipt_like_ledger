@@ -38,9 +38,14 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     // 若服务端未设置 ACCESS_TOKEN，则默认公开访问
     hasFullAccess = true;
   } else {
-    // 只要配置了 ACCESS_TOKEN，必须匹配 URL 参数或具有管理员权限
+    // 只要配置了 ACCESS_TOKEN，匹配 URL 参数或具备正确管理员凭证即可解密
     hasFullAccess = isAuthorizedAdmin || (queryToken !== '' && queryToken === cfAccessToken);
   }
+
+  const responseHeaders = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+  };
 
   if (!env.DB) {
     return new Response(JSON.stringify({
@@ -50,7 +55,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       hasFullAccess,
     }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: responseHeaders,
     });
   }
 
@@ -71,12 +76,12 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     });
 
     return new Response(JSON.stringify({ success: true, data, hasFullAccess }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: responseHeaders,
     });
   } catch (error: any) {
     return new Response(JSON.stringify({ success: false, error: error.message }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: responseHeaders,
     });
   }
 };

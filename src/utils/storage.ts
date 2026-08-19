@@ -4,25 +4,30 @@ const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
 const AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
 
 export const storage = {
-  // 获取所有交易数据 (同时透传 URL 参数与已验证的 X-Admin-Password 管理员 Header)
+  // 获取所有交易数据 (拼接时间戳 _t 防止浏览器 HTTP 缓存脱敏 Response)
   async getTransactions(): Promise<{ data: Transaction[]; hasFullAccess: boolean }> {
     const search = window.location.search;
     const adminPassword = this.getSavedAdminPassword() || '';
 
+    // 拼接防缓存时间戳参数 _t
+    const sep = search ? '&' : '?';
+    const fetchUrl = `/api/transactions${search}${sep}_t=${Date.now()}`;
+
     try {
-      const res = await fetch(`/api/transactions${search}`, {
+      const res = await fetch(fetchUrl, {
         headers: {
+          'Cache-Control': 'no-cache, no-store',
           'X-Admin-Password': adminPassword,
         },
       });
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
+          // 只要具备有效的管理员密码，或者后端返回 hasFullAccess === true，均为解密状态！
+          const hasAccess = !!adminPassword || json.hasFullAccess !== false;
           return {
             data: json.data,
-
-            // 核心优化 2：只要验证通过了管理员模式（或具备正确 URL Token），自动解除脱敏，无需再次校验 ACCESS_TOKEN！
-            hasFullAccess: json.hasFullAccess !== false,
+            hasFullAccess: hasAccess,
           };
         }
       }
