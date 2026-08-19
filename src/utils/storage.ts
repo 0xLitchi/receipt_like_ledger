@@ -2,6 +2,9 @@ import type { Transaction } from '../types';
 
 const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
 const AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
+const THEME_STYLE_KEY = 'receipt_ledger_theme_style';
+
+export type ThemeStyle = 'receipt' | 'gameboy';
 
 export interface ActivityLog {
   id: string;
@@ -13,6 +16,15 @@ export interface ActivityLog {
 }
 
 export const storage = {
+  // 获取/设置 UI 界面主题配置
+  getThemeStyle(): ThemeStyle {
+    return (localStorage.getItem(THEME_STYLE_KEY) as ThemeStyle) || 'receipt';
+  },
+
+  setThemeStyle(style: ThemeStyle) {
+    localStorage.setItem(THEME_STYLE_KEY, style);
+  },
+
   // 获取所有交易数据
   async getTransactions(): Promise<{ data: Transaction[]; hasFullAccess: boolean }> {
     const adminPassword = this.getSavedAdminPassword() || '';
@@ -113,11 +125,10 @@ export const storage = {
     localStorage.removeItem(AUTH_PASSWORD_KEY);
   },
 
-  // 高性能增量保存：只对变动的 changedItems 和 deletedIds 发起网络请求！
+  // 高性能增量保存
   async batchSaveTransactions(changedItems: Transaction[], deletedIds: string[]): Promise<boolean> {
     const adminPassword = this.getSavedAdminPassword() || '';
 
-    // 1. 删除变动行
     for (const delId of deletedIds) {
       if (!delId || delId.startsWith('new_') || delId.startsWith('parse_')) continue;
       try {
@@ -130,7 +141,6 @@ export const storage = {
       }
     }
 
-    // 2. 增量更新/插入变动行
     for (const item of changedItems) {
       const isNewItem = !item.id || item.id.startsWith('new_') || item.id.startsWith('parse_');
 

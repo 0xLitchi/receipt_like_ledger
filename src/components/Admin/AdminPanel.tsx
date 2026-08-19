@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Transaction } from '../../types';
-import { storage, type ActivityLog } from '../../utils/storage';
+import { storage, type ActivityLog, type ThemeStyle } from '../../utils/storage';
 import {
   Plus,
   Trash2,
@@ -19,8 +19,11 @@ import {
   CheckCircle2,
   Database,
   History,
-  Globe,
+  Settings,
+  Receipt,
+  Gamepad2,
   Zap,
+  Globe,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -29,6 +32,8 @@ interface AdminPanelProps {
   transactions: Transaction[];
   onBatchSave: (items: Transaction[], deletedIds: string[]) => Promise<void>;
   onLogout: () => void;
+  themeStyle: ThemeStyle;
+  onThemeStyleChange: (style: ThemeStyle) => void;
 }
 
 // 文本数据解析器
@@ -92,9 +97,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onClose,
   transactions,
   onBatchSave,
+  themeStyle,
+  onThemeStyleChange,
 }) => {
-  // 菜单 Tab 控制：'data' | 'log'
-  const [activeTab, setActiveTab] = useState<'data' | 'log'>('data');
+  // 菜单 Tab 控制：'data' | 'log' | 'general'
+  const [activeTab, setActiveTab] = useState<'data' | 'log' | 'general'>('data');
 
   const [rows, setRows] = useState<Transaction[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
@@ -103,7 +110,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [sortField, setSortField] = useState<keyof Transaction | ''>('');
   const [sortAsc, setSortAsc] = useState(true);
 
-  // 高性能增量变动追踪集合 (dirtyRowIds)
+  // 高性能增量变动追踪集合
   const dirtyRowIdsRef = useRef<Set<string>>(new Set());
 
   const [saving, setSaving] = useState(false);
@@ -148,7 +155,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, [isOpen, activeTab, loadLogs]);
 
-  // 高性能增量自动保存防抖提交 (只保存包含在 dirtyRowIdsRef 中或 deletedIds 中的变动数据)
+  // 高性能增量自动保存防抖提交
   const triggerAutoSave = useCallback(
     (currentRows: Transaction[], currentDeleted: string[]) => {
       setSaving(true);
@@ -164,7 +171,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         try {
           await onBatchSave(changedRows, currentDeleted);
 
-          // 提交成功后清除变动标记
           dirtyRowIdsRef.current.clear();
           setDeletedIds([]);
 
@@ -365,7 +371,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const nextRows = [...parsedPreviewList, ...rows];
 
     try {
-      // 增量保存解析出的数据列表
       await onBatchSave(parsedPreviewList, deletedIds);
       setRows(nextRows);
 
@@ -425,7 +430,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-50 text-slate-800 flex font-mono day-admin-workbench select-none overflow-hidden">
-      {/* 侧边栏 (Sidebar Menu): Data 与 Log 两个菜单 */}
+      {/* 侧边栏 (Sidebar Menu): Data, Log, General 三个子菜单 */}
       <aside className="w-52 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col justify-between shrink-0">
         <div>
           <div className="p-4 border-b border-slate-800 flex items-center gap-2">
@@ -458,6 +463,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             >
               <History className="w-4 h-4" />
               <span>Log (变更日志)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('general')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                activeTab === 'general'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>General (通用设置)</span>
             </button>
           </nav>
         </div>
@@ -765,7 +782,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
           </>
-        ) : (
+        ) : activeTab === 'log' ? (
           // ==================== TAB 2: LOG 变更日志视图 ====================
           <>
             <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between gap-4">
@@ -879,6 +896,102 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </>
+        ) : (
+          // ==================== TAB 3: GENERAL 通用设置 ====================
+          <>
+            <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm">
+              <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
+                General 通用设置
+              </h1>
+              <p className="text-xs font-mono text-slate-500 mt-0.5">
+                管理前台主页面的 UI 界面呈现风格与全局显示偏好
+              </p>
+            </header>
+
+            <div className="flex-1 overflow-auto p-6 font-mono max-w-3xl space-y-6">
+              {/* 主题选择卡片 */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+                  <Settings className="w-5 h-5 text-emerald-600" />
+                  <h3 className="text-sm font-bold text-slate-900">UI 界面呈现风格设置 (Theme Style)</h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  {/* 主题 1: 拟真小票 */}
+                  <div
+                    onClick={() => {
+                      onThemeStyleChange('receipt');
+                      storage.setThemeStyle('receipt');
+                    }}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      themeStyle === 'receipt'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                            <Receipt className="w-5 h-5" />
+                          </div>
+                          <span className="font-bold text-sm text-slate-900">拟真热敏小票</span>
+                        </div>
+                        {themeStyle === 'receipt' && (
+                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        经典黑灰热敏出纸缝、马达震动、发光扫描线与热感显影全套拟物化视觉呈现。
+                      </p>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400 font-mono">
+                      状态: {themeStyle === 'receipt' ? '已应用' : '未选择'}
+                    </div>
+                  </div>
+
+                  {/* 主题 2: GameBoy 绿屏 */}
+                  <div
+                    onClick={() => {
+                      onThemeStyleChange('gameboy');
+                      storage.setThemeStyle('gameboy');
+                    }}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      themeStyle === 'gameboy'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
+                            <Gamepad2 className="w-5 h-5" />
+                          </div>
+                          <span className="font-bold text-sm text-slate-900">80s GameBoy 像素绿屏</span>
+                        </div>
+                        {themeStyle === 'gameboy' && (
+                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        复古 DMG-01 灰白掌机机身、8-Bit 像素点阵 LCD 绿光屏与经典 A/B 按键风格。
+                      </p>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400 font-mono">
+                      状态: {themeStyle === 'gameboy' ? '已应用' : '未选择'}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </>

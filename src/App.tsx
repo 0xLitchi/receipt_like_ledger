@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Transaction, SummaryStats } from './types';
-import { storage } from './utils/storage';
+import { storage, type ThemeStyle } from './utils/storage';
 import { ReceiptView } from './components/Receipt/ReceiptView';
 import { GameBoyView } from './components/GameBoy/GameBoyView';
-import { FilterBar, type ThemeStyle } from './components/FilterBar';
+import { FilterBar } from './components/FilterBar';
 import { AdminAuthModal } from './components/Admin/AdminAuthModal';
 import { AdminPanel } from './components/Admin/AdminPanel';
 
@@ -12,8 +12,8 @@ export function App() {
   const [hasFullAccess, setHasFullAccess] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
 
-  // UI 界面风格状态：'receipt' (拟真小票) | 'gameboy' (GameBoy 绿屏)
-  const [themeStyle, setThemeStyle] = useState<ThemeStyle>('receipt');
+  // UI 界面风格状态：从本地存储持久化读取 ('receipt' | 'gameboy')
+  const [themeStyle, setThemeStyle] = useState<ThemeStyle>(() => storage.getThemeStyle());
 
   // 强制白天模式
   useEffect(() => {
@@ -146,16 +146,14 @@ export function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start py-6 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
-      {/* 机械滑块月份切换器 & UI 界面风格切换器 */}
+      {/* 还原为纯粹的单栏月份滑动切换控件 */}
       <FilterBar
         selectedMonth={selectedMonth || (recentMonths[0] || '')}
         onSelectMonth={setSelectedMonth}
         recentMonths={recentMonths}
-        themeStyle={themeStyle}
-        onSelectThemeStyle={setThemeStyle}
       />
 
-      {/* 动态主界面展示区 (支持拟真热敏小票 vs 80s GameBoy 像素复古绿屏) */}
+      {/* 动态主界面展示区 (基于后台 General 通用设置下的偏好) */}
       <main className="w-full max-w-md mx-auto">
         {loading ? (
           <div className="py-20 text-center font-mono text-slate-500 text-xs">
@@ -201,6 +199,8 @@ export function App() {
         transactions={transactions}
         onBatchSave={handleBatchSave}
         onLogout={handleAdminLogout}
+        themeStyle={themeStyle}
+        onThemeStyleChange={setThemeStyle}
       />
     </div>
   );
