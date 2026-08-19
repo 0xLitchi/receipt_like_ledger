@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Transaction } from '../../types';
+import { storage, type ActivityLog } from '../../utils/storage';
 import {
   Plus,
   Trash2,
@@ -16,6 +17,10 @@ import {
   X,
   RefreshCw,
   CheckCircle2,
+  Database,
+  History,
+  Globe,
+  Zap,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -88,6 +93,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   transactions,
   onBatchSave,
 }) => {
+  // 菜单 Tab 控制：'data' | 'log'
+  const [activeTab, setActiveTab] = useState<'data' | 'log'>('data');
+
   const [rows, setRows] = useState<Transaction[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -99,6 +107,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // 日志列表状态
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logSearchQuery, setLogSearchQuery] = useState('');
+
   // 解析文本导入弹窗状态
   const [showParseModal, setShowParseModal] = useState(false);
   const [rawText, setRawText] = useState('');
@@ -107,7 +120,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 初始化加载
+  // 初始化加载数据
   useEffect(() => {
     if (isOpen) {
       setRows(JSON.parse(JSON.stringify(transactions)));
@@ -117,7 +130,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, [isOpen, transactions]);
 
-  // 1. 自动保存防抖提交并更新上次保存时间戳
+  // 加载日志
+  const loadLogs = useCallback(async () => {
+    setLoadingLogs(true);
+    const data = await storage.getLogs();
+    setLogs(data);
+    setLoadingLogs(false);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'log') {
+      loadLogs();
+    }
+  }, [isOpen, activeTab, loadLogs]);
+
+  // 自动保存防抖提交并更新上次保存时间戳
   const triggerAutoSave = useCallback(
     (currentRows: Transaction[], currentDeleted: string[]) => {
       setSaving(true);
@@ -281,7 +308,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return result;
   }, [rows, searchQuery, sortField, sortAsc]);
 
-  // 2. 文本解析：点击“保存”按钮进入预览状态
+  // 过滤日志列表
+  const filteredLogs = useMemo(() => {
+    if (!logSearchQuery.trim()) return logs;
+    const q = logSearchQuery.toLowerCase().trim();
+    return logs.filter(
+      (l) =>
+        l.details.toLowerCase().includes(q) ||
+        l.source.toLowerCase().includes(q) ||
+        l.action.toLowerCase().includes(q) ||
+        (l.timestamp && l.timestamp.toLowerCase().includes(q))
+    );
+  }, [logs, logSearchQuery]);
+
+  // 文本解析：点击“保存”按钮进入预览状态
   const handleStartParsePreview = () => {
     if (!rawText.trim()) {
       alert('请先粘贴需要解析的账单文本数据');
@@ -298,7 +338,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setParseStep('preview');
   };
 
-  // 2. 二次确认导入：点击“确认保存导入”将解析数据保存提交
+  // 二次确认导入：保存提交
   const handleConfirmImportParsedData = async () => {
     if (parsedPreviewList.length === 0) return;
 
@@ -366,319 +406,480 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     processedRows.length > 0 && processedRows.every((r) => selectedIds.has(r.id));
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-50 text-slate-800 flex flex-col font-mono day-admin-workbench select-none overflow-hidden">
-      {/* 顶部导航栏 Header */}
-      <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        {/* 左侧：返回小票按钮 + Admin Panel 名称 */}
-        <div className="flex items-center gap-4">
+    <div className="fixed inset-0 z-50 bg-slate-50 text-slate-800 flex font-mono day-admin-workbench select-none overflow-hidden">
+      {/* 2. 侧边栏 (Sidebar Menu): Data 与 Log 两个菜单 */}
+      <aside className="w-52 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col justify-between shrink-0">
+        <div>
+          {/* 侧栏 Header */}
+          <div className="p-4 border-b border-slate-800 flex items-center gap-2">
+            <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <span className="font-bold text-sm text-white font-mono tracking-tight">Admin Console</span>
+          </div>
+
+          {/* 菜单列表 */}
+          <nav className="p-2 space-y-1">
+            <button
+              onClick={() => setActiveTab('data')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                activeTab === 'data'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Database className="w-4 h-4" />
+              <span>Data (数据维护)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('log')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                activeTab === 'log'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <History className="w-4 h-4" />
+              <span>Log (变更日志)</span>
+            </button>
+          </nav>
+        </div>
+
+        {/* 侧栏底部：返回小票按钮 */}
+        <div className="p-3 border-t border-slate-800">
           <button
             onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono font-bold transition-colors border border-slate-300 shadow-sm cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-mono font-bold transition-colors cursor-pointer border border-slate-700"
           >
-            <ArrowLeft className="w-4 h-4 text-slate-600" />
-            返回小票
+            <ArrowLeft className="w-4 h-4 text-slate-400" />
+            <span>返回小票</span>
           </button>
+        </div>
+      </aside>
 
-          <div className="h-5 w-px bg-slate-300" />
-
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-emerald-100 border border-emerald-300 text-emerald-700 rounded-xl shadow-xs">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
-                Admin Panel
-              </h1>
-              <div className="flex items-center gap-2 text-xs font-mono text-slate-500">
-                <span>共 <strong className="text-slate-800">{rows.length}</strong> 行</span>
-                <span>•</span>
-                {selectedIds.size > 0 && (
-                  <span className="text-emerald-700 font-bold">已选 {selectedIds.size} 行</span>
-                )}
-                {/* 1. 自动保存状态展示上次保存时间 */}
-                <span className="ml-1 text-[11px] flex items-center gap-1 text-slate-500 font-mono">
-                  {saving ? (
-                    <>
-                      <RefreshCw className="w-3 h-3 animate-spin text-amber-600" />
-                      <span className="text-amber-700 font-bold">正在自动保存...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-3 h-3 text-emerald-600" />
-                      <span className="text-emerald-700 font-medium">
-                        {lastSavedTime ? `已自动保存 (${lastSavedTime})` : '已自动保存'}
-                      </span>
-                    </>
+      {/* 右侧主工作区 */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+        {activeTab === 'data' ? (
+          // ==================== TAB 1: DATA 数据维护工作台 ====================
+          <>
+            {/* Header 导航工具栏 */}
+            <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
+                  Data 维护工作台
+                </h1>
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-500">
+                  <span>共 <strong className="text-slate-800">{rows.length}</strong> 行</span>
+                  <span>•</span>
+                  {selectedIds.size > 0 && (
+                    <span className="text-emerald-700 font-bold">已选 {selectedIds.size} 行</span>
                   )}
-                </span>
+                  {/* 1. 自动保存状态指示上次保存时间 */}
+                  <span className="ml-1 text-[11px] flex items-center gap-1 text-slate-500 font-mono">
+                    {saving ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin text-amber-600" />
+                        <span className="text-amber-700 font-bold">正在自动保存...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        <span className="text-emerald-700 font-medium">
+                          {lastSavedTime ? `已自动保存 (${lastSavedTime})` : '已自动保存'}
+                        </span>
+                      </>
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* 中间：全局多维搜索 */}
+              <div className="flex-1 max-w-sm relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索备注、成员、分类、日期..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-all"
+                />
+              </div>
+
+              {/* 右侧：功能按钮 */}
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => {
+                    setParseStep('input');
+                    setShowParseModal(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-mono font-bold transition-colors shadow-xs cursor-pointer"
+                >
+                  <FileCode className="w-4 h-4 text-indigo-600" />
+                  解析文本导入
+                </button>
+
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono transition-colors shadow-xs cursor-pointer"
+                  title="导出为 CSV"
+                >
+                  <Download className="w-4 h-4 text-slate-500" />
+                  导出 CSV
+                </button>
+
+                <button
+                  onClick={handleAddRow}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold shadow-sm transition-colors cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  添加行
+                </button>
+
+                {selectedIds.size > 0 && (
+                  <button
+                    onClick={handleBulkDeleteSelected}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-mono font-bold transition-colors shadow-xs cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-600" />
+                    删除选中 ({selectedIds.size})
+                  </button>
+                )}
+              </div>
+            </header>
+
+            {/* 状态通知 */}
+            {statusMsg && (
+              <div
+                className={`p-2.5 text-xs flex items-center justify-center gap-2 border-b font-mono ${
+                  statusMsg.type === 'success'
+                    ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-100 border-rose-200 text-rose-800'
+                }`}
+              >
+                {statusMsg.type === 'success' ? (
+                  <Check className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600" />
+                )}
+                <span>{statusMsg.text}</span>
+              </div>
+            )}
+
+            {/* 白天主题表格区 */}
+            <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10 font-bold tracking-wider">
+                      <th className="py-3 px-3 border-r border-slate-200 w-12 text-center bg-slate-100">
+                        <input
+                          type="checkbox"
+                          checked={isAllFilteredSelected}
+                          onChange={() => handleToggleSelectAll(processedRows)}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 bg-white cursor-pointer"
+                        />
+                      </th>
+
+                      <th className="py-3 px-2 border-r border-slate-200 w-12 text-center opacity-60 bg-slate-100">
+                        #
+                      </th>
+
+                      <th className="py-3 px-3 border-r border-slate-200 w-36 bg-slate-100">
+                        <button
+                          onClick={() => handleSort('date')}
+                          className="flex items-center gap-1 hover:text-slate-900 transition-colors"
+                        >
+                          日期
+                          {sortField === 'date' ? (
+                            sortAsc ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                          )}
+                        </button>
+                      </th>
+
+                      <th className="py-3 px-3 border-r border-slate-200 w-28 bg-slate-100">
+                        <button
+                          onClick={() => handleSort('member')}
+                          className="flex items-center gap-1 hover:text-slate-900 transition-colors"
+                        >
+                          成员
+                          {sortField === 'member' ? (
+                            sortAsc ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                          )}
+                        </button>
+                      </th>
+
+                      <th className="py-3 px-3 border-r border-slate-200 w-32 bg-slate-100">
+                        <button
+                          onClick={() => handleSort('category')}
+                          className="flex items-center gap-1 hover:text-slate-900 transition-colors"
+                        >
+                          主分类
+                          {sortField === 'category' ? (
+                            sortAsc ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                          )}
+                        </button>
+                      </th>
+
+                      <th className="py-3 px-3 border-r border-slate-200 w-32 bg-slate-100">子分类</th>
+
+                      <th className="py-3 px-3 border-r border-slate-200 min-w-[160px] bg-slate-100">
+                        备注
+                      </th>
+
+                      <th className="py-3 px-3 text-right bg-slate-100 w-36">
+                        <button
+                          onClick={() => handleSort('amount')}
+                          className="flex items-center gap-1 hover:text-slate-900 transition-colors ml-auto"
+                        >
+                          金额
+                          {sortField === 'amount' ? (
+                            sortAsc ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                          )}
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-200">
+                    {processedRows.map((row, idx) => {
+                      const isSelected = selectedIds.has(row.id);
+                      return (
+                        <tr
+                          key={row.id}
+                          className={`transition-colors ${
+                            isSelected
+                              ? 'bg-emerald-50 hover:bg-emerald-100/60'
+                              : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <td className="py-1 px-3 border-r border-slate-200 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectRow(row.id)}
+                              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            />
+                          </td>
+
+                          <td className="py-1 px-2 border-r border-slate-200 text-center opacity-40 bg-slate-50/50">
+                            {idx + 1}
+                          </td>
+
+                          <td className="p-0 border-r border-slate-200">
+                            <input
+                              type="text"
+                              placeholder="YYYY-MM-DD"
+                              value={row.date || ''}
+                              onChange={(e) => handleCellChange(row.id, 'date', e.target.value)}
+                              className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none font-mono"
+                            />
+                          </td>
+
+                          <td className="p-0 border-r border-slate-200">
+                            <input
+                              type="text"
+                              value={row.member || ''}
+                              onChange={(e) => handleCellChange(row.id, 'member', e.target.value)}
+                              className="w-full h-full px-3 py-2 bg-transparent text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none font-bold"
+                            />
+                          </td>
+
+                          <td className="p-0 border-r border-slate-200">
+                            <input
+                              type="text"
+                              value={row.category || ''}
+                              onChange={(e) => handleCellChange(row.id, 'category', e.target.value)}
+                              className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none"
+                            />
+                          </td>
+
+                          <td className="p-0 border-r border-slate-200">
+                            <input
+                              type="text"
+                              value={row.subcategory || ''}
+                              onChange={(e) => handleCellChange(row.id, 'subcategory', e.target.value)}
+                              className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none"
+                            />
+                          </td>
+
+                          <td className="p-0 border-r border-slate-200">
+                            <input
+                              type="text"
+                              placeholder="选填"
+                              value={row.title || ''}
+                              onChange={(e) => handleCellChange(row.id, 'title', e.target.value)}
+                              className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none"
+                            />
+                          </td>
+
+                          <td className="p-0">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={row.amount}
+                              onChange={(e) => handleCellChange(row.id, 'amount', e.target.value)}
+                              className={`w-full h-full px-3 py-2 bg-transparent text-right font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none ${
+                                row.amount > 0 ? 'text-emerald-700' : 'text-rose-700'
+                              }`}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-        </div>
+          </>
+        ) : (
+          // ==================== TAB 2: LOG 变更日志视图 ====================
+          <>
+            {/* Header 导航 */}
+            <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between gap-4">
+              <div>
+                <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
+                  Log 变更日志审计
+                </h1>
+                <p className="text-xs font-mono text-slate-500 mt-0.5">
+                  记录数据的修改时间与修改来源（区分网页修改 vs API 修改）
+                </p>
+              </div>
 
-        {/* 中间：全局多维搜索 */}
-        <div className="flex-1 max-w-sm relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索备注、成员、分类、日期..."
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-all"
-          />
-        </div>
-
-        {/* 右侧：功能按钮 */}
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => {
-              setParseStep('input');
-              setShowParseModal(true);
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-mono font-bold transition-colors shadow-xs cursor-pointer"
-          >
-            <FileCode className="w-4 h-4 text-indigo-600" />
-            解析文本导入
-          </button>
-
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono transition-colors shadow-xs cursor-pointer"
-            title="导出为 CSV"
-          >
-            <Download className="w-4 h-4 text-slate-500" />
-            导出 CSV
-          </button>
-
-          <button
-            onClick={handleAddRow}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold shadow-sm transition-colors cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            添加行
-          </button>
-
-          {selectedIds.size > 0 && (
-            <button
-              onClick={handleBulkDeleteSelected}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-mono font-bold transition-colors shadow-xs cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4 text-rose-600" />
-              删除选中 ({selectedIds.size})
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* 状态通知 */}
-      {statusMsg && (
-        <div
-          className={`p-2.5 text-xs flex items-center justify-center gap-2 border-b font-mono ${
-            statusMsg.type === 'success'
-              ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
-              : 'bg-rose-100 border-rose-200 text-rose-800'
-          }`}
-        >
-          {statusMsg.type === 'success' ? (
-            <Check className="w-4 h-4 text-emerald-600" />
-          ) : (
-            <AlertCircle className="w-4 h-4 text-rose-600" />
-          )}
-          <span>{statusMsg.text}</span>
-        </div>
-      )}
-
-      {/* 白天主题表格区 */}
-      <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
-        <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10 font-bold tracking-wider">
-                <th className="py-3 px-3 border-r border-slate-200 w-12 text-center bg-slate-100">
+              <div className="flex items-center gap-3">
+                {/* 搜索过滤 */}
+                <div className="relative w-64">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
                   <input
-                    type="checkbox"
-                    checked={isAllFilteredSelected}
-                    onChange={() => handleToggleSelectAll(processedRows)}
-                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 bg-white cursor-pointer"
+                    type="text"
+                    value={logSearchQuery}
+                    onChange={(e) => setLogSearchQuery(e.target.value)}
+                    placeholder="搜索日志详情..."
+                    className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white"
                   />
-                </th>
+                </div>
 
-                <th className="py-3 px-2 border-r border-slate-200 w-12 text-center opacity-60 bg-slate-100">
-                  #
-                </th>
+                <button
+                  onClick={loadLogs}
+                  disabled={loadingLogs}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono font-bold transition-colors border border-slate-300 shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingLogs ? 'animate-spin' : ''}`} />
+                  刷新日志
+                </button>
+              </div>
+            </header>
 
-                <th className="py-3 px-3 border-r border-slate-200 w-36 bg-slate-100">
-                  <button
-                    onClick={() => handleSort('date')}
-                    className="flex items-center gap-1 hover:text-slate-900 transition-colors"
-                  >
-                    日期
-                    {sortField === 'date' ? (
-                      sortAsc ? (
-                        <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
-                      )
+            {/* 日志表格内容区 */}
+            <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10 font-bold tracking-wider">
+                      <th className="py-3 px-4 border-r border-slate-200 w-44">变更时间</th>
+                      <th className="py-3 px-4 border-r border-slate-200 w-32">修改来源</th>
+                      <th className="py-3 px-4 border-r border-slate-200 w-28">操作类型</th>
+                      <th className="py-3 px-4">详细变更记录</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {loadingLogs ? (
+                      <tr>
+                        <td colSpan={4} className="py-12 text-center text-slate-400 font-mono">
+                          正在加载活动日志...
+                        </td>
+                      </tr>
+                    ) : filteredLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-12 text-center text-slate-400 font-mono">
+                          暂无变更日志记录
+                        </td>
+                      </tr>
                     ) : (
-                      <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                      filteredLogs.map((log) => {
+                        const dateStr = log.created_at || log.timestamp || '';
+                        const formattedTime = dateStr.length >= 19 ? dateStr.substring(0, 19).replace('T', ' ') : dateStr;
+
+                        const isWeb = log.source === 'web';
+                        const isApi = log.source === 'api';
+
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-600">
+                              {formattedTime}
+                            </td>
+
+                            <td className="py-2.5 px-4 border-r border-slate-200">
+                              {isApi ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                  <Zap className="w-3 h-3 text-purple-600" />
+                                  API 修改
+                                </span>
+                              ) : isWeb ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                  <Globe className="w-3 h-3 text-blue-600" />
+                                  网页修改
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <FileCode className="w-3 h-3 text-emerald-600" />
+                                  文本解析
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-2.5 px-4 border-r border-slate-200 font-bold">
+                              {log.action === 'create' ? (
+                                <span className="text-emerald-700 font-bold">新增</span>
+                              ) : log.action === 'update' ? (
+                                <span className="text-amber-700 font-bold">更新</span>
+                              ) : log.action === 'delete' ? (
+                                <span className="text-rose-700 font-bold">删除</span>
+                              ) : (
+                                <span className="text-slate-700 font-bold">批量同步</span>
+                              )}
+                            </td>
+
+                            <td className="py-2.5 px-4 text-slate-800 font-mono">
+                              {log.details}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
-                  </button>
-                </th>
-
-                <th className="py-3 px-3 border-r border-slate-200 w-28 bg-slate-100">
-                  <button
-                    onClick={() => handleSort('member')}
-                    className="flex items-center gap-1 hover:text-slate-900 transition-colors"
-                  >
-                    成员
-                    {sortField === 'member' ? (
-                      sortAsc ? (
-                        <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
-                    )}
-                  </button>
-                </th>
-
-                <th className="py-3 px-3 border-r border-slate-200 w-32 bg-slate-100">
-                  <button
-                    onClick={() => handleSort('category')}
-                    className="flex items-center gap-1 hover:text-slate-900 transition-colors"
-                  >
-                    主分类
-                    {sortField === 'category' ? (
-                      sortAsc ? (
-                        <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
-                    )}
-                  </button>
-                </th>
-
-                <th className="py-3 px-3 border-r border-slate-200 w-32 bg-slate-100">子分类</th>
-
-                <th className="py-3 px-3 border-r border-slate-200 min-w-[160px] bg-slate-100">
-                  备注
-                </th>
-
-                <th className="py-3 px-3 text-right bg-slate-100 w-36">
-                  <button
-                    onClick={() => handleSort('amount')}
-                    className="flex items-center gap-1 hover:text-slate-900 transition-colors ml-auto"
-                  >
-                    金额
-                    {sortField === 'amount' ? (
-                      sortAsc ? (
-                        <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
-                    )}
-                  </button>
-                </th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-200">
-              {processedRows.map((row, idx) => {
-                const isSelected = selectedIds.has(row.id);
-                return (
-                  <tr
-                    key={row.id}
-                    className={`transition-colors ${
-                      isSelected
-                        ? 'bg-emerald-50 hover:bg-emerald-100/60'
-                        : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <td className="py-1 px-3 border-r border-slate-200 text-center">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleToggleSelectRow(row.id)}
-                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                      />
-                    </td>
-
-                    <td className="py-1 px-2 border-r border-slate-200 text-center opacity-40 bg-slate-50/50">
-                      {idx + 1}
-                    </td>
-
-                    <td className="p-0 border-r border-slate-200">
-                      <input
-                        type="text"
-                        placeholder="YYYY-MM-DD"
-                        value={row.date || ''}
-                        onChange={(e) => handleCellChange(row.id, 'date', e.target.value)}
-                        className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none font-mono"
-                      />
-                    </td>
-
-                    <td className="p-0 border-r border-slate-200">
-                      <input
-                        type="text"
-                        value={row.member || ''}
-                        onChange={(e) => handleCellChange(row.id, 'member', e.target.value)}
-                        className="w-full h-full px-3 py-2 bg-transparent text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none font-bold"
-                      />
-                    </td>
-
-                    <td className="p-0 border-r border-slate-200">
-                      <input
-                        type="text"
-                        value={row.category || ''}
-                        onChange={(e) => handleCellChange(row.id, 'category', e.target.value)}
-                        className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none"
-                      />
-                    </td>
-
-                    <td className="p-0 border-r border-slate-200">
-                      <input
-                        type="text"
-                        value={row.subcategory || ''}
-                        onChange={(e) => handleCellChange(row.id, 'subcategory', e.target.value)}
-                        className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none"
-                      />
-                    </td>
-
-                    <td className="p-0 border-r border-slate-200">
-                      <input
-                        type="text"
-                        placeholder="选填"
-                        value={row.title || ''}
-                        onChange={(e) => handleCellChange(row.id, 'title', e.target.value)}
-                        className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none"
-                      />
-                    </td>
-
-                    <td className="p-0">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={row.amount}
-                        onChange={(e) => handleCellChange(row.id, 'amount', e.target.value)}
-                        className={`w-full h-full px-3 py-2 bg-transparent text-right font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none ${
-                          row.amount > 0 ? 'text-emerald-700' : 'text-rose-700'
-                        }`}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* 2. 解析文本导入弹窗（支持预览与二次确认导入） */}
+      {/* 解析文本导入弹窗 */}
       {showParseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-3xl p-6 shadow-2xl text-slate-800 relative max-h-[85vh] flex flex-col">
@@ -690,7 +891,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </button>
 
             {parseStep === 'input' ? (
-              // 步骤 1：粘贴文本输入
               <>
                 <h3 className="text-base font-bold flex items-center gap-2 mb-2 font-mono text-slate-900">
                   <FileCode className="w-5 h-5 text-indigo-600" />
@@ -716,7 +916,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     预计解析: {rawText.trim() ? `${parseRawLedgerText(rawText).length} 条记录` : '0 条'}
                   </span>
 
-                  {/* 2. 单个“保存”按钮，去除了全量覆盖按钮 */}
                   <button
                     type="button"
                     onClick={handleStartParsePreview}
@@ -727,7 +926,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </>
             ) : (
-              // 2. 步骤 2：二次确认预览界面 (Preview Table & Secondary Confirmation)
               <>
                 <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-3">
                   <h3 className="text-base font-bold flex items-center gap-2 font-mono text-slate-900">
@@ -743,7 +941,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   请检查以下解析出的账目数据，确认无误后点击“确认保存导入”：
                 </p>
 
-                {/* 预览数据表格 */}
                 <div className="flex-1 overflow-auto border border-slate-200 rounded-xl mb-4 max-h-[340px]">
                   <table className="w-full text-left border-collapse font-mono text-xs">
                     <thead>

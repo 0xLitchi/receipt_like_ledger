@@ -10,6 +10,36 @@ const cleanSecretString = (str?: string | null): string => {
   return str.replace(/[\r\n\t\s"']/g, '').trim();
 };
 
+// 动态创建并记录日志 Helper
+const recordActivityLog = async (
+  db: D1Database,
+  source: 'web' | 'api' | 'import',
+  action: 'create' | 'update' | 'delete' | 'batch_save',
+  details: string
+) => {
+  try {
+    await db.prepare(
+      `CREATE TABLE IF NOT EXISTS activity_logs (
+        id TEXT PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        source TEXT NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`
+    ).run();
+
+    const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const timestamp = new Date().toISOString();
+
+    await db.prepare(
+      `INSERT INTO activity_logs (id, timestamp, source, action, details) VALUES (?, ?, ?, ?, ?)`
+    ).bind(id, timestamp, source, action, details).run();
+  } catch (e) {
+    console.warn('Failed to record log', e);
+  }
+};
+
 // CORS 跨域预检处理
 export const onRequestOptions: PagesFunction<Env> = async () => {
   return new Response(null, {
@@ -54,10 +84,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   let hasFullAccess = false;
   if (!cfAccessToken) {
-    // 若服务端未设置 ACCESS_TOKEN，则默认公开访问
     hasFullAccess = true;
   } else {
-    // 只要配置了 ACCESS_TOKEN，匹配 URL 参数或具备正确管理员凭证即可解密
     hasFullAccess = isAuthorizedAdmin || (queryToken !== '' && queryToken === cfAccessToken);
   }
 
@@ -84,7 +112,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
     ).all();
 
-    // 根据 hasFullAccess 决定返回真实数据还是脱敏数据
     const data = (results || []).map((t: any) => {
       if (hasFullAccess) return t;
       return {
@@ -106,7 +133,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 };
 
-// 通过 API 插入/追加账单数据 (HTTP POST，支持精简字段 desc, amt, tag, type:"账单/招商银行")
+// 通过 API 插入/追加账单数据 (区分 web 与 api 修改来源，并自动写入 activity_logs)
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -158,23 +185,17 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const items = Array.isArray(body) ? body : [body];
     const insertedList: any[] = [];
 
+    // 区分数据变更来源：Bearer Token 鉴权判定为 'api'，网页管理员登录判定为 'web'
+    const source: 'web' | 'api' = isBearerAuthorized ? 'api' : 'web';
+
     for (const item of items) {
       const id = item.id || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-      // 1. desc -> title (兼容 title)
       const title = item.desc !== undefined ? String(item.desc) : (item.title || '');
-
-      // 2. date
       const date = item.date || new Date().toISOString().split('T')[0];
-
-      // 3. amt -> amount (兼容 amount)
       const rawAmt = item.amt !== undefined ? item.amt : item.amount;
       const amount = Number(rawAmt) || 0;
-
-      // 4. tag -> member (兼容 member)
       const member = item.tag !== undefined ? String(item.tag) : (item.member || '默认');
 
-      // 5. type -> category / subcategory (如 "账单/招商银行" 自动拆分还原)
       let category = item.category || '其它';
       let subcategory = item.subcategory || '';
 
@@ -198,6 +219,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       ).bind(id, title, date, amount, member, category, subcategory, ledger).run();
 
       insertedList.push({ id, title, date, amount, member, category, subcategory, ledger });
+
+      // 记录活动日志
+      const catLabel = subcategory ? `${category}/${subcategory}` : category;
+      const logDetails = `新增账目: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}) 日期:${date}`;
+      await recordActivityLog(env.DB, source, 'create', logDetails);
     }
 
     return new Response(

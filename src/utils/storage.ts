@@ -3,12 +3,20 @@ import type { Transaction } from '../types';
 const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
 const AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
 
+export interface ActivityLog {
+  id: string;
+  timestamp: string;
+  source: 'web' | 'api' | 'import';
+  action: 'create' | 'update' | 'delete' | 'batch_save';
+  details: string;
+  created_at?: string;
+}
+
 export const storage = {
-  // 获取所有交易数据 (同时通过 URL Query 参数与 Header 传递 admin_password，彻底避免鉴权丢失)
+  // 获取所有交易数据
   async getTransactions(): Promise<{ data: Transaction[]; hasFullAccess: boolean }> {
     const adminPassword = this.getSavedAdminPassword() || '';
 
-    // 构造请求 URL，同时带上防缓存 _t 与 admin_password
     const urlObj = new URL(window.location.href);
     const searchParams = new URLSearchParams(urlObj.search);
 
@@ -31,7 +39,6 @@ export const storage = {
         if (json.success && Array.isArray(json.data)) {
           return {
             data: json.data,
-            // 服务端鉴权成功返回 true 时即可全面解锁解密数据
             hasFullAccess: json.hasFullAccess === true,
           };
         }
@@ -51,6 +58,30 @@ export const storage = {
       }
     }
     return { data: [], hasFullAccess: true };
+  },
+
+  // 获取数据变更日志
+  async getLogs(): Promise<ActivityLog[]> {
+    const adminPassword = this.getSavedAdminPassword() || '';
+    if (!adminPassword) return [];
+
+    try {
+      const res = await fetch(`/api/logs?admin_password=${encodeURIComponent(adminPassword)}&_t=${Date.now()}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store',
+          'X-Admin-Password': adminPassword,
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          return json.data;
+        }
+      }
+    } catch (e) {
+      console.warn('API error fetching logs', e);
+    }
+    return [];
   },
 
   // 验证管理员密码
