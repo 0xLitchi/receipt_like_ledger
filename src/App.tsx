@@ -41,7 +41,7 @@ export function App() {
   }, []);
 
   // 当前是否具备管理员凭证
-  const isAdmin = !!storage.getSavedAdminPassword();
+  const isAdmin = !!storage.getAdminToken();
 
   // 动态提取最近三个月 YYYY-MM
   const recentMonths = useMemo(() => {
@@ -105,7 +105,7 @@ export function App() {
 
   // 快捷触发后台模式（按 "." 键触发）
   const handleAdminToggle = useCallback(() => {
-    if (storage.getSavedAdminPassword()) {
+    if (storage.getAdminToken()) {
       setShowAdminPanel(true);
     } else {
       setShowAuthModal(true);
@@ -140,8 +140,8 @@ export function App() {
     await loadData();
   };
 
-  const handleAdminLogout = () => {
-    storage.logoutAdmin();
+  const handleAdminLogout = async () => {
+    await storage.logoutAdmin();
     setShowAdminPanel(false);
     loadData();
   };

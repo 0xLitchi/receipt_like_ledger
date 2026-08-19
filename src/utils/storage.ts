@@ -1,7 +1,8 @@
 import type { Transaction } from '../types';
 
 const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
-const AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
+const LEGACY_AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
+const AUTH_TOKEN_KEY = 'receipt_ledger_admin_session';
 const THEME_STYLE_KEY = 'receipt_ledger_theme_style';
 
 export type ThemeStyle = 'receipt' | 'gameboy' | 'wallet' | 'tractor';
@@ -15,6 +16,23 @@ export interface ActivityLog {
   created_at?: string;
 }
 
+interface AuthResponse {
+  success: boolean;
+  token?: string;
+  message?: string;
+}
+
+// 统一的请求头：仅携带会话 token，绝不把密码放进 URL/Header
+const authHeaders = (token: string | null): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Cache-Control': 'no-cache, no-store',
+  };
+  if (token) {
+    headers['X-Admin-Token'] = token;
+  }
+  return headers;
+};
+
 export const storage = {
   // 获取/设置 UI 界面主题配置
   getThemeStyle(): ThemeStyle {
@@ -27,24 +45,17 @@ export const storage = {
 
   // 获取所有交易数据
   async getTransactions(): Promise<{ data: Transaction[]; hasFullAccess: boolean }> {
-    const adminPassword = this.getSavedAdminPassword() || '';
+    const token = this.getAdminToken();
 
     const urlObj = new URL(window.location.href);
     const searchParams = new URLSearchParams(urlObj.search);
-
     searchParams.set('_t', String(Date.now()));
-    if (adminPassword) {
-      searchParams.set('admin_password', adminPassword);
-    }
 
     const fetchUrl = `/api/transactions?${searchParams.toString()}`;
 
     try {
       const res = await fetch(fetchUrl, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store',
-          'X-Admin-Password': adminPassword,
-        },
+        headers: authHeaders(token),
       });
       if (res.ok) {
         const json = await res.json();
@@ -59,30 +70,27 @@ export const storage = {
       console.warn('API error fetching transactions', e);
     }
 
-    // 本地缓存兜底
+    // 本地缓存兜底：未登录时不信任缓存明文，交给前端脱敏渲染
     const local = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (local) {
       try {
         const parsed = JSON.parse(local);
-        return { data: parsed, hasFullAccess: true };
+        return { data: parsed, hasFullAccess: !!token };
       } catch (err) {
         console.error('Failed to parse local storage', err);
       }
     }
-    return { data: [], hasFullAccess: true };
+    return { data: [], hasFullAccess: !!token };
   },
 
   // 获取数据变更日志
   async getLogs(): Promise<ActivityLog[]> {
-    const adminPassword = this.getSavedAdminPassword() || '';
-    if (!adminPassword) return [];
+    const token = this.getAdminToken();
+    if (!token) return [];
 
     try {
-      const res = await fetch(`/api/logs?admin_password=${encodeURIComponent(adminPassword)}&_t=${Date.now()}`, {
-        headers: {
-          'Cache-Control': 'no-cache, no-store',
-          'X-Admin-Password': adminPassword,
-        },
+      const res = await fetch(`/api/logs?_t=${Date.now()}`, {
+        headers: authHeaders(token),
       });
       if (res.ok) {
         const json = await res.json();
@@ -96,7 +104,7 @@ export const storage = {
     return [];
   },
 
-  // 验证管理员密码
+  // 验证管理员密码，成功后服务端签发会话 token（仅 token 落本地存储）
   async verifyAdminPassword(password: string): Promise<boolean> {
     try {
       const res = await fetch('/api/auth/verify', {
@@ -105,9 +113,10 @@ export const storage = {
         body: JSON.stringify({ password }),
       });
       if (res.ok) {
-        const json = await res.json();
-        if (json.success) {
-          localStorage.setItem(AUTH_PASSWORD_KEY, password);
+        const json = (await res.json()) as AuthResponse;
+        if (json.success && json.token) {
+          localStorage.setItem(AUTH_TOKEN_KEY, json.token);
+          localStorage.removeItem(LEGACY_AUTH_PASSWORD_KEY);
           return true;
         }
       }
@@ -117,24 +126,42 @@ export const storage = {
     return false;
   },
 
-  getSavedAdminPassword(): string | null {
-    return localStorage.getItem(AUTH_PASSWORD_KEY);
+  // 读取会话 token；同时清理旧版明文密码缓存（旧会话失效需重新登录）
+  getAdminToken(): string | null {
+    const legacy = localStorage.getItem(LEGACY_AUTH_PASSWORD_KEY);
+    if (legacy) {
+      localStorage.removeItem(LEGACY_AUTH_PASSWORD_KEY);
+    }
+    return localStorage.getItem(AUTH_TOKEN_KEY);
   },
 
-  logoutAdmin() {
-    localStorage.removeItem(AUTH_PASSWORD_KEY);
+  // 登出：通知服务端删除会话，并清除本地 token
+  async logoutAdmin(): Promise<void> {
+    const token = this.getAdminToken();
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(LEGACY_AUTH_PASSWORD_KEY);
+    if (!token) return;
+
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+      });
+    } catch (e) {
+      console.warn('Logout API failed (local session cleared anyway)', e);
+    }
   },
 
   // 高性能增量保存
   async batchSaveTransactions(changedItems: Transaction[], deletedIds: string[]): Promise<boolean> {
-    const adminPassword = this.getSavedAdminPassword() || '';
+    const token = this.getAdminToken();
 
     for (const delId of deletedIds) {
       if (!delId || delId.startsWith('new_') || delId.startsWith('parse_')) continue;
       try {
-        await fetch(`/api/transactions/${delId}?admin_password=${encodeURIComponent(adminPassword)}`, {
+        await fetch(`/api/transactions/${delId}`, {
           method: 'DELETE',
-          headers: { 'X-Admin-Password': adminPassword },
+          headers: authHeaders(token),
         });
       } catch (e) {
         console.warn('Failed to delete transaction ID', delId, e);
@@ -146,12 +173,9 @@ export const storage = {
 
       if (isNewItem) {
         try {
-          await fetch(`/api/transactions?admin_password=${encodeURIComponent(adminPassword)}`, {
+          await fetch(`/api/transactions`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Admin-Password': adminPassword,
-            },
+            headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...item, id: undefined }),
           });
         } catch (e) {
@@ -159,12 +183,9 @@ export const storage = {
         }
       } else {
         try {
-          await fetch(`/api/transactions/${item.id}?admin_password=${encodeURIComponent(adminPassword)}`, {
+          await fetch(`/api/transactions/${item.id}`, {
             method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Admin-Password': adminPassword,
-            },
+            headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
             body: JSON.stringify(item),
           });
         } catch (e) {

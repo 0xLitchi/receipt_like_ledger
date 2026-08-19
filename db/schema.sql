@@ -14,3 +14,20 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_member ON transactions(member);
 CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
+
+-- 活动审计日志（API 运行时也会幂等建表，此处显式声明便于初始化）
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    source TEXT NOT NULL,
+    action TEXT NOT NULL,
+    details TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 管理员会话表（签发会话 token，替代明文密码传递）
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    token TEXT PRIMARY KEY,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

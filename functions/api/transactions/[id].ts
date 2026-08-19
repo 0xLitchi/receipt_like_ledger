@@ -1,81 +1,50 @@
-interface Env {
-  DB?: D1Database;
-  ADMIN_PASSWORD?: string;
-}
+import {
+  getCorsHeaders,
+  isAdminAuthorized,
+  recordActivityLog,
+  type SharedEnv,
+  type TransactionRow,
+} from '../_shared';
 
-const cleanSecretString = (str?: string | null): string => {
-  if (!str) return '';
-  return str.replace(/[\r\n\t\s"']/g, '').trim();
-};
+interface Env extends SharedEnv {}
 
-const recordActivityLog = async (
-  db: D1Database,
-  source: 'web' | 'api' | 'import',
-  action: 'create' | 'update' | 'delete' | 'batch_save',
-  details: string
-) => {
-  try {
-    await db.prepare(
-      `CREATE TABLE IF NOT EXISTS activity_logs (
-        id TEXT PRIMARY KEY,
-        timestamp TEXT NOT NULL,
-        source TEXT NOT NULL,
-        action TEXT NOT NULL,
-        details TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`
-    ).run();
-
-    const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const timestamp = new Date().toISOString();
-
-    await db.prepare(
-      `INSERT INTO activity_logs (id, timestamp, source, action, details) VALUES (?, ?, ?, ?, ?)`
-    ).bind(id, timestamp, source, action, details).run();
-  } catch (e) {
-    console.warn('Failed to record log', e);
-  }
-};
+const jsonHeaders = (request: Request, env: Env, extra: Record<string, string> = {}): Record<string, string> => ({
+  'Content-Type': 'application/json',
+  ...getCorsHeaders(request, env),
+  ...extra,
+});
 
 export const onRequestPut: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
   const id = params.id as string;
   const url = new URL(request.url);
 
-  const rawAdminPass =
-    request.headers.get('X-Admin-Password') ||
-    request.headers.get('x-admin-password') ||
-    url.searchParams.get('admin_password');
-
-  const authHeader = cleanSecretString(rawAdminPass);
-  const expectedPassword = cleanSecretString(env.ADMIN_PASSWORD);
-
-  if (!expectedPassword || authHeader !== expectedPassword) {
-    return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误或未配置' }), {
+  if (!(await isAdminAuthorized(env.DB, env, request, url))) {
+    return new Response(JSON.stringify({ success: false, message: '未授权：管理员凭证错误或未配置' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders(request, env),
     });
   }
 
   if (!env.DB) {
     return new Response(JSON.stringify({ success: false, message: 'D1 DB binding not found' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders(request, env),
     });
   }
 
   try {
-    const item = await request.json() as any;
-    const title = item.title || '';
-    const date = item.date;
-    const amount = Number(item.amount);
-    const member = item.member || '默认';
-    const category = item.category || '其它';
-    const subcategory = item.subcategory || '';
-    const ledger = item.ledger || 'Default';
+    const body = await request.json() as Record<string, unknown>;
+    const title = typeof body.title === 'string' ? body.title : '';
+    const date = typeof body.date === 'string' ? body.date : '';
+    const amount = Number(body.amount);
+    const member = typeof body.member === 'string' ? body.member : '默认';
+    const category = typeof body.category === 'string' ? body.category : '其它';
+    const subcategory = typeof body.subcategory === 'string' ? body.subcategory : '';
+    const ledger = typeof body.ledger === 'string' ? body.ledger : 'Default';
 
     await env.DB.prepare(
-      `UPDATE transactions 
+      `UPDATE transactions
        SET title = ?, date = ?, amount = ?, member = ?, category = ?, subcategory = ?, ledger = ?
        WHERE id = ?`
     ).bind(title, date, amount, member, category, subcategory, ledger, id).run();
@@ -86,12 +55,13 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
     await recordActivityLog(env.DB, 'web', 'update', logDetails);
 
     return new Response(JSON.stringify({ success: true, message: 'Transaction updated' }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders(request, env),
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders(request, env),
     });
   }
 };
@@ -101,25 +71,17 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
   const id = params.id as string;
   const url = new URL(request.url);
 
-  const rawAdminPass =
-    request.headers.get('X-Admin-Password') ||
-    request.headers.get('x-admin-password') ||
-    url.searchParams.get('admin_password');
-
-  const authHeader = cleanSecretString(rawAdminPass);
-  const expectedPassword = cleanSecretString(env.ADMIN_PASSWORD);
-
-  if (!expectedPassword || authHeader !== expectedPassword) {
-    return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误或未配置' }), {
+  if (!(await isAdminAuthorized(env.DB, env, request, url))) {
+    return new Response(JSON.stringify({ success: false, message: '未授权：管理员凭证错误或未配置' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders(request, env),
     });
   }
 
   if (!env.DB) {
     return new Response(JSON.stringify({ success: false, message: 'D1 DB binding not found' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders(request, env),
     });
   }
 
@@ -127,11 +89,13 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
     // 先查一下被删除的记录信息用于日志记录
     let targetTitle = id;
     try {
-      const existing = await env.DB.prepare('SELECT title, amount FROM transactions WHERE id = ?').bind(id).first() as any;
+      const existing = await env.DB.prepare('SELECT title, amount FROM transactions WHERE id = ?')
+        .bind(id)
+        .first<Pick<TransactionRow, 'title' | 'amount'>>();
       if (existing) {
         targetTitle = `[${existing.title || '无备注'}] ￥${existing.amount}`;
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
 
@@ -142,12 +106,13 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
     await recordActivityLog(env.DB, 'web', 'delete', logDetails);
 
     return new Response(JSON.stringify({ success: true, message: 'Transaction deleted' }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders(request, env),
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: jsonHeaders(request, env),
     });
   }
 };

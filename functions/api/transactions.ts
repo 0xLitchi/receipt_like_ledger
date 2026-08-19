@@ -1,54 +1,27 @@
-interface Env {
-  DB?: D1Database;
-  ADMIN_PASSWORD?: string;
-  ACCESS_TOKEN?: string;
-}
+import {
+  cleanSecretString,
+  getCorsHeaders,
+  isAdminAuthorized,
+  readBearerToken,
+  recordActivityLog,
+  type SharedEnv,
+  type TransactionRow,
+} from './_shared';
 
-// 辅助函数：剥离换行符 (\r, \n)、制表符、多余空格及引号
-const cleanSecretString = (str?: string | null): string => {
-  if (!str) return '';
-  return str.replace(/[\r\n\t\s"']/g, '').trim();
-};
+interface Env extends SharedEnv {}
 
-// 动态创建并记录日志 Helper
-const recordActivityLog = async (
-  db: D1Database,
-  source: 'web' | 'api' | 'import',
-  action: 'create' | 'update' | 'delete' | 'batch_save',
-  details: string
-) => {
-  try {
-    await db.prepare(
-      `CREATE TABLE IF NOT EXISTS activity_logs (
-        id TEXT PRIMARY KEY,
-        timestamp TEXT NOT NULL,
-        source TEXT NOT NULL,
-        action TEXT NOT NULL,
-        details TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`
-    ).run();
+const jsonHeaders = (request: Request, env: Env, extra: Record<string, string> = {}): Record<string, string> => ({
+  'Content-Type': 'application/json',
+  'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+  ...getCorsHeaders(request, env),
+  ...extra,
+});
 
-    const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const timestamp = new Date().toISOString();
-
-    await db.prepare(
-      `INSERT INTO activity_logs (id, timestamp, source, action, details) VALUES (?, ?, ?, ?, ?)`
-    ).bind(id, timestamp, source, action, details).run();
-  } catch (e) {
-    console.warn('Failed to record log', e);
-  }
-};
-
-// CORS 跨域预检处理
-export const onRequestOptions: PagesFunction<Env> = async () => {
+// CORS 跨域预检处理（仅白名单域名放行）
+export const onRequestOptions: PagesFunction<Env> = async (context) => {
   return new Response(null, {
     status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Password',
-    },
+    headers: getCorsHeaders(context.request, context.env),
   });
 };
 
@@ -65,35 +38,19 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       break;
     }
   }
-
   const queryToken = cleanSecretString(rawQueryToken);
 
-  // 2. 支持 Header 或 Query 参数 (admin_password / password / X-Admin-Password) 校验管理员身份
-  const rawAdminPass =
-    request.headers.get('X-Admin-Password') ||
-    request.headers.get('x-admin-password') ||
-    url.searchParams.get('admin_password') ||
-    url.searchParams.get('password');
-
-  const authHeader = cleanSecretString(rawAdminPass);
-  const expectedAdminPassword = cleanSecretString(env.ADMIN_PASSWORD);
-  const isAuthorizedAdmin = !!(expectedAdminPassword && authHeader === expectedAdminPassword);
-
-  // 3. 严格读取 Cloudflare 环境变量 ACCESS_TOKEN
+  // 2. 严格读取 Cloudflare 环境变量 ACCESS_TOKEN
   const cfAccessToken = cleanSecretString(env.ACCESS_TOKEN);
 
   let hasFullAccess = false;
   if (!cfAccessToken) {
     hasFullAccess = true;
   } else {
-    hasFullAccess = isAuthorizedAdmin || (queryToken !== '' && queryToken === cfAccessToken);
+    hasFullAccess =
+      (await isAdminAuthorized(env.DB, env, request, url)) ||
+      (queryToken !== '' && queryToken === cfAccessToken);
   }
-
-  const responseHeaders = {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-    'Access-Control-Allow-Origin': '*',
-  };
 
   if (!env.DB) {
     return new Response(JSON.stringify({
@@ -103,16 +60,16 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       hasFullAccess,
     }), {
       status: 200,
-      headers: responseHeaders,
+      headers: jsonHeaders(request, env),
     });
   }
 
   try {
     const { results } = await env.DB.prepare(
       'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
-    ).all();
+    ).all<TransactionRow>();
 
-    const data = (results || []).map((t: any) => {
+    const data = (results || []).map((t) => {
       if (hasFullAccess) return t;
       return {
         ...t,
@@ -123,12 +80,13 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     });
 
     return new Response(JSON.stringify({ success: true, data, hasFullAccess }), {
-      headers: responseHeaders,
+      headers: jsonHeaders(request, env),
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
-      headers: responseHeaders,
+      headers: jsonHeaders(request, env),
     });
   }
 };
@@ -138,66 +96,70 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
 
-  // 1. 提取 Authorization: Bearer <TOKEN>
-  const authHeaderRaw = request.headers.get('Authorization') || request.headers.get('authorization') || '';
-  let bearerToken = '';
-  if (authHeaderRaw.toLowerCase().startsWith('bearer ')) {
-    bearerToken = cleanSecretString(authHeaderRaw.substring(7));
-  }
-
-  // 2. 提取 X-Admin-Password
-  const rawAdminPass =
-    request.headers.get('X-Admin-Password') ||
-    request.headers.get('x-admin-password') ||
-    url.searchParams.get('admin_password');
-  const adminPassHeader = cleanSecretString(rawAdminPass);
-
   const expectedAccessToken = cleanSecretString(env.ACCESS_TOKEN);
-  const expectedAdminPassword = cleanSecretString(env.ADMIN_PASSWORD);
+  const bearerToken = readBearerToken(request);
+  const isBearerAuthorized = !!(expectedAccessToken && bearerToken && bearerToken === expectedAccessToken);
+  const isAdmin = await isAdminAuthorized(env.DB, env, request, url);
 
-  const isBearerAuthorized = !!(expectedAccessToken && bearerToken === expectedAccessToken);
-  const isAdminAuthorized = !!(expectedAdminPassword && adminPassHeader === expectedAdminPassword);
-
-  const responseHeaders = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-  };
-
-  if (!isBearerAuthorized && !isAdminAuthorized) {
+  if (!isBearerAuthorized && !isAdmin) {
     return new Response(
       JSON.stringify({
         success: false,
-        message: '未授权：请提供有效的 Bearer Token (Authorization: Bearer <ACCESS_TOKEN>) 或 X-Admin-Password',
+        message: '未授权：请提供有效的 Bearer Token (Authorization: Bearer <ACCESS_TOKEN>) 或管理员凭证',
       }),
-      { status: 401, headers: responseHeaders }
+      { status: 401, headers: jsonHeaders(request, env) }
     );
   }
 
   if (!env.DB) {
     return new Response(JSON.stringify({ success: false, message: 'D1 DB binding not found' }), {
       status: 500,
-      headers: responseHeaders,
+      headers: jsonHeaders(request, env),
     });
   }
 
   try {
-    const body = await request.json() as any;
-    const items = Array.isArray(body) ? body : [body];
-    const insertedList: any[] = [];
+    const body = await request.json() as unknown;
+    const rawItems = Array.isArray(body) ? body : [body];
+    if (rawItems.length === 0) {
+      return new Response(JSON.stringify({ success: false, message: '请求体不能为空' }), {
+        status: 400,
+        headers: jsonHeaders(request, env),
+      });
+    }
 
+    const insertedList: TransactionRow[] = [];
     // 区分数据变更来源：Bearer Token 鉴权判定为 'api'，网页管理员登录判定为 'web'
     const source: 'web' | 'api' = isBearerAuthorized ? 'api' : 'web';
 
-    for (const item of items) {
-      const id = item.id || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const title = item.desc !== undefined ? String(item.desc) : (item.title || '');
-      const date = item.date || new Date().toISOString().split('T')[0];
-      const rawAmt = item.amt !== undefined ? item.amt : item.amount;
-      const amount = Number(rawAmt) || 0;
-      const member = item.tag !== undefined ? String(item.tag) : (item.member || '默认');
+    for (const rawItem of rawItems) {
+      if (typeof rawItem !== 'object' || rawItem === null) {
+        return new Response(JSON.stringify({ success: false, message: '请求体必须是对象或对象数组' }), {
+          status: 400,
+          headers: jsonHeaders(request, env),
+        });
+      }
 
-      let category = item.category || '其它';
-      let subcategory = item.subcategory || '';
+      const item = rawItem as Record<string, unknown>;
+      const id = typeof item.id === 'string' && item.id
+        ? item.id
+        : `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const title = item.desc !== undefined ? String(item.desc) : (item.title !== undefined ? String(item.title) : '');
+      const date = typeof item.date === 'string' && item.date
+        ? item.date
+        : new Date().toISOString().split('T')[0];
+      const rawAmt = item.amt !== undefined ? item.amt : item.amount;
+      const amount = Number(rawAmt);
+      if (typeof amount !== 'number' || Number.isNaN(amount)) {
+        return new Response(JSON.stringify({ success: false, message: `金额字段 amt/amount 非法: ${String(rawAmt)}` }), {
+          status: 400,
+          headers: jsonHeaders(request, env),
+        });
+      }
+      const member = item.tag !== undefined ? String(item.tag) : (item.member !== undefined ? String(item.member) : '默认');
+
+      let category = item.category !== undefined ? String(item.category) : '其它';
+      let subcategory = item.subcategory !== undefined ? String(item.subcategory) : '';
 
       const typeStr = item.type !== undefined ? String(item.type).trim() : '';
       if (typeStr) {
@@ -211,14 +173,15 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         }
       }
 
-      const ledger = item.ledger || 'Default';
+      const ledger = item.ledger !== undefined ? String(item.ledger) : 'Default';
 
       await env.DB.prepare(
         `INSERT INTO transactions (id, title, date, amount, member, category, subcategory, ledger)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(id, title, date, amount, member, category, subcategory, ledger).run();
 
-      insertedList.push({ id, title, date, amount, member, category, subcategory, ledger });
+      const inserted: TransactionRow = { id, title, date, amount, member, category, subcategory, ledger };
+      insertedList.push(inserted);
 
       // 记录活动日志
       const catLabel = subcategory ? `${category}/${subcategory}` : category;
@@ -232,15 +195,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         message: `成功插入 ${insertedList.length} 条账目记录`,
         data: Array.isArray(body) ? insertedList : insertedList[0],
       }),
-      {
-        status: 200,
-        headers: responseHeaders,
-      }
+      { status: 200, headers: jsonHeaders(request, env) }
     );
-  } catch (error: any) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
-      headers: responseHeaders,
+      headers: jsonHeaders(request, env),
     });
   }
 };

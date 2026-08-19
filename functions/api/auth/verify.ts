@@ -1,11 +1,10 @@
-interface Env {
-  ADMIN_PASSWORD?: string;
-}
+import {
+  cleanSecretString,
+  createAdminSession,
+  type SharedEnv,
+} from '../_shared';
 
-const cleanSecretString = (str?: string | null): string => {
-  if (!str) return '';
-  return str.replace(/[\r\n\t\s"']/g, '').trim();
-};
+interface Env extends SharedEnv {}
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
@@ -20,18 +19,27 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
-    if (inputPass && inputPass === adminPassword) {
-      return new Response(JSON.stringify({ success: true, message: 'Authentication successful' }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    } else {
+    if (!inputPass || inputPass !== adminPassword) {
       return new Response(JSON.stringify({ success: false, message: '密码错误，请重新输入' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       });
     }
-  } catch (error: any) {
-    return new Response(JSON.stringify({ success: false, message: error.message || 'Server Error' }), {
+
+    if (!context.env.DB) {
+      return new Response(JSON.stringify({ success: false, message: 'D1 DB binding not found，无法签发会话' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const token = await createAdminSession(context.env.DB);
+    return new Response(JSON.stringify({ success: true, token, message: 'Authentication successful' }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ success: false, message }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     });
