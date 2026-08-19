@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Transaction, SummaryStats } from './types';
 import { storage } from './utils/storage';
 import { ReceiptView } from './components/Receipt/ReceiptView';
-import { FilterBar } from './components/FilterBar';
+import { GameBoyView } from './components/GameBoy/GameBoyView';
+import { FilterBar, type ThemeStyle } from './components/FilterBar';
 import { AdminAuthModal } from './components/Admin/AdminAuthModal';
 import { AdminPanel } from './components/Admin/AdminPanel';
 
@@ -10,6 +11,9 @@ export function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [hasFullAccess, setHasFullAccess] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
+
+  // UI 界面风格状态：'receipt' (拟真小票) | 'gameboy' (GameBoy 绿屏)
+  const [themeStyle, setThemeStyle] = useState<ThemeStyle>('receipt');
 
   // 强制白天模式
   useEffect(() => {
@@ -21,7 +25,7 @@ export function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
-  // 1. 加载交易数据 (自动透传已验证的管理员 Header 或 URL Token)
+  // 1. 加载交易数据
   const loadData = async () => {
     setLoading(true);
     const result = await storage.getTransactions();
@@ -97,7 +101,7 @@ export function App() {
     };
   }, [filteredTransactions]);
 
-  // 2. 快捷触发后台模式（按 "." 键触发）
+  // 快捷触发后台模式（按 "." 键触发）
   const handleAdminToggle = useCallback(() => {
     if (storage.getSavedAdminPassword()) {
       setShowAdminPanel(true);
@@ -142,19 +146,29 @@ export function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start py-6 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
-      {/* 机械滑块月份切换器 */}
+      {/* 机械滑块月份切换器 & UI 界面风格切换器 */}
       <FilterBar
         selectedMonth={selectedMonth || (recentMonths[0] || '')}
         onSelectMonth={setSelectedMonth}
         recentMonths={recentMonths}
+        themeStyle={themeStyle}
+        onSelectThemeStyle={setThemeStyle}
       />
 
-      {/* 拟物化购物小票展示区 (透传 hasFullAccess 与 isAdmin) */}
+      {/* 动态主界面展示区 (支持拟真热敏小票 vs 80s GameBoy 像素复古绿屏) */}
       <main className="w-full max-w-md mx-auto">
         {loading ? (
           <div className="py-20 text-center font-mono text-slate-500 text-xs">
-            加载小票中...
+            加载中...
           </div>
+        ) : themeStyle === 'gameboy' ? (
+          <GameBoyView
+            transactions={filteredTransactions}
+            stats={stats}
+            selectedMonth={selectedMonth || (recentMonths[0] || '')}
+            hasFullAccess={hasFullAccess}
+            isAdmin={isAdmin}
+          />
         ) : (
           <ReceiptView
             transactions={filteredTransactions}
@@ -173,8 +187,6 @@ export function App() {
         onSuccess={async () => {
           setShowAuthModal(false);
           setShowAdminPanel(true);
-
-          // 核心逻辑 1：验证完管理员密码后，自动重新加载数据全额解密明细与金额，不需要重复验证或输入 Token！
           await loadData();
         }}
       />
