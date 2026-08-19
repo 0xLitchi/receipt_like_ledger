@@ -171,7 +171,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 ) : (
                   dateGroups.map((group) => (
                     <div key={group.date} className="my-2">
-                      <div className="bg-black/5 py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-dashed border-current/30 text-left tracking-wider">
+                      <div className="bg-black/5 py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-dashed border-current/20 text-left tracking-wider opacity-60">
                         <span>{group.shortDate}</span>
                       </div>
 

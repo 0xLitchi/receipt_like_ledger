@@ -4,6 +4,7 @@ const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
 const LEGACY_AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
 const AUTH_TOKEN_KEY = 'receipt_ledger_admin_session';
 const THEME_STYLE_KEY = 'receipt_ledger_theme_style';
+const ALL_THEME_STYLES: ThemeStyle[] = ['receipt', 'gameboy', 'wallet', 'tractor'];
 
 export type ThemeStyle = 'receipt' | 'gameboy' | 'wallet' | 'tractor';
 
@@ -41,6 +42,44 @@ export const storage = {
 
   setThemeStyle(style: ThemeStyle) {
     localStorage.setItem(THEME_STYLE_KEY, style);
+  },
+
+  // 读取服务端持久化的全局主题（管理员配置后所有访客延续）
+  async getGlobalThemeStyle(): Promise<ThemeStyle | null> {
+    try {
+      const res = await fetch(`/api/settings?_t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache, no-store' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const style = json?.data?.themeStyle;
+        if (typeof style === 'string' && (ALL_THEME_STYLES as string[]).includes(style)) {
+          return style as ThemeStyle;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch global theme style', e);
+    }
+    return null;
+  },
+
+  // 管理员将主题持久化到服务端
+  async setGlobalThemeStyle(style: ThemeStyle): Promise<boolean> {
+    const token = this.getAdminToken();
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themeStyle: style }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.success === true;
+      }
+    } catch (e) {
+      console.warn('Failed to persist global theme style', e);
+    }
+    return false;
   },
 
   // 获取所有交易数据

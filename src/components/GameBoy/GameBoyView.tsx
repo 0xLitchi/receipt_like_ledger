@@ -98,7 +98,7 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
               ) : (
                 dateGroups.map((group) => (
                   <div key={group.date} className="my-2">
-                    <div className="bg-[#c8e6a4] py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-[#2b582b] text-[#082008] text-left tracking-wider">
+                    <div className="bg-[#c8e6a4] py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-[#2b582b] text-[#3f6f3f] text-left tracking-wider">
                       <span>{group.shortDate}</span>
                     </div>
 

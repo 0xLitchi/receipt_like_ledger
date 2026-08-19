@@ -871,7 +871,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div
                     onClick={() => {
                       onThemeStyleChange('receipt');
-                      storage.setThemeStyle('receipt');
                     }}
                     className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                       themeStyle === 'receipt'
@@ -906,7 +905,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div
                     onClick={() => {
                       onThemeStyleChange('gameboy');
-                      storage.setThemeStyle('gameboy');
                     }}
                     className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                       themeStyle === 'gameboy'
@@ -941,7 +939,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div
                     onClick={() => {
                       onThemeStyleChange('wallet');
-                      storage.setThemeStyle('wallet');
                     }}
                     className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                       themeStyle === 'wallet'
@@ -976,7 +973,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div
                     onClick={() => {
                       onThemeStyleChange('tractor');
-                      storage.setThemeStyle('tractor');
                     }}
                     className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                       themeStyle === 'tractor'

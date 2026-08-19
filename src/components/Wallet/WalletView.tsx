@@ -85,7 +85,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
           ) : (
             dateGroups.map((group) => (
               <div key={group.date} className="my-3">
-                <div className="px-3 py-1 bg-slate-100/80 rounded-lg text-[11px] font-mono font-bold text-slate-500 my-1.5 text-left w-fit">
+                <div className="px-3 py-1 bg-slate-100/60 rounded-lg text-[11px] font-mono font-bold text-slate-400 my-1.5 text-left w-fit">
                   {group.shortDate}
                 </div>
 

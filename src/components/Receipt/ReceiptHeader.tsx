@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Transaction } from '../../types';
 import { AnimatedNumber } from './AnimatedNumber';
-import { Receipt, PieChart, Crown } from 'lucide-react';
+import { Receipt, PieChart } from 'lucide-react';
 
 interface ReceiptHeaderProps {
   selectedMonth: string;
@@ -52,8 +52,6 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
     return { list, grandExpenseTotal };
   }, [transactions, hasFullAccess]);
 
-  const topCategory = categoryStats.list.length > 0 && categoryStats.list[0].total < 0 ? categoryStats.list[0] : null;
-
   return (
     <div className="text-center pt-1 pb-1 select-none font-pixel tracking-wider">
       {/* 抬头图标 */}
@@ -75,17 +73,6 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
             <span className="opacity-80 text-[11px]">共 {categoryStats.list.length} 类</span>
           </div>
 
-          {/* 重点强调最大支出项目 (Top Category Badge) */}
-          {topCategory && (
-            <div className="flex items-center justify-between px-2 py-1 bg-rose-500/10 border border-rose-500/30 rounded-lg text-[11px] font-bold text-rose-800 font-mono">
-              <div className="flex items-center gap-1">
-                <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
-                <span>最大支出: <strong>{topCategory.name}</strong></span>
-              </div>
-              <span>￥{Math.abs(topCategory.total).toFixed(2)} ({topCategory.ratio}%)</span>
-            </div>
-          )}
-
           {/* 各分类列表与占比数据 */}
           <div className="space-y-1.5 pt-1">
             {categoryStats.list.map((item) => (
@@ -104,8 +91,8 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
                   </span>
                 </div>
 
-                {/* 支出占比可视度条 */}
-                {item.ratio > 0 && (
+                {/* 支出占比进度条：仅支出分类显示，收入不体现在进度条上 */}
+                {item.total < 0 && item.ratio > 0 && (
                   <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
                     <div
                       className="h-full bg-rose-600/80 rounded-full transition-all duration-500"

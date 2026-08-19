@@ -83,7 +83,7 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
             ) : (
               dateGroups.map((group) => (
                 <div key={group.date} className="my-2">
-                  <div className="py-0.5 px-2 bg-slate-900/10 border-y border-slate-900/30 text-slate-950 font-bold text-xs my-1 text-left">
+                  <div className="py-0.5 px-2 bg-slate-900/5 border-y border-slate-900/20 text-slate-500 font-bold text-xs my-1 text-left">
                     === {group.shortDate} ===
                   </div>
 

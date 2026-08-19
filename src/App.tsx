@@ -23,6 +23,19 @@ export function App() {
     document.body.classList.add('mode-day');
   }, []);
 
+  // 加载服务端持久化的全局主题（管理员配置后所有访客延续）
+  useEffect(() => {
+    let cancelled = false;
+    storage.getGlobalThemeStyle().then((serverStyle) => {
+      if (!cancelled && serverStyle) {
+        setThemeStyle(serverStyle);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 弹窗与视图控制
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -110,6 +123,13 @@ export function App() {
     } else {
       setShowAuthModal(true);
     }
+  }, []);
+
+  // 主题切换：本地立即生效 + 服务端持久化
+  const handleThemeStyleChange = useCallback(async (style: ThemeStyle) => {
+    setThemeStyle(style);
+    storage.setThemeStyle(style);
+    await storage.setGlobalThemeStyle(style);
   }, []);
 
   // 全局键盘监听 "." 按键触发后台
@@ -218,7 +238,7 @@ export function App() {
         onBatchSave={handleBatchSave}
         onLogout={handleAdminLogout}
         themeStyle={themeStyle}
-        onThemeStyleChange={setThemeStyle}
+        onThemeStyleChange={handleThemeStyleChange}
       />
     </div>
   );
