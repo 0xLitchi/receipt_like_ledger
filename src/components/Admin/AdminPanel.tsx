@@ -22,6 +22,8 @@ import {
   Settings,
   Receipt,
   Gamepad2,
+  CreditCard,
+  Printer,
   Zap,
   Globe,
 } from 'lucide-react';
@@ -911,8 +913,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </p>
             </header>
 
-            <div className="flex-1 overflow-auto p-6 font-mono max-w-3xl space-y-6">
-              {/* 主题选择卡片 */}
+            <div className="flex-1 overflow-auto p-6 font-mono max-w-4xl space-y-6">
+              {/* 主题选择 4 大卡片 */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
                 <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
                   <Settings className="w-5 h-5 text-emerald-600" />
@@ -947,11 +949,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         )}
                       </div>
                       <p className="text-xs text-slate-500 leading-relaxed">
-                        经典黑灰热敏出纸缝、马达震动、发光扫描线与热感显影全套拟物化视觉呈现。
+                        经典黑灰热敏出纸缝、马达震动、发光扫描线与热感显影全套拟物视觉。
                       </p>
                     </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400 font-mono">
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
                       状态: {themeStyle === 'receipt' ? '已应用' : '未选择'}
                     </div>
                   </div>
@@ -983,12 +984,81 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         )}
                       </div>
                       <p className="text-xs text-slate-500 leading-relaxed">
-                        复古 DMG-01 灰白掌机机身、8-Bit 像素点阵 LCD 绿光屏与经典 A/B 按键风格。
+                        复古 DMG-01 灰白掌机机身、8-Bit 像素点阵清爽淡绿屏幕与 A/B 按键。
                       </p>
                     </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400 font-mono">
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
                       状态: {themeStyle === 'gameboy' ? '已应用' : '未选择'}
+                    </div>
+                  </div>
+
+                  {/* 主题 3: iOS Apple Wallet 卡片 */}
+                  <div
+                    onClick={() => {
+                      onThemeStyleChange('wallet');
+                      storage.setThemeStyle('wallet');
+                    }}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      themeStyle === 'wallet'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
+                            <CreditCard className="w-5 h-5" />
+                          </div>
+                          <span className="font-bold text-sm text-slate-900">iOS Apple Wallet 卡片</span>
+                        </div>
+                        {themeStyle === 'wallet' && (
+                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Apple Pass 纯白高斯模糊卡片、极致软圆角与现代化清爽数据展示。
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
+                      状态: {themeStyle === 'wallet' ? '已应用' : '未选择'}
+                    </div>
+                  </div>
+
+                  {/* 主题 4: 90s 复古针式连续打印纸 */}
+                  <div
+                    onClick={() => {
+                      onThemeStyleChange('tractor');
+                      storage.setThemeStyle('tractor');
+                    }}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      themeStyle === 'tractor'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-teal-100 text-teal-700 rounded-lg">
+                            <Printer className="w-5 h-5" />
+                          </div>
+                          <span className="font-bold text-sm text-slate-900">90s 复古针式连续打印纸</span>
+                        </div>
+                        {themeStyle === 'tractor' && (
+                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        绿白相间斑马条纹连打纸、两侧定位提纸圆孔与针式击打字体。
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
+                      状态: {themeStyle === 'tractor' ? '已应用' : '未选择'}
                     </div>
                   </div>
                 </div>
