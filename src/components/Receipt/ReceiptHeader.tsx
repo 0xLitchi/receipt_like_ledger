@@ -15,10 +15,11 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
   hasFullAccess = true,
   isPrinting = false,
 }) => {
-  // 分类汇总：按支出金额从大到小 (排序)
+  // 分类汇总：支出与收入分别计算占比进度
   const categoryStats = React.useMemo(() => {
     const map = new Map<string, { total: number; count: number }>();
     let grandExpenseTotal = 0;
+    let grandIncomeTotal = 0;
 
     transactions.forEach((t) => {
       let key = t.category || '其它';
@@ -28,6 +29,7 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
 
       const val = hasFullAccess ? t.amount : 0;
       if (val < 0) grandExpenseTotal += Math.abs(val);
+      else if (val > 0) grandIncomeTotal += val;
 
       const prev = map.get(key) || { total: 0, count: 0 };
       map.set(key, {
@@ -38,7 +40,14 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
 
     const list = Array.from(map.entries()).map(([name, stat]) => {
       const absTotal = Math.abs(stat.total);
-      const ratio = grandExpenseTotal > 0 && stat.total < 0 ? Math.min(100, Math.round((absTotal / grandExpenseTotal) * 100)) : 0;
+      const ratio =
+        stat.total < 0
+          ? grandExpenseTotal > 0
+            ? Math.min(100, Math.round((absTotal / grandExpenseTotal) * 100))
+            : 0
+          : grandIncomeTotal > 0
+          ? Math.min(100, Math.round((absTotal / grandIncomeTotal) * 100))
+          : 0;
       return {
         name,
         total: stat.total,
@@ -47,9 +56,9 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
       };
     });
 
-    // 按数值升序（负值最大的排在前列）
+    // 按数值升序（支出最大排前，收入排后）
     list.sort((a, b) => a.total - b.total);
-    return { list, grandExpenseTotal };
+    return { list };
   }, [transactions, hasFullAccess]);
 
   return (
@@ -68,7 +77,7 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
           <div className="flex items-center justify-between font-black text-xs border-b-2 border-dashed border-current/40 pb-1.5 uppercase tracking-widest">
             <div className="flex items-center gap-1.5">
               <PieChart className="w-4 h-4 stroke-[2.5]" />
-              <span>★ 分类支出汇总 ★</span>
+            <span>★ 分类汇总 ★</span>
             </div>
             <span className="opacity-80 text-[11px]">共 {categoryStats.list.length} 类</span>
           </div>
@@ -91,11 +100,13 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
                   </span>
                 </div>
 
-                {/* 支出占比进度条：仅支出分类显示，收入不体现在进度条上 */}
-                {item.total < 0 && item.ratio > 0 && (
+                {/* 占比进度条：支出红色、收入绿色，两类都体现在进度条上 */}
+                {item.ratio > 0 && (
                   <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
                     <div
-                      className="h-full bg-rose-600/80 rounded-full transition-all duration-500"
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        item.total > 0 ? 'bg-emerald-600/80' : 'bg-rose-600/80'
+                      }`}
                       style={{ width: `${item.ratio}%` }}
                     />
                   </div>
