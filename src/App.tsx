@@ -17,7 +17,7 @@ export function App() {
     document.body.classList.add('mode-day');
   }, []);
 
-  // 弹窗控制
+  // 弹窗与视图控制
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
@@ -33,6 +33,9 @@ export function App() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // 当前是否具备管理员凭证
+  const isAdmin = !!storage.getSavedAdminPassword();
 
   // 动态提取最近三个月 YYYY-MM
   const recentMonths = useMemo(() => {
@@ -146,7 +149,7 @@ export function App() {
         recentMonths={recentMonths}
       />
 
-      {/* 拟物化购物小票展示区 */}
+      {/* 拟物化购物小票展示区 (透传 hasFullAccess 与 isAdmin) */}
       <main className="w-full max-w-md mx-auto">
         {loading ? (
           <div className="py-20 text-center font-mono text-slate-500 text-xs">
@@ -158,11 +161,12 @@ export function App() {
             stats={stats}
             selectedMonth={selectedMonth || (recentMonths[0] || '')}
             hasFullAccess={hasFullAccess}
+            isAdmin={isAdmin}
           />
         )}
       </main>
 
-      {/* 管理员验证弹窗 (按 "." 键触发) */}
+      {/* 管理员验证弹窗 */}
       <AdminAuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -170,15 +174,18 @@ export function App() {
           setShowAuthModal(false);
           setShowAdminPanel(true);
 
-          // 核心优化 2：管理员验证成功后，自动重新加载数据，全额解密明细与金额！
+          // 核心逻辑 1：验证完管理员密码后，自动重新加载数据全额解密明细与金额，不需要重复验证或输入 Token！
           await loadData();
         }}
       />
 
-      {/* Excel 风格后台数据批量管理面板 */}
+      {/* Admin Panel 全屏整页后台管理 */}
       <AdminPanel
         isOpen={showAdminPanel}
-        onClose={() => setShowAdminPanel(false)}
+        onClose={() => {
+          setShowAdminPanel(false);
+          loadData();
+        }}
         transactions={transactions}
         onBatchSave={handleBatchSave}
         onLogout={handleAdminLogout}
