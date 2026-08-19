@@ -10,7 +10,7 @@ const cleanSecretString = (str?: string | null): string => {
   return str.replace(/[\r\n\t\s"']/g, '').trim();
 };
 
-// CORS 跨域预检处理 (支持外部 cURL / Python / 快捷指令 / API 客户端)
+// CORS 跨域预检处理
 export const onRequestOptions: PagesFunction<Env> = async () => {
   return new Response(null, {
     status: 204,
@@ -106,7 +106,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 };
 
-// 通过 API 插入/追加账单数据 (支持 HTTP POST，校验 Bearer Token = ACCESS_TOKEN 或 X-Admin-Password)
+// 通过 API 插入/追加账单数据 (HTTP POST，支持精简字段 desc, amt, tag, type:"账单/招商银行")
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -160,12 +160,36 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     for (const item of items) {
       const id = item.id || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const title = item.title || '';
+
+      // 1. desc -> title (兼容 title)
+      const title = item.desc !== undefined ? String(item.desc) : (item.title || '');
+
+      // 2. date
       const date = item.date || new Date().toISOString().split('T')[0];
-      const amount = Number(item.amount) || 0;
-      const member = item.member || '默认';
-      const category = item.category || '其它';
-      const subcategory = item.subcategory || '';
+
+      // 3. amt -> amount (兼容 amount)
+      const rawAmt = item.amt !== undefined ? item.amt : item.amount;
+      const amount = Number(rawAmt) || 0;
+
+      // 4. tag -> member (兼容 member)
+      const member = item.tag !== undefined ? String(item.tag) : (item.member || '默认');
+
+      // 5. type -> category / subcategory (如 "账单/招商银行" 自动拆分还原)
+      let category = item.category || '其它';
+      let subcategory = item.subcategory || '';
+
+      const typeStr = item.type !== undefined ? String(item.type).trim() : '';
+      if (typeStr) {
+        if (typeStr.includes('/')) {
+          const typeParts = typeStr.split('/');
+          category = typeParts[0].trim();
+          subcategory = typeParts.slice(1).join('/').trim();
+        } else {
+          category = typeStr;
+          subcategory = '';
+        }
+      }
+
       const ledger = item.ledger || 'Default';
 
       await env.DB.prepare(
