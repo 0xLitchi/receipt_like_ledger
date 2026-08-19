@@ -26,7 +26,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   const queryToken = cleanSecretString(rawQueryToken);
 
-  // 支持 Header 或 Query 参数 (admin_password / password / X-Admin-Password) 校验管理员身份
+  // 2. 支持 Header 或 Query 参数 (admin_password / password / X-Admin-Password) 校验管理员身份
   const rawAdminPass =
     request.headers.get('X-Admin-Password') ||
     request.headers.get('x-admin-password') ||
@@ -37,7 +37,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const expectedAdminPassword = cleanSecretString(env.ADMIN_PASSWORD);
   const isAuthorizedAdmin = !!(expectedAdminPassword && authHeader === expectedAdminPassword);
 
-  // 2. 严格读取 Cloudflare 环境变量 ACCESS_TOKEN
+  // 3. 严格读取 Cloudflare 环境变量 ACCESS_TOKEN
   const cfAccessToken = cleanSecretString(env.ACCESS_TOKEN);
 
   let hasFullAccess = false;
@@ -96,7 +96,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
 
-  const authHeader = cleanSecretString(request.headers.get('X-Admin-Password'));
+  const authHeader = cleanSecretString(
+    request.headers.get('X-Admin-Password') ||
+    request.headers.get('x-admin-password')
+  );
   const expectedPassword = cleanSecretString(env.ADMIN_PASSWORD);
 
   if (!expectedPassword || authHeader !== expectedPassword) {

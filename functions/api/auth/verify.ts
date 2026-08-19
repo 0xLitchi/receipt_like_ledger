@@ -2,10 +2,16 @@ interface Env {
   ADMIN_PASSWORD?: string;
 }
 
+const cleanSecretString = (str?: string | null): string => {
+  if (!str) return '';
+  return str.replace(/[\r\n\t\s"']/g, '').trim();
+};
+
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const body = await context.request.json() as { password?: string };
-    const adminPassword = context.env.ADMIN_PASSWORD;
+    const inputPass = cleanSecretString(body.password);
+    const adminPassword = cleanSecretString(context.env.ADMIN_PASSWORD);
 
     if (!adminPassword) {
       return new Response(JSON.stringify({ success: false, message: '服务端未配置 ADMIN_PASSWORD 环境变量' }), {
@@ -14,7 +20,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
-    if (body.password && body.password === adminPassword) {
+    if (inputPass && inputPass === adminPassword) {
       return new Response(JSON.stringify({ success: true, message: 'Authentication successful' }), {
         headers: { 'Content-Type': 'application/json' },
       });
