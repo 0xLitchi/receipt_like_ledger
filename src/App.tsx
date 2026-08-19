@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Transaction, SummaryStats } from './types';
-import { storage, type ThemeStyle } from './utils/storage';
+import { storage, type FxSettingKey, type GlobalSettings, type ThemeStyle } from './utils/storage';
 import { ReceiptView } from './components/Receipt/ReceiptView';
 import { GameBoyView } from './components/GameBoy/GameBoyView';
 import { WalletView } from './components/Wallet/WalletView';
@@ -8,6 +8,9 @@ import { TractorPaperView } from './components/Tractor/TractorPaperView';
 import { FilterBar } from './components/FilterBar';
 import { AdminAuthModal } from './components/Admin/AdminAuthModal';
 import { AdminPanel } from './components/Admin/AdminPanel';
+import { SoundFx } from './components/Fx/SoundFx';
+import { PaperRain } from './components/Fx/PaperRain';
+import { CoinRain } from './components/Fx/CoinRain';
 
 export function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -16,6 +19,12 @@ export function App() {
 
   // UI 界面风格状态 ('receipt' | 'gameboy' | 'wallet' | 'tractor')
   const [themeStyle, setThemeStyle] = useState<ThemeStyle>(() => storage.getThemeStyle());
+  const [fxSettings, setFxSettings] = useState<GlobalSettings>({
+    themeStyle: storage.getThemeStyle(),
+    fxSound: true,
+    fxPaperRain: true,
+    fxCoinRain: true,
+  });
 
   // 强制白天模式
   useEffect(() => {
@@ -23,13 +32,13 @@ export function App() {
     document.body.classList.add('mode-day');
   }, []);
 
-  // 加载服务端持久化的全局主题（管理员配置后所有访客延续）
+  // 加载服务端持久化的全局设置（主题 + 特效开关，管理员配置后所有访客延续）
   useEffect(() => {
     let cancelled = false;
-    storage.getGlobalThemeStyle().then((serverStyle) => {
-      if (!cancelled && serverStyle) {
-        setThemeStyle(serverStyle);
-      }
+    storage.getGlobalSettings().then((settings) => {
+      if (cancelled) return;
+      setThemeStyle(settings.themeStyle);
+      setFxSettings(settings);
     });
     return () => {
       cancelled = true;
@@ -129,7 +138,16 @@ export function App() {
   const handleThemeStyleChange = useCallback(async (style: ThemeStyle) => {
     setThemeStyle(style);
     storage.setThemeStyle(style);
-    await storage.setGlobalThemeStyle(style);
+    await storage.setGlobalSetting('themeStyle', style);
+  }, []);
+
+  // 特效开关：本地立即生效 + 服务端持久化
+  const handleFxSettingChange = useCallback((key: FxSettingKey, value: boolean) => {
+    setFxSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      storage.setGlobalSetting(key, value ? 'on' : 'off');
+      return next;
+    });
   }, []);
 
   // 全局键盘监听 "." 按键触发后台
@@ -168,6 +186,13 @@ export function App() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start py-6 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
+      {/* 背景特效：硬币雨（低透明度背景层） */}
+      <CoinRain enabled={fxSettings.fxCoinRain} />
+
+      {/* 拟物音效与纸片飘落 */}
+      <SoundFx enabled={fxSettings.fxSound} trigger={selectedMonth || (recentMonths[0] || '')} />
+      <PaperRain enabled={fxSettings.fxPaperRain} trigger={selectedMonth || (recentMonths[0] || '')} />
+
       {/* 纯粹拟物化月份滑动切换控件 */}
       <FilterBar
         selectedMonth={selectedMonth || (recentMonths[0] || '')}
@@ -176,7 +201,7 @@ export function App() {
       />
 
       {/* 动态 4 大 UI 主题展示区 */}
-      <main className="w-full max-w-md mx-auto">
+      <main className="w-full max-w-md mx-auto relative z-10">
         {loading ? (
           <div className="py-20 text-center font-mono text-slate-500 text-xs">
             加载中...
@@ -239,6 +264,8 @@ export function App() {
         onLogout={handleAdminLogout}
         themeStyle={themeStyle}
         onThemeStyleChange={handleThemeStyleChange}
+        fxSettings={fxSettings}
+        onFxSettingChange={handleFxSettingChange}
       />
     </div>
   );

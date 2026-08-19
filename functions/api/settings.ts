@@ -6,8 +6,14 @@ import {
 
 interface Env extends SharedEnv {}
 
-const THEME_STYLE_KEY = 'theme_style';
 const ALLOWED_THEME_STYLES = ['receipt', 'gameboy', 'wallet', 'tractor'] as const;
+const ALLOWED_KEYS = ['theme_style', 'fx_sound', 'fx_paper_rain', 'fx_coin_rain'] as const;
+const DEFAULT_SETTINGS: Record<string, string> = {
+  theme_style: 'receipt',
+  fx_sound: 'on',
+  fx_paper_rain: 'on',
+  fx_coin_rain: 'on',
+};
 
 const jsonHeaders = (request: Request, env: Env, extra: Record<string, string> = {}): Record<string, string> => ({
   'Content-Type': 'application/json',
@@ -27,24 +33,37 @@ const ensureSettingsTable = async (db: D1Database): Promise<void> => {
   ).run();
 };
 
-// 公开读取全局设置（主题不是敏感数据，无需鉴权）
+const isValidValue = (key: string, value: string): boolean => {
+  if (key === 'theme_style') {
+    return (ALLOWED_THEME_STYLES as readonly string[]).includes(value);
+  }
+  return value === 'on' || value === 'off';
+};
+
+// 公开读取全局设置（主题与特效开关不是敏感数据，无需鉴权）
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
+  const data: Record<string, string> = { ...DEFAULT_SETTINGS };
 
   if (!env.DB) {
-    return new Response(JSON.stringify({ success: true, data: { themeStyle: 'receipt' } }), {
+    return new Response(JSON.stringify({ success: true, data }), {
       headers: jsonHeaders(request, env),
     });
   }
 
   try {
     await ensureSettingsTable(env.DB);
-    const row = await env.DB.prepare('SELECT value FROM app_settings WHERE key = ?')
-      .bind(THEME_STYLE_KEY)
-      .first<{ value: string }>();
+    const { results } = await env.DB.prepare(
+      'SELECT key, value FROM app_settings'
+    ).all<{ key: string; value: string }>();
 
-    const themeStyle = row && row.value ? row.value : 'receipt';
-    return new Response(JSON.stringify({ success: true, data: { themeStyle } }), {
+    (results || []).forEach((row) => {
+      if (row.key in DEFAULT_SETTINGS) {
+        data[row.key] = row.value;
+      }
+    });
+
+    return new Response(JSON.stringify({ success: true, data }), {
       headers: jsonHeaders(request, env),
     });
   } catch (error: unknown) {
@@ -56,7 +75,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 };
 
-// 管理员写入全局设置（服务端持久化主题，其他访客访问时延续）
+// 管理员写入全局设置（支持部分更新，body 如 { "fx_sound": "off" } 或 { "theme_style": "gameboy" }）
 export const onRequestPut: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -76,13 +95,15 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    const body = await request.json() as { themeStyle?: unknown };
-    const themeStyle = typeof body.themeStyle === 'string' ? body.themeStyle : '';
+    const body = await request.json() as Record<string, unknown>;
+    const entries = Object.entries(body).filter(([key]) =>
+      (ALLOWED_KEYS as readonly string[]).includes(key)
+    );
 
-    if (!(ALLOWED_THEME_STYLES as readonly string[]).includes(themeStyle)) {
+    if (entries.length === 0) {
       return new Response(JSON.stringify({
         success: false,
-        message: `themeStyle 必须是 ${ALLOWED_THEME_STYLES.join(', ')} 之一`,
+        message: `至少需要一个可写设置键: ${ALLOWED_KEYS.join(', ')}`,
       }), {
         status: 400,
         headers: jsonHeaders(request, env),
@@ -90,12 +111,36 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
     }
 
     await ensureSettingsTable(env.DB);
-    await env.DB.prepare(
-      `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
-    ).bind(THEME_STYLE_KEY, themeStyle).run();
+    for (const [key, rawValue] of entries) {
+      const value = String(rawValue);
+      if (!isValidValue(key, value)) {
+        return new Response(JSON.stringify({
+          success: false,
+          message: key === 'theme_style'
+            ? `theme_style 必须是 ${ALLOWED_THEME_STYLES.join(', ')} 之一`
+            : `${key} 必须是 on 或 off`,
+        }), {
+          status: 400,
+          headers: jsonHeaders(request, env),
+        });
+      }
+      await env.DB.prepare(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
+      ).bind(key, value).run();
+    }
 
-    return new Response(JSON.stringify({ success: true, data: { themeStyle } }), {
+    const { results } = await env.DB.prepare(
+      'SELECT key, value FROM app_settings'
+    ).all<{ key: string; value: string }>();
+    const data: Record<string, string> = { ...DEFAULT_SETTINGS };
+    (results || []).forEach((row) => {
+      if (row.key in DEFAULT_SETTINGS) {
+        data[row.key] = row.value;
+      }
+    });
+
+    return new Response(JSON.stringify({ success: true, data }), {
       headers: jsonHeaders(request, env),
     });
   } catch (error: unknown) {

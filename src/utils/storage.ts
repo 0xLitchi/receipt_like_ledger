@@ -17,6 +17,29 @@ export interface ActivityLog {
   created_at?: string;
 }
 
+export interface GlobalSettings {
+  themeStyle: ThemeStyle;
+  fxSound: boolean;
+  fxPaperRain: boolean;
+  fxCoinRain: boolean;
+}
+
+export type FxSettingKey = 'fxSound' | 'fxPaperRain' | 'fxCoinRain';
+
+const SETTING_KEY_MAP: Record<string, string> = {
+  themeStyle: 'theme_style',
+  fxSound: 'fx_sound',
+  fxPaperRain: 'fx_paper_rain',
+  fxCoinRain: 'fx_coin_rain',
+};
+
+const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
+  themeStyle: 'receipt',
+  fxSound: true,
+  fxPaperRain: true,
+  fxCoinRain: true,
+};
+
 interface AuthResponse {
   success: boolean;
   token?: string;
@@ -44,33 +67,45 @@ export const storage = {
     localStorage.setItem(THEME_STYLE_KEY, style);
   },
 
-  // 读取服务端持久化的全局主题（管理员配置后所有访客延续）
-  async getGlobalThemeStyle(): Promise<ThemeStyle | null> {
+  // 读取服务端持久化的全局设置（主题 + 特效开关，管理员配置后所有访客延续）
+  async getGlobalSettings(): Promise<GlobalSettings> {
+    const settings: GlobalSettings = {
+      ...DEFAULT_GLOBAL_SETTINGS,
+      themeStyle: this.getThemeStyle(),
+    };
+
     try {
       const res = await fetch(`/api/settings?_t=${Date.now()}`, {
         headers: { 'Cache-Control': 'no-cache, no-store' },
       });
       if (res.ok) {
         const json = await res.json();
-        const style = json?.data?.themeStyle;
+        const data = json?.data || {};
+        const style = data.theme_style;
         if (typeof style === 'string' && (ALL_THEME_STYLES as string[]).includes(style)) {
-          return style as ThemeStyle;
+          settings.themeStyle = style as ThemeStyle;
         }
+        settings.fxSound = data.fx_sound !== 'off';
+        settings.fxPaperRain = data.fx_paper_rain !== 'off';
+        settings.fxCoinRain = data.fx_coin_rain !== 'off';
+        return settings;
       }
     } catch (e) {
-      console.warn('Failed to fetch global theme style', e);
+      console.warn('Failed to fetch global settings', e);
     }
-    return null;
+    return settings;
   },
 
-  // 管理员将主题持久化到服务端
-  async setGlobalThemeStyle(style: ThemeStyle): Promise<boolean> {
+  // 管理员将设置持久化到服务端（key 为前端友好名，如 fxSound）
+  async setGlobalSetting(key: keyof GlobalSettings, value: string): Promise<boolean> {
     const token = this.getAdminToken();
+    const dbKey = SETTING_KEY_MAP[key];
+    if (!dbKey) return false;
     try {
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ themeStyle: style }),
+        body: JSON.stringify({ [dbKey]: value }),
       });
       if (res.ok) {
         const json = await res.json();

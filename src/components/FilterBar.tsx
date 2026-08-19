@@ -17,7 +17,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   );
 
   return (
-    <div className="w-full max-w-sm mx-auto mb-6 no-print select-none">
+    <div className="w-full max-w-sm mx-auto mb-6 no-print select-none relative z-10">
       {/* 机械风拟物滑块外壳 */}
       <div className="relative p-1.5 bg-slate-900 border-2 border-slate-800 rounded-xl shadow-[inset_0_2px_6px_rgba(0,0,0,0.8),0_4px_12px_rgba(0,0,0,0.5)]">
         {/* 背景微颗粒网格 */}
