@@ -103,6 +103,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [sortField, setSortField] = useState<keyof Transaction | ''>('');
   const [sortAsc, setSortAsc] = useState(true);
 
+  // 高性能增量变动追踪集合 (dirtyRowIds)
+  const dirtyRowIdsRef = useRef<Set<string>>(new Set());
+
   const [saving, setSaving] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -126,6 +129,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setRows(JSON.parse(JSON.stringify(transactions)));
       setDeletedIds([]);
       setSelectedIds(new Set());
+      dirtyRowIdsRef.current.clear();
       setStatusMsg(null);
     }
   }, [isOpen, transactions]);
@@ -144,15 +148,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, [isOpen, activeTab, loadLogs]);
 
-  // 自动保存防抖提交并更新上次保存时间戳
+  // 高性能增量自动保存防抖提交 (只保存包含在 dirtyRowIdsRef 中或 deletedIds 中的变动数据)
   const triggerAutoSave = useCallback(
     (currentRows: Transaction[], currentDeleted: string[]) => {
       setSaving(true);
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
 
       autoSaveTimerRef.current = setTimeout(async () => {
+        const changedRows = currentRows.filter((r) => dirtyRowIdsRef.current.has(r.id));
+        if (changedRows.length === 0 && currentDeleted.length === 0) {
+          setSaving(false);
+          return;
+        }
+
         try {
-          await onBatchSave(currentRows, currentDeleted);
+          await onBatchSave(changedRows, currentDeleted);
+
+          // 提交成功后清除变动标记
+          dirtyRowIdsRef.current.clear();
           setDeletedIds([]);
 
           const now = new Date();
@@ -168,14 +181,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         } finally {
           setSaving(false);
         }
-      }, 700);
+      }, 600);
     },
     [onBatchSave]
   );
 
-  // 单元格修改并触发自动保存
+  // 单元格修改并标记 dirty 触发自动保存
   const handleCellChange = useCallback(
     (id: string, field: keyof Transaction, value: any) => {
+      dirtyRowIdsRef.current.add(id);
       setRows((prev) => {
         const nextRows = prev.map((r) => {
           if (r.id === id) {
@@ -193,10 +207,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     [deletedIds, triggerAutoSave]
   );
 
-  // 添加行并自动保存
+  // 添加行并标记 dirty 自动保存
   const handleAddRow = () => {
+    const newId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const newRow: Transaction = {
-      id: `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: newId,
       date: new Date().toISOString().split('T')[0],
       member: '荔枝',
       category: '杂项',
@@ -205,6 +220,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       amount: 0,
       ledger: 'Default',
     };
+
+    dirtyRowIdsRef.current.add(newId);
 
     setRows((prev) => {
       const nextRows = [newRow, ...prev];
@@ -348,7 +365,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const nextRows = [...parsedPreviewList, ...rows];
 
     try {
-      await onBatchSave(nextRows, deletedIds);
+      // 增量保存解析出的数据列表
+      await onBatchSave(parsedPreviewList, deletedIds);
       setRows(nextRows);
 
       const now = new Date();
@@ -407,10 +425,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-50 text-slate-800 flex font-mono day-admin-workbench select-none overflow-hidden">
-      {/* 2. 侧边栏 (Sidebar Menu): Data 与 Log 两个菜单 */}
+      {/* 侧边栏 (Sidebar Menu): Data 与 Log 两个菜单 */}
       <aside className="w-52 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col justify-between shrink-0">
         <div>
-          {/* 侧栏 Header */}
           <div className="p-4 border-b border-slate-800 flex items-center gap-2">
             <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
               <Sparkles className="w-4 h-4" />
@@ -418,7 +435,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <span className="font-bold text-sm text-white font-mono tracking-tight">Admin Console</span>
           </div>
 
-          {/* 菜单列表 */}
           <nav className="p-2 space-y-1">
             <button
               onClick={() => setActiveTab('data')}
@@ -446,7 +462,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </nav>
         </div>
 
-        {/* 侧栏底部：返回小票按钮 */}
         <div className="p-3 border-t border-slate-800">
           <button
             onClick={onClose}
@@ -463,7 +478,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {activeTab === 'data' ? (
           // ==================== TAB 1: DATA 数据维护工作台 ====================
           <>
-            {/* Header 导航工具栏 */}
             <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
@@ -475,7 +489,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {selectedIds.size > 0 && (
                     <span className="text-emerald-700 font-bold">已选 {selectedIds.size} 行</span>
                   )}
-                  {/* 1. 自动保存状态指示上次保存时间 */}
                   <span className="ml-1 text-[11px] flex items-center gap-1 text-slate-500 font-mono">
                     {saving ? (
                       <>
@@ -494,7 +507,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               </div>
 
-              {/* 中间：全局多维搜索 */}
               <div className="flex-1 max-w-sm relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
                 <input
@@ -506,7 +518,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 />
               </div>
 
-              {/* 右侧：功能按钮 */}
               <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => {
@@ -548,7 +559,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </header>
 
-            {/* 状态通知 */}
             {statusMsg && (
               <div
                 className={`p-2.5 text-xs flex items-center justify-center gap-2 border-b font-mono ${
@@ -566,7 +576,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             )}
 
-            {/* 白天主题表格区 */}
             <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
               <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
                 <table className="w-full text-left border-collapse">
@@ -759,7 +768,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         ) : (
           // ==================== TAB 2: LOG 变更日志视图 ====================
           <>
-            {/* Header 导航 */}
             <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between gap-4">
               <div>
                 <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
@@ -771,7 +779,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div className="flex items-center gap-3">
-                {/* 搜索过滤 */}
                 <div className="relative w-64">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
                   <input
@@ -794,7 +801,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </header>
 
-            {/* 日志表格内容区 */}
             <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
               <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
                 <table className="w-full text-left border-collapse">

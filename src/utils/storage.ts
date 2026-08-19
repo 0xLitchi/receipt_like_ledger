@@ -113,10 +113,11 @@ export const storage = {
     localStorage.removeItem(AUTH_PASSWORD_KEY);
   },
 
-  // Excel 批量保存接口逻辑
-  async batchSaveTransactions(items: Transaction[], deletedIds: string[]): Promise<boolean> {
+  // 高性能增量保存：只对变动的 changedItems 和 deletedIds 发起网络请求！
+  async batchSaveTransactions(changedItems: Transaction[], deletedIds: string[]): Promise<boolean> {
     const adminPassword = this.getSavedAdminPassword() || '';
 
+    // 1. 删除变动行
     for (const delId of deletedIds) {
       if (!delId || delId.startsWith('new_') || delId.startsWith('parse_')) continue;
       try {
@@ -129,7 +130,8 @@ export const storage = {
       }
     }
 
-    for (const item of items) {
+    // 2. 增量更新/插入变动行
+    for (const item of changedItems) {
       const isNewItem = !item.id || item.id.startsWith('new_') || item.id.startsWith('parse_');
 
       if (isNewItem) {
@@ -161,7 +163,6 @@ export const storage = {
       }
     }
 
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
     return true;
   }
 };
