@@ -10,6 +10,18 @@ const cleanSecretString = (str?: string | null): string => {
   return str.replace(/[\r\n\t\s"']/g, '').trim();
 };
 
+// CORS 跨域预检处理 (支持外部 cURL / Python / 快捷指令 / API 客户端)
+export const onRequestOptions: PagesFunction<Env> = async () => {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Password',
+    },
+  });
+};
+
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -52,6 +64,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const responseHeaders = {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+    'Access-Control-Allow-Origin': '*',
   };
 
   if (!env.DB) {
@@ -93,52 +106,91 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 };
 
+// 通过 API 插入/追加账单数据 (支持 HTTP POST，校验 Bearer Token = ACCESS_TOKEN 或 X-Admin-Password)
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
+  const url = new URL(request.url);
 
-  const authHeader = cleanSecretString(
+  // 1. 提取 Authorization: Bearer <TOKEN>
+  const authHeaderRaw = request.headers.get('Authorization') || request.headers.get('authorization') || '';
+  let bearerToken = '';
+  if (authHeaderRaw.toLowerCase().startsWith('bearer ')) {
+    bearerToken = cleanSecretString(authHeaderRaw.substring(7));
+  }
+
+  // 2. 提取 X-Admin-Password
+  const rawAdminPass =
     request.headers.get('X-Admin-Password') ||
-    request.headers.get('x-admin-password')
-  );
-  const expectedPassword = cleanSecretString(env.ADMIN_PASSWORD);
+    request.headers.get('x-admin-password') ||
+    url.searchParams.get('admin_password');
+  const adminPassHeader = cleanSecretString(rawAdminPass);
 
-  if (!expectedPassword || authHeader !== expectedPassword) {
-    return new Response(JSON.stringify({ success: false, message: '未授权：管理员密码错误或未配置 ADMIN_PASSWORD' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  const expectedAccessToken = cleanSecretString(env.ACCESS_TOKEN);
+  const expectedAdminPassword = cleanSecretString(env.ADMIN_PASSWORD);
+
+  const isBearerAuthorized = !!(expectedAccessToken && bearerToken === expectedAccessToken);
+  const isAdminAuthorized = !!(expectedAdminPassword && adminPassHeader === expectedAdminPassword);
+
+  const responseHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  };
+
+  if (!isBearerAuthorized && !isAdminAuthorized) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: '未授权：请提供有效的 Bearer Token (Authorization: Bearer <ACCESS_TOKEN>) 或 X-Admin-Password',
+      }),
+      { status: 401, headers: responseHeaders }
+    );
   }
 
   if (!env.DB) {
     return new Response(JSON.stringify({ success: false, message: 'D1 DB binding not found' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: responseHeaders,
     });
   }
 
   try {
-    const item = await request.json() as any;
-    const id = item.id || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const title = item.title || '';
-    const date = item.date;
-    const amount = Number(item.amount);
-    const member = item.member || '默认';
-    const category = item.category || '其它';
-    const subcategory = item.subcategory || '';
-    const ledger = item.ledger || 'Default';
+    const body = await request.json() as any;
+    const items = Array.isArray(body) ? body : [body];
+    const insertedList: any[] = [];
 
-    await env.DB.prepare(
-      `INSERT INTO transactions (id, title, date, amount, member, category, subcategory, ledger)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(id, title, date, amount, member, category, subcategory, ledger).run();
+    for (const item of items) {
+      const id = item.id || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const title = item.title || '';
+      const date = item.date || new Date().toISOString().split('T')[0];
+      const amount = Number(item.amount) || 0;
+      const member = item.member || '默认';
+      const category = item.category || '其它';
+      const subcategory = item.subcategory || '';
+      const ledger = item.ledger || 'Default';
 
-    return new Response(JSON.stringify({ success: true, data: { id, title, date, amount, member, category, subcategory, ledger } }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+      await env.DB.prepare(
+        `INSERT INTO transactions (id, title, date, amount, member, category, subcategory, ledger)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(id, title, date, amount, member, category, subcategory, ledger).run();
+
+      insertedList.push({ id, title, date, amount, member, category, subcategory, ledger });
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: `成功插入 ${insertedList.length} 条账目记录`,
+        data: Array.isArray(body) ? insertedList : insertedList[0],
+      }),
+      {
+        status: 200,
+        headers: responseHeaders,
+      }
+    );
   } catch (error: any) {
     return new Response(JSON.stringify({ success: false, error: error.message }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: responseHeaders,
     });
   }
 };
