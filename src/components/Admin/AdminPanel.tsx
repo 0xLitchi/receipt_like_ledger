@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   X,
   RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -95,10 +96,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [sortAsc, setSortAsc] = useState(true);
 
   const [saving, setSaving] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // 解析文本导入弹窗状态
   const [showParseModal, setShowParseModal] = useState(false);
   const [rawText, setRawText] = useState('');
+  const [parseStep, setParseStep] = useState<'input' | 'preview'>('input');
+  const [parsedPreviewList, setParsedPreviewList] = useState<Transaction[]>([]);
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -112,7 +117,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, [isOpen, transactions]);
 
-  // 4. 自动保存防抖提交到 Cloudflare D1
+  // 1. 自动保存防抖提交并更新上次保存时间戳
   const triggerAutoSave = useCallback(
     (currentRows: Transaction[], currentDeleted: string[]) => {
       setSaving(true);
@@ -122,7 +127,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         try {
           await onBatchSave(currentRows, currentDeleted);
           setDeletedIds([]);
-          setStatusMsg({ type: 'success', text: '已实时自动保存' });
+
+          const now = new Date();
+          const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(
+            now.getMinutes()
+          ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+          setLastSavedTime(timeStr);
+
+          setStatusMsg({ type: 'success', text: `已自动保存 (${timeStr})` });
           setTimeout(() => setStatusMsg(null), 2500);
         } catch (err: any) {
           setStatusMsg({ type: 'error', text: '自动保存失败: ' + (err.message || '网络或密码错误') });
@@ -154,7 +166,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     [deletedIds, triggerAutoSave]
   );
 
-  // 4. 添加行并自动保存
+  // 添加行并自动保存
   const handleAddRow = () => {
     const newRow: Transaction = {
       id: `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -203,7 +215,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
-  // 1 & 4. 批量删除选中行并自动保存（已移除了单行单元格删除列）
+  // 批量删除选中行并自动保存
   const handleBulkDeleteSelected = () => {
     if (selectedIds.size === 0) return;
 
@@ -269,8 +281,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return result;
   }, [rows, searchQuery, sortField, sortAsc]);
 
-  // 文本解析器应用并自动保存
-  const handleApplyParsedData = async (mode: 'append' | 'overwrite') => {
+  // 2. 文本解析：点击“保存”按钮进入预览状态
+  const handleStartParsePreview = () => {
     if (!rawText.trim()) {
       alert('请先粘贴需要解析的账单文本数据');
       return;
@@ -282,33 +294,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
+    setParsedPreviewList(parsed);
+    setParseStep('preview');
+  };
+
+  // 2. 二次确认导入：点击“确认保存导入”将解析数据保存提交
+  const handleConfirmImportParsedData = async () => {
+    if (parsedPreviewList.length === 0) return;
+
     setSaving(true);
     setStatusMsg(null);
 
-    let nextRows: Transaction[] = [];
-    let nextDeletedIds: string[] = [...deletedIds];
-
-    if (mode === 'overwrite') {
-      const currentDbIds = rows
-        .map((r) => r.id)
-        .filter((id) => id && !id.startsWith('new_') && !id.startsWith('parse_'));
-      nextDeletedIds = Array.from(new Set([...nextDeletedIds, ...currentDbIds]));
-      nextRows = parsed;
-    } else {
-      nextRows = [...parsed, ...rows];
-    }
+    const nextRows = [...parsedPreviewList, ...rows];
 
     try {
-      await onBatchSave(nextRows, nextDeletedIds);
+      await onBatchSave(nextRows, deletedIds);
       setRows(nextRows);
-      setDeletedIds([]);
+
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(
+        now.getMinutes()
+      ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      setLastSavedTime(timeStr);
+
       setRawText('');
+      setParsedPreviewList([]);
+      setParseStep('input');
       setShowParseModal(false);
+
       setStatusMsg({
         type: 'success',
-        text: mode === 'overwrite'
-          ? `已成功覆盖并保存 ${parsed.length} 条数据！`
-          : `已成功追加并保存 ${parsed.length} 条数据！`,
+        text: `已成功保存导入 ${parsedPreviewList.length} 条账目数据！(${timeStr})`,
       });
       setTimeout(() => setStatusMsg(null), 3500);
     } catch (err: any) {
@@ -350,11 +366,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     processedRows.length > 0 && processedRows.every((r) => selectedIds.has(r.id));
 
   return (
-    // 7. 后台管理界面改为全屏整页页面，且采用 Day 白天极简主题
     <div className="fixed inset-0 z-50 bg-slate-50 text-slate-800 flex flex-col font-mono day-admin-workbench select-none overflow-hidden">
       {/* 顶部导航栏 Header */}
       <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        {/* 左侧：返回小票按钮 + Admin Panel 2. 名称 */}
+        {/* 左侧：返回小票按钮 + Admin Panel 名称 */}
         <div className="flex items-center gap-4">
           <button
             onClick={onClose}
@@ -371,7 +386,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              {/* 2. 名称改为 "Admin Panel" */}
               <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
                 Admin Panel
               </h1>
@@ -381,7 +395,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {selectedIds.size > 0 && (
                   <span className="text-emerald-700 font-bold">已选 {selectedIds.size} 行</span>
                 )}
-                {/* 4. 自动保存状态指示 */}
+                {/* 1. 自动保存状态展示上次保存时间 */}
                 <span className="ml-1 text-[11px] flex items-center gap-1 text-slate-500 font-mono">
                   {saving ? (
                     <>
@@ -391,7 +405,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   ) : (
                     <>
                       <Check className="w-3 h-3 text-emerald-600" />
-                      <span className="text-emerald-700 font-medium">已自动保存</span>
+                      <span className="text-emerald-700 font-medium">
+                        {lastSavedTime ? `已自动保存 (${lastSavedTime})` : '已自动保存'}
+                      </span>
                     </>
                   )}
                 </span>
@@ -412,10 +428,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           />
         </div>
 
-        {/* 右侧：功能按钮（已去除了"保存修改"与"退出"按钮） */}
+        {/* 右侧：功能按钮 */}
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => setShowParseModal(true)}
+            onClick={() => {
+              setParseStep('input');
+              setShowParseModal(true);
+            }}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-mono font-bold transition-colors shadow-xs cursor-pointer"
           >
             <FileCode className="w-4 h-4 text-indigo-600" />
@@ -469,13 +488,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* 7. 白天主题表格区 */}
+      {/* 白天主题表格区 */}
       <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
         <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10 font-bold tracking-wider">
-                {/* 勾选列 */}
                 <th className="py-3 px-3 border-r border-slate-200 w-12 text-center bg-slate-100">
                   <input
                     type="checkbox"
@@ -485,12 +503,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   />
                 </th>
 
-                {/* 序号 */}
                 <th className="py-3 px-2 border-r border-slate-200 w-12 text-center opacity-60 bg-slate-100">
                   #
                 </th>
 
-                {/* 5. 简洁表头: 日期 */}
                 <th className="py-3 px-3 border-r border-slate-200 w-36 bg-slate-100">
                   <button
                     onClick={() => handleSort('date')}
@@ -509,7 +525,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </button>
                 </th>
 
-                {/* 5. 简洁表头: 成员 */}
                 <th className="py-3 px-3 border-r border-slate-200 w-28 bg-slate-100">
                   <button
                     onClick={() => handleSort('member')}
@@ -528,7 +543,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </button>
                 </th>
 
-                {/* 5. 简洁表头: 主分类 */}
                 <th className="py-3 px-3 border-r border-slate-200 w-32 bg-slate-100">
                   <button
                     onClick={() => handleSort('category')}
@@ -547,15 +561,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </button>
                 </th>
 
-                {/* 5. 简洁表头: 子分类 */}
                 <th className="py-3 px-3 border-r border-slate-200 w-32 bg-slate-100">子分类</th>
 
-                {/* 5. 简洁表头: 备注 */}
                 <th className="py-3 px-3 border-r border-slate-200 min-w-[160px] bg-slate-100">
                   备注
                 </th>
 
-                {/* 5. 简洁表头: 金额 */}
                 <th className="py-3 px-3 text-right bg-slate-100 w-36">
                   <button
                     onClick={() => handleSort('amount')}
@@ -588,7 +599,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         : 'hover:bg-slate-50'
                     }`}
                   >
-                    {/* 勾选框 */}
                     <td className="py-1 px-3 border-r border-slate-200 text-center">
                       <input
                         type="checkbox"
@@ -598,12 +608,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </td>
 
-                    {/* 序号 */}
                     <td className="py-1 px-2 border-r border-slate-200 text-center opacity-40 bg-slate-50/50">
                       {idx + 1}
                     </td>
 
-                    {/* 日期 */}
                     <td className="p-0 border-r border-slate-200">
                       <input
                         type="text"
@@ -614,7 +622,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </td>
 
-                    {/* 成员 */}
                     <td className="p-0 border-r border-slate-200">
                       <input
                         type="text"
@@ -624,7 +631,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </td>
 
-                    {/* 主分类 */}
                     <td className="p-0 border-r border-slate-200">
                       <input
                         type="text"
@@ -634,7 +640,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </td>
 
-                    {/* 子分类 */}
                     <td className="p-0 border-r border-slate-200">
                       <input
                         type="text"
@@ -644,7 +649,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </td>
 
-                    {/* 备注 */}
                     <td className="p-0 border-r border-slate-200">
                       <input
                         type="text"
@@ -655,7 +659,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </td>
 
-                    {/* 1 & 5. 金额 (最后一行无独立删除框) */}
                     <td className="p-0">
                       <input
                         type="number"
@@ -675,10 +678,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {/* 解析文本导入弹窗 */}
+      {/* 2. 解析文本导入弹窗（支持预览与二次确认导入） */}
       {showParseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-2xl p-6 shadow-2xl text-slate-800 relative">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-3xl p-6 shadow-2xl text-slate-800 relative max-h-[85vh] flex flex-col">
             <button
               onClick={() => setShowParseModal(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1"
@@ -686,49 +689,121 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-base font-bold flex items-center gap-2 mb-2 font-mono text-slate-900">
-              <FileCode className="w-5 h-5 text-indigo-600" />
-              解析文本数据增加到数据库
-            </h3>
-            <p className="text-xs text-slate-500 mb-3 font-mono">
-              在下方粘贴文本，点击确认按钮即可自动提交保存：<br />
-              <code className="text-emerald-700 bg-slate-100 px-1.5 py-0.5 rounded block my-1">
-                工会费	2026-08-13	￥-117.82	扶正	杂项/其它	Default
-              </code>
-            </p>
+            {parseStep === 'input' ? (
+              // 步骤 1：粘贴文本输入
+              <>
+                <h3 className="text-base font-bold flex items-center gap-2 mb-2 font-mono text-slate-900">
+                  <FileCode className="w-5 h-5 text-indigo-600" />
+                  解析文本数据导入
+                </h3>
+                <p className="text-xs text-slate-500 mb-3 font-mono">
+                  在此粘贴账单文本，点击“保存”查看解析预览：<br />
+                  <code className="text-emerald-700 bg-slate-100 px-1.5 py-0.5 rounded block my-1">
+                    工会费	2026-08-13	￥-117.82	扶正	杂项/其它	Default
+                  </code>
+                </p>
 
-            <textarea
-              rows={8}
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              placeholder="在此粘贴包含多行账单的原始文本..."
-              className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-mono text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:bg-white mb-4"
-            />
+                <textarea
+                  rows={9}
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  placeholder="在此粘贴包含多行账单的原始文本..."
+                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-mono text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:bg-white mb-4"
+                />
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200 font-mono">
-              <span className="text-xs text-slate-500 font-mono">
-                预计解析: {rawText.trim() ? `${parseRawLedgerText(rawText).length} 条记录` : '0 条'}
-              </span>
+                <div className="flex items-center justify-between pt-3 border-t border-slate-200 font-mono">
+                  <span className="text-xs text-slate-500 font-mono">
+                    预计解析: {rawText.trim() ? `${parseRawLedgerText(rawText).length} 条记录` : '0 条'}
+                  </span>
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => handleApplyParsedData('append')}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-mono font-bold shadow-xs disabled:opacity-50 cursor-pointer"
-                >
-                  {saving ? '正在提交...' : '追加到现有数据并保存'}
-                </button>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => handleApplyParsedData('overwrite')}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-mono font-bold shadow-xs disabled:opacity-50 cursor-pointer"
-                >
-                  {saving ? '正在提交...' : '全部覆盖现有数据并保存'}
-                </button>
-              </div>
-            </div>
+                  {/* 2. 单个“保存”按钮，去除了全量覆盖按钮 */}
+                  <button
+                    type="button"
+                    onClick={handleStartParsePreview}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-mono font-bold shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors"
+                  >
+                    <span>保存</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              // 2. 步骤 2：二次确认预览界面 (Preview Table & Secondary Confirmation)
+              <>
+                <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-3">
+                  <h3 className="text-base font-bold flex items-center gap-2 font-mono text-slate-900">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    解析结果预览二次确认
+                  </h3>
+                  <span className="text-xs font-mono text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 font-bold">
+                    成功解析出 {parsedPreviewList.length} 条记录
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-500 mb-3 font-mono">
+                  请检查以下解析出的账目数据，确认无误后点击“确认保存导入”：
+                </p>
+
+                {/* 预览数据表格 */}
+                <div className="flex-1 overflow-auto border border-slate-200 rounded-xl mb-4 max-h-[340px]">
+                  <table className="w-full text-left border-collapse font-mono text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 font-bold sticky top-0">
+                        <th className="py-2.5 px-3 border-r border-slate-200">日期</th>
+                        <th className="py-2.5 px-3 border-r border-slate-200">成员</th>
+                        <th className="py-2.5 px-3 border-r border-slate-200">分类</th>
+                        <th className="py-2.5 px-3 border-r border-slate-200">备注</th>
+                        <th className="py-2.5 px-3 text-right">金额</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 bg-white">
+                      {parsedPreviewList.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 border-r border-slate-200 font-mono text-slate-800">
+                            {item.date}
+                          </td>
+                          <td className="py-2 px-3 border-r border-slate-200 font-bold text-slate-900">
+                            {item.member}
+                          </td>
+                          <td className="py-2 px-3 border-r border-slate-200 text-slate-700">
+                            {item.category}{item.subcategory ? `/${item.subcategory}` : ''}
+                          </td>
+                          <td className="py-2 px-3 border-r border-slate-200 text-slate-700 truncate max-w-[150px]">
+                            {item.title || '-'}
+                          </td>
+                          <td
+                            className={`py-2 px-3 text-right font-bold ${
+                              item.amount > 0 ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            ￥{item.amount.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-slate-200 font-mono">
+                  <button
+                    type="button"
+                    onClick={() => setParseStep('input')}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono font-bold transition-colors cursor-pointer"
+                  >
+                    返回修改
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleConfirmImportParsedData}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold shadow-md cursor-pointer flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>{saving ? '正在提交...' : '确认保存导入'}</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
