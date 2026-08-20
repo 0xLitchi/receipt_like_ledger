@@ -159,9 +159,9 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
               <div className="my-3 border-2 border-current/40 rounded-xl overflow-hidden shadow-xs">
                 <div className="grid grid-cols-4 divide-x divide-current/30 border-b-2 border-current/40 text-center text-xs font-black py-1.5 bg-current/10 font-pixel tracking-widest uppercase">
                   <div>备注</div>
-                  <div>金额</div>
                   <div>成员</div>
                   <div>分类</div>
+                  <div>金额</div>
                 </div>
 
                 {dateGroups.length === 0 ? (

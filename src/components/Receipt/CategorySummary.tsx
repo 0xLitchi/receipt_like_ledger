@@ -35,9 +35,9 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
   isPrinting = false,
   themeStyle = 'receipt',
 }) => {
-  // 视图切换：'pie' (环形饼图) | 'bar' (柱状图) | 'list' (传统列表)
-  const [viewType, setViewType] = useState<'pie' | 'bar' | 'list'>('pie');
-  // 收支方向：'expense' (支出) | 'income' (收入)
+  // 视图切换：默认 'list' (列表视图)，支持 'pie' (环形饼图) | 'bar' (柱状图)
+  const [viewType, setViewType] = useState<'pie' | 'bar' | 'list'>('list');
+  // 收支方向：'expense' (支出) | 'income' (收入) - 用于 Pie/Bar 图表视图
   const [activeDirection, setActiveDirection] = useState<'expense' | 'income'>('expense');
   // 激活的扇区索引
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -123,47 +123,63 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
 
   return (
     <div className="my-3 p-3 border-2 border-current rounded-xl text-left font-pixel text-xs space-y-2 bg-current/5 shadow-xs select-none">
-      {/* 顶部控制栏: 支出/收入 Tab + 图表切换 (Pie / Bar / List) */}
+      {/* 顶部控制栏 */}
       <div className="flex items-center justify-between border-b border-current/25 pb-2 font-pixel">
-        {/* 支出/收入 Tab 切换 */}
-        <div className="flex items-center gap-1 bg-current/10 p-0.5 rounded-lg border border-current/20">
-          {expenses.length > 0 && (
-            <button
-              onClick={() => {
-                setActiveDirection('expense');
-                setActiveIndex(null);
-              }}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                activeDirection === 'expense'
-                  ? 'bg-rose-600 text-white shadow-xs'
-                  : 'text-current opacity-70 hover:opacity-100'
-              }`}
-            >
-              <TrendingDown className="w-3 h-3" />
-              <span>支出 ({expenses.length})</span>
-            </button>
-          )}
+        {/* 仅在 图表模式 (Pie / Bar) 下显示 支出/收入 单选切换；列表模式下同时展示 */}
+        {viewType !== 'list' ? (
+          <div className="flex items-center gap-1 bg-current/10 p-0.5 rounded-lg border border-current/20">
+            {expenses.length > 0 && (
+              <button
+                onClick={() => {
+                  setActiveDirection('expense');
+                  setActiveIndex(null);
+                }}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                  activeDirection === 'expense'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'text-current opacity-70 hover:opacity-100'
+                }`}
+              >
+                <TrendingDown className="w-3 h-3" />
+                <span>支出 ({expenses.length})</span>
+              </button>
+            )}
 
-          {incomes.length > 0 && (
-            <button
-              onClick={() => {
-                setActiveDirection('income');
-                setActiveIndex(null);
-              }}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                activeDirection === 'income'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-current opacity-70 hover:opacity-100'
-              }`}
-            >
-              <TrendingUp className="w-3 h-3" />
-              <span>收入 ({incomes.length})</span>
-            </button>
-          )}
-        </div>
+            {incomes.length > 0 && (
+              <button
+                onClick={() => {
+                  setActiveDirection('income');
+                  setActiveIndex(null);
+                }}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                  activeDirection === 'income'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-current opacity-70 hover:opacity-100'
+                }`}
+              >
+                <TrendingUp className="w-3 h-3" />
+                <span>收入 ({incomes.length})</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="text-[11px] font-bold opacity-80 uppercase tracking-wider font-pixel flex items-center gap-1">
+            <span>分类汇总明细</span>
+          </div>
+        )}
 
-        {/* 视图模式切换 */}
+        {/* 视图模式切换：默认列表，支持一键切换到 饼图 / 柱状图 */}
         <div className="flex items-center gap-1 bg-current/10 p-0.5 rounded-lg border border-current/20">
+          <button
+            onClick={() => setViewType('list')}
+            className={`p-1 rounded transition-colors cursor-pointer ${
+              viewType === 'list' ? 'bg-current/20 opacity-100 font-bold' : 'opacity-50 hover:opacity-100'
+            }`}
+            title="列表视图"
+          >
+            <List className="w-3.5 h-3.5" />
+          </button>
+
           <button
             onClick={() => setViewType('pie')}
             className={`p-1 rounded transition-colors cursor-pointer ${
@@ -183,26 +199,75 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
           >
             <BarChart2 className="w-3.5 h-3.5" />
           </button>
-
-          <button
-            onClick={() => setViewType('list')}
-            className={`p-1 rounded transition-colors cursor-pointer ${
-              viewType === 'list' ? 'bg-current/20 opacity-100 font-bold' : 'opacity-50 hover:opacity-100'
-            }`}
-            title="列表视图"
-          >
-            <List className="w-3.5 h-3.5" />
-          </button>
         </div>
       </div>
 
       {/* 核心展示区域 */}
-      {activeData.length === 0 ? (
+      {viewType === 'list' ? (
+        // ==================== 1. 列表视图 (默认显示：收入和支出同时展示，无需点按钮切换) ====================
+        <div className="space-y-2 pt-0.5">
+          {/* 支出列表 */}
+          {expenses.map((item) => (
+            <div key={`exp_${item.name}`} className="space-y-0.5">
+              <div className="flex justify-between items-center font-pixel text-xs">
+                <span className="font-bold">
+                  {item.name} <span className="opacity-60 text-[10px]">({item.count}笔)</span>
+                </span>
+                <span className="font-black tracking-tight">
+                  <AnimatedNumber
+                    value={item.displayTotal}
+                    hasFullAccess={hasFullAccess}
+                    isPrinting={isPrinting}
+                    className="text-rose-700"
+                  />
+                </span>
+              </div>
+
+              {item.ratio > 0 && (
+                <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
+                  <div
+                    className="h-full bg-rose-600/80 rounded-full transition-all duration-500"
+                    style={{ width: `${item.ratio}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* 收入列表 */}
+          {incomes.map((item) => (
+            <div key={`inc_${item.name}`} className="space-y-0.5">
+              <div className="flex justify-between items-center font-pixel text-xs">
+                <span className="font-bold">
+                  {item.name} <span className="opacity-60 text-[10px]">({item.count}笔)</span>
+                </span>
+                <span className="font-black tracking-tight">
+                  <AnimatedNumber
+                    value={item.displayTotal}
+                    hasFullAccess={hasFullAccess}
+                    isPrinting={isPrinting}
+                    className="text-emerald-700"
+                  />
+                </span>
+              </div>
+
+              {item.ratio > 0 && (
+                <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
+                  <div
+                    className="h-full bg-emerald-600/80 rounded-full transition-all duration-500"
+                    style={{ width: `${item.ratio}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : activeData.length === 0 ? (
         <div className="py-6 text-center text-xs opacity-50 font-pixel">
           暂无{activeDirection === 'expense' ? '支出' : '收入'}数据
         </div>
       ) : viewType === 'pie' ? (
-        // ==================== 1. 交互式环形饼图 (Recharts PieChart) ====================
+        // ==================== 2. 交互式环形饼图 (Recharts PieChart) ====================
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
           <div className="w-36 h-36 relative shrink-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -282,8 +347,8 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
             })}
           </div>
         </div>
-      ) : viewType === 'bar' ? (
-        // ==================== 2. 交互式水平柱状图 (Recharts BarChart) ====================
+      ) : (
+        // ==================== 3. 交互式水平柱状图 (Recharts BarChart) ====================
         <div className="pt-2 font-pixel">
           <div className="h-44 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -303,38 +368,6 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
-      ) : (
-        // ==================== 3. 传统清晰列表视图 ====================
-        <div className="space-y-1.5 pt-1">
-          {activeData.map((item) => (
-            <div key={item.name} className="space-y-0.5">
-              <div className="flex justify-between items-center font-pixel text-xs">
-                <span className="font-bold">
-                  {item.name} <span className="opacity-60 text-[10px]">({item.count}笔)</span>
-                </span>
-                <span className="font-black tracking-tight">
-                  <AnimatedNumber
-                    value={item.displayTotal}
-                    hasFullAccess={hasFullAccess}
-                    isPrinting={isPrinting}
-                    className={item.displayTotal > 0 ? 'text-emerald-700' : 'text-rose-700'}
-                  />
-                </span>
-              </div>
-
-              {item.ratio > 0 && (
-                <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      item.displayTotal > 0 ? 'bg-emerald-600/80' : 'bg-rose-600/80'
-                    }`}
-                    style={{ width: `${item.ratio}%` }}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
         </div>
       )}
     </div>

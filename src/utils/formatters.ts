@@ -1,20 +1,26 @@
 /**
- * 格式化人民币金额 (如 ￥3,900.00 / ￥-205.50)
+ * 格式化人民币金额 (支持可控制的 ￥ 前缀符号与正负号)
  */
-export const formatCurrency = (amount: number, showPlus: boolean = false): string => {
+export const formatCurrency = (
+  amount: number,
+  showPlus: boolean = false,
+  showSymbol: boolean = true
+): string => {
   const isNegative = amount < 0;
   const absVal = Math.abs(amount).toLocaleString('zh-CN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 
+  const symbol = showSymbol ? '￥' : '';
+
   if (isNegative) {
-    return `￥-${absVal}`;
+    return `${symbol}-${absVal}`;
   }
   if (showPlus && amount > 0) {
-    return `￥+${absVal}`;
+    return `${symbol}+${absVal}`;
   }
-  return `￥${absVal}`;
+  return `${symbol}${absVal}`;
 };
 
 /**

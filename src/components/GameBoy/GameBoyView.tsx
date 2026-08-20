@@ -84,9 +84,9 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
             <div className="my-3 border-2 border-[#2b582b] rounded-xl overflow-hidden bg-[#d8ecc0]/50">
               <div className="grid grid-cols-4 divide-x divide-[#2b582b] border-b-2 border-[#2b582b] text-center text-xs font-black py-1.5 bg-[#c8e6a4] tracking-widest uppercase">
                 <div>备注</div>
-                <div>金额</div>
                 <div>成员</div>
                 <div>分类</div>
+                <div>金额</div>
               </div>
 
               {dateGroups.length === 0 ? (

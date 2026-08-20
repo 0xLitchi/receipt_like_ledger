@@ -79,9 +79,9 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
           <div className="my-3 border-2 border-slate-800/60 rounded-xl overflow-hidden shadow-xs bg-[#f7f3e8]">
             <div className="grid grid-cols-4 divide-x divide-slate-800/40 border-b-2 border-slate-800/60 text-center text-xs font-black py-1.5 bg-slate-800/15 tracking-widest uppercase">
               <div>备注</div>
-              <div>金额</div>
               <div>成员</div>
               <div>分类</div>
+              <div>金额</div>
             </div>
 
             {dateGroups.length === 0 ? (

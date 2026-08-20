@@ -5,6 +5,7 @@ interface AnimatedNumberProps {
   value: number;
   hasFullAccess?: boolean;
   isPrinting?: boolean;
+  showSymbol?: boolean;
   className?: string;
 }
 
@@ -12,6 +13,7 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
   value,
   hasFullAccess = true,
   isPrinting = false,
+  showSymbol = true,
   className = '',
 }) => {
   const [displayValue, setDisplayValue] = useState<number>(value);
@@ -47,10 +49,10 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
   }, [value, isPrinting, hasFullAccess]);
 
   if (!hasFullAccess) {
-    return <span className={className}>￥***.**</span>;
+    return <span className={className}>{showSymbol ? '￥***.**' : '***.**'}</span>;
   }
 
-  const formatted = formatCurrency(displayValue, true);
+  const formatted = formatCurrency(displayValue, false, showSymbol);
 
   return (
     <span

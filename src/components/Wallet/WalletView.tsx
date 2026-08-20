@@ -68,9 +68,9 @@ export const WalletView: React.FC<WalletViewProps> = ({
           <div className="my-3 border-2 border-slate-300 rounded-xl overflow-hidden shadow-xs">
             <div className="grid grid-cols-4 divide-x divide-slate-300 border-b-2 border-slate-300 text-center text-xs font-black py-1.5 bg-slate-100 tracking-widest uppercase">
               <div>备注</div>
-              <div>金额</div>
               <div>成员</div>
               <div>分类</div>
+              <div>金额</div>
             </div>
 
             {dateGroups.length === 0 ? (
