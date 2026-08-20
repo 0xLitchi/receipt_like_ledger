@@ -40,7 +40,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
   // 激活的扇区索引
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  // 按分类合并计算金额汇总（去除笔数显示，按分类净金额汇总列示）
+  // 按分类汇总金额，并按金额数值从小到大排序 (不考虑绝对值，如 -1200.00 -> -350.00 -> 100.00)
   const categories = useMemo(() => {
     const categoryMap = new Map<string, number>();
     let totalAbsSum = 0;
@@ -76,7 +76,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
           ratioText,
         };
       })
-      .sort((a, b) => b.absVal - a.absVal);
+      .sort((a, b) => a.netTotal - b.netTotal); // 不考虑绝对值，按金额从最小到最大升序排序
 
     return catList;
   }, [transactions, hasFullAccess]);
@@ -108,7 +108,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
 
   return (
     <div className="my-3 p-3 border-2 border-current rounded-xl text-left font-pixel text-xs space-y-2 bg-current/5 shadow-xs select-none">
-      {/* 顶部控制栏 (居中显示视图模式切换按钮) */}
+      {/* 顶部控制栏 */}
       <div className="flex items-center justify-center gap-3 border-b border-current/25 pb-2 font-pixel">
         <div className="flex items-center gap-1 bg-current/10 p-0.5 rounded-lg border border-current/20">
           <button
@@ -145,7 +145,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
 
       {/* 核心展示区域 */}
       {viewType === 'list' ? (
-        // ==================== 1. 列表视图 (分类金额汇总列示，无笔数计算，去除单独收支拆分) ====================
+        // ==================== 1. 列表视图 (按金额从小到大排序，不考虑绝对值) ====================
         <div className="space-y-2 pt-0.5">
           {categories.map((item) => (
             <div key={item.name} className="space-y-0.5">
