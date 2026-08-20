@@ -227,6 +227,7 @@ export function App() {
           loadData();
         }}
         transactions={transactions}
+        onRefresh={loadData}
         onBatchSave={handleBatchSave}
         onLogout={handleAdminLogout}
         themeStyle={themeStyle}

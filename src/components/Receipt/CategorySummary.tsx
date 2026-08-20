@@ -191,7 +191,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                   outerRadius={56}
                   paddingAngle={3}
                   dataKey="value"
-                  onMouseEnter={(_, index) => setActiveIndex(index)}
+                  onMouseEnter={(_: unknown, index: number) => setActiveIndex(index)}
                   onMouseLeave={() => setActiveIndex(null)}
                 >
                   {categories.map((_, index) => (

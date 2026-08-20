@@ -35,6 +35,7 @@ interface AdminPanelProps {
   isOpen: boolean;
   onClose: () => void;
   transactions: Transaction[];
+  onRefresh?: () => Promise<void>;
   onBatchSave: (items: Transaction[], deletedIds: string[]) => Promise<void>;
   onLogout: () => void;
   themeStyle: ThemeStyle;
@@ -101,6 +102,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   isOpen,
   onClose,
   transactions,
+  onRefresh,
   onBatchSave,
   themeStyle,
   onThemeStyleChange,
@@ -108,6 +110,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // 菜单 Tab 控制：'data' | 'log' | 'reqlog' | 'general'
   const [activeTab, setActiveTab] = useState<'data' | 'log' | 'reqlog' | 'general'>('data');
 
+  const [refreshingData, setRefreshingData] = useState(false);
   const [rows, setRows] = useState<Transaction[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -150,6 +153,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setStatusMsg(null);
     }
   }, [isOpen, transactions]);
+
+  // 手动刷新 Data 数据
+  const handleRefreshData = async () => {
+    if (refreshingData) return;
+    setRefreshingData(true);
+    try {
+      if (onRefresh) {
+        await onRefresh();
+      } else {
+        const res = await storage.getTransactions();
+        setRows(JSON.parse(JSON.stringify(res.data)));
+        setDeletedIds([]);
+        setSelectedIds(new Set());
+        dirtyRowIdsRef.current.clear();
+      }
+    } finally {
+      setRefreshingData(false);
+    }
+  };
 
   // 加载数据变更日志
   const loadLogs = useCallback(async () => {
@@ -583,6 +605,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div className="flex items-center gap-2.5">
+                <button
+                  onClick={handleRefreshData}
+                  disabled={refreshingData || saving}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono font-bold transition-colors border border-slate-300 shadow-xs cursor-pointer disabled:opacity-50"
+                  title="刷新数据"
+                >
+                  <RefreshCw className={`w-4 h-4 ${refreshingData ? 'animate-spin' : ''}`} />
+                  <span>刷新数据</span>
+                </button>
+
                 <button
                   onClick={() => {
                     setParseStep('input');
