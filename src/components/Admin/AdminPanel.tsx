@@ -24,6 +24,9 @@ import {
   Settings,
   Receipt,
   Printer,
+  BookOpen,
+  Tv,
+  Plane,
   Zap,
   Globe,
   Terminal,
@@ -1266,6 +1269,108 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                     <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
                       状态: {themeStyle === 'tractor' ? '已应用' : '未选择'}
+                    </div>
+                  </div>
+
+                  {/* 主题 3: 经典复古银行存折 */}
+                  <div
+                    onClick={() => {
+                      onThemeStyleChange('passbook');
+                    }}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      themeStyle === 'passbook'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-red-100 text-red-700 rounded-lg">
+                            <BookOpen className="w-5 h-5" />
+                          </div>
+                          <span className="font-bold text-sm text-slate-900">经典复古银行存折</span>
+                        </div>
+                        {themeStyle === 'passbook' && (
+                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        酒红皮质存折外壳、米黄网格流水纸面与红色业务核算印章。
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
+                      状态: {themeStyle === 'passbook' ? '已应用' : '未选择'}
+                    </div>
+                  </div>
+
+                  {/* 主题 4: VFD 荧光管收银机 */}
+                  <div
+                    onClick={() => {
+                      onThemeStyleChange('vfd');
+                    }}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      themeStyle === 'vfd'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-cyan-100 text-cyan-700 rounded-lg">
+                            <Tv className="w-5 h-5" />
+                          </div>
+                          <span className="font-bold text-sm text-slate-900">VFD 荧光管收银机</span>
+                        </div>
+                        {themeStyle === 'vfd' && (
+                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        金属拉丝外框、暗色发光亚克力面板与青绿霓虹荧光发光管字符。
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
+                      状态: {themeStyle === 'vfd' ? '已应用' : '未选择'}
+                    </div>
+                  </div>
+
+                  {/* 主题 5: 航空登机牌机票 */}
+                  <div
+                    onClick={() => {
+                      onThemeStyleChange('boarding_pass');
+                    }}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      themeStyle === 'boarding_pass'
+                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
+                            <Plane className="w-5 h-5" />
+                          </div>
+                          <span className="font-bold text-sm text-slate-900">航空登机牌机票</span>
+                        </div>
+                        {themeStyle === 'boarding_pass' && (
+                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
+                            <Check className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        红蓝航空条纹、航班号日期栏、打孔撕票存根联与条形码。
+                      </p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
+                      状态: {themeStyle === 'boarding_pass' ? '已应用' : '未选择'}
                     </div>
                   </div>
                 </div>

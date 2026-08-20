@@ -18,13 +18,16 @@ interface CategorySummaryProps {
   transactions: Transaction[];
   hasFullAccess?: boolean;
   isPrinting?: boolean;
-  themeStyle?: 'receipt' | 'tractor';
+  themeStyle?: 'receipt' | 'tractor' | 'passbook' | 'vfd' | 'boarding_pass';
 }
 
 // 主题专属图表调色板
 const THEME_PALETTES = {
   receipt: ['#0f172a', '#334155', '#475569', '#64748b', '#94a3b8', '#cbd5e1'],
   tractor: ['#0f766e', '#0369a1', '#1d4ed8', '#4338ca', '#6b21a8', '#991b1b'],
+  passbook: ['#7f1d1d', '#991b1b', '#b91c1c', '#c2410c', '#b45309', '#15803d'],
+  vfd: ['#00f0ff', '#14ffec', '#00e5a3', '#39ff14', '#00b4d8', '#38bdf8'],
+  boarding_pass: ['#1d4ed8', '#dc2626', '#0284c7', '#d97706', '#475569', '#2563eb'],
 };
 
 export const CategorySummary: React.FC<CategorySummaryProps> = ({

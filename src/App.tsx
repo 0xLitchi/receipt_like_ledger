@@ -3,6 +3,9 @@ import type { Transaction, SummaryStats } from './types';
 import { storage, type ThemeStyle } from './utils/storage';
 import { ReceiptView } from './components/Receipt/ReceiptView';
 import { TractorPaperView } from './components/Tractor/TractorPaperView';
+import { PassbookView } from './components/Passbook/PassbookView';
+import { VfdView } from './components/VFD/VfdView';
+import { BoardingPassView } from './components/BoardingPass/BoardingPassView';
 import { FilterBar } from './components/FilterBar';
 import { AdminAuthModal } from './components/Admin/AdminAuthModal';
 import { AdminPanel } from './components/Admin/AdminPanel';
@@ -12,7 +15,7 @@ export function App() {
   const [hasFullAccess, setHasFullAccess] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
 
-  // UI 界面风格状态 ('receipt' | 'tractor')
+  // UI 界面风格状态 ('receipt' | 'tractor' | 'passbook' | 'vfd' | 'boarding_pass')
   const [themeStyle, setThemeStyle] = useState<ThemeStyle>(() => storage.getThemeStyle());
 
   // 强制白天模式
@@ -171,6 +174,30 @@ export function App() {
           <div className="py-20 text-center font-mono text-slate-500 text-xs">
             加载中...
           </div>
+        ) : themeStyle === 'passbook' ? (
+          <PassbookView
+            transactions={filteredTransactions}
+            stats={stats}
+            selectedMonth={selectedMonth || (recentMonths[0] || '')}
+            hasFullAccess={hasFullAccess}
+            isAdmin={isAdmin}
+          />
+        ) : themeStyle === 'vfd' ? (
+          <VfdView
+            transactions={filteredTransactions}
+            stats={stats}
+            selectedMonth={selectedMonth || (recentMonths[0] || '')}
+            hasFullAccess={hasFullAccess}
+            isAdmin={isAdmin}
+          />
+        ) : themeStyle === 'boarding_pass' ? (
+          <BoardingPassView
+            transactions={filteredTransactions}
+            stats={stats}
+            selectedMonth={selectedMonth || (recentMonths[0] || '')}
+            hasFullAccess={hasFullAccess}
+            isAdmin={isAdmin}
+          />
         ) : themeStyle === 'tractor' ? (
           <TractorPaperView
             transactions={filteredTransactions}

@@ -4,7 +4,7 @@ const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
 const AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
 const THEME_STYLE_KEY = 'receipt_ledger_theme_style';
 
-export type ThemeStyle = 'receipt' | 'tractor';
+export type ThemeStyle = 'receipt' | 'tractor' | 'passbook' | 'vfd' | 'boarding_pass';
 
 export interface ActivityLog {
   id: string;
