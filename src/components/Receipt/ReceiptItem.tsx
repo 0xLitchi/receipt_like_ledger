@@ -25,7 +25,7 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
 
   return (
     <div className="grid grid-cols-4 divide-x divide-current/30 border-b border-current/30 text-xs font-pixel select-none hover:bg-current/5 transition-colors leading-snug items-center py-1.5 bg-current/[0.01]">
-      {/* 1. 备注（列间分割符严格保留，为空时通过 non-breaking space 充实高宽） */}
+      {/* 1. 备注 */}
       <div className="font-bold text-[12px] opacity-95 truncate px-2 text-left min-w-0 min-h-[18px]" title={titleText}>
         {titleText || '\u00A0'}
       </div>
@@ -40,8 +40,8 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
         {categoryLabel || ''}
       </div>
 
-      {/* 4. 金额（位于第四列，去除 ￥ 前置符号） */}
-      <div className="font-black text-xs font-pixel tracking-tighter px-2 text-right min-w-0">
+      {/* 4. 金额（第四列，居中对齐，无 ￥ 符号） */}
+      <div className="font-black text-xs font-pixel tracking-tighter px-1 text-center min-w-0">
         <AnimatedNumber
           value={transaction.amount}
           hasFullAccess={hasFullAccess}
