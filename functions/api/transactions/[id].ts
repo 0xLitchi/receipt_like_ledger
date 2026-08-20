@@ -25,6 +25,76 @@ export const onRequestOptions: PagesFunction<Env> = async (context) => {
   });
 };
 
+// 支持通过 GET URL Query 参数追加账单数据: GET /api/transactions/<token>?desc=午餐&amt=-35&tag=荔枝&type=餐饮/外卖
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { request, env, params } = context;
+  const tokenOrId = params.id as string;
+  const url = new URL(request.url);
+
+  const urlToken = cleanSecretString(tokenOrId);
+  const expectedAccessToken = cleanSecretString(env.ACCESS_TOKEN);
+
+  const isTokenAuthorized = !!(expectedAccessToken && urlToken && urlToken === expectedAccessToken);
+  const isAdmin = await isAdminAuthorized(env.DB, env, request, url);
+
+  if (!isTokenAuthorized && !isAdmin) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: '未授权：URL 中拼接的 Access Token 无效，校验未通过',
+      }),
+      { status: 401, headers: jsonHeaders(request, env) }
+    );
+  }
+
+  if (!env.DB) {
+    return new Response(JSON.stringify({ success: false, message: 'D1 DB binding not found' }), {
+      status: 500,
+      headers: jsonHeaders(request, env),
+    });
+  }
+
+  const rawAmt = url.searchParams.get('amt') ?? url.searchParams.get('amount');
+  const desc = url.searchParams.get('desc') ?? url.searchParams.get('title');
+
+  if (rawAmt === null && desc === null) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: 'GET 追加数据请拼接参数，示例: /api/transactions/<token>?desc=午餐&amt=-35.5&tag=荔枝&type=餐饮/外卖',
+      }),
+      { status: 400, headers: jsonHeaders(request, env) }
+    );
+  }
+
+  try {
+    const item = {
+      desc: desc ?? '',
+      amt: rawAmt ?? 0,
+      tag: url.searchParams.get('tag') ?? url.searchParams.get('member') ?? '默认',
+      type: url.searchParams.get('type') ?? '',
+      category: url.searchParams.get('category') ?? '其它',
+      subcategory: url.searchParams.get('subcategory') ?? '',
+      date: url.searchParams.get('date') ?? new Date().toISOString().split('T')[0],
+      ledger: url.searchParams.get('ledger') ?? 'Default',
+    };
+
+    const source: 'web' | 'api' = isTokenAuthorized ? 'api' : 'web';
+    const result = await insertTransactionsBatch(env.DB, item, source);
+
+    return new Response(JSON.stringify(result), {
+      status: result.status,
+      headers: jsonHeaders(request, env),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ success: false, error: message }), {
+      status: 500,
+      headers: jsonHeaders(request, env),
+    });
+  }
+};
+
 // 通过 URL 路径中的 Token 追加账单数据: POST /api/transactions/<token>
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
