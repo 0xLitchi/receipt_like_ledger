@@ -1,5 +1,7 @@
 import {
+  cleanSecretString,
   getCorsHeaders,
+  insertTransactionsBatch,
   isAdminAuthorized,
   recordActivityLog,
   type SharedEnv,
@@ -10,10 +12,125 @@ interface Env extends SharedEnv {}
 
 const jsonHeaders = (request: Request, env: Env, extra: Record<string, string> = {}): Record<string, string> => ({
   'Content-Type': 'application/json',
+  'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
   ...getCorsHeaders(request, env),
   ...extra,
 });
 
+// CORS 预检
+export const onRequestOptions: PagesFunction<Env> = async (context) => {
+  return new Response(null, {
+    status: 204,
+    headers: getCorsHeaders(context.request, context.env),
+  });
+};
+
+// 支持通过 URL 路径中的 Token 读取完整解密账单数据: GET /api/transactions/<token>
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const { request, env, params } = context;
+  const tokenOrId = params.id as string;
+  const url = new URL(request.url);
+
+  const urlToken = cleanSecretString(tokenOrId);
+  const expectedAccessToken = cleanSecretString(env.ACCESS_TOKEN);
+
+  const isTokenAuthorized = !!(expectedAccessToken && urlToken && urlToken === expectedAccessToken);
+  const isAdmin = await isAdminAuthorized(env.DB, env, request, url);
+
+  const hasFullAccess = isTokenAuthorized || isAdmin;
+
+  if (!isTokenAuthorized && !isAdmin) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: '未授权：URL 中提供的 Access Token 无效或未设置',
+      }),
+      { status: 401, headers: jsonHeaders(request, env) }
+    );
+  }
+
+  if (!env.DB) {
+    return new Response(
+      JSON.stringify({ success: false, message: 'D1 DB binding not found', hasFullAccess }),
+      { status: 500, headers: jsonHeaders(request, env) }
+    );
+  }
+
+  try {
+    const { results } = await env.DB.prepare(
+      'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
+    ).all<TransactionRow>();
+
+    const data = (results || []).map((t) => {
+      if (hasFullAccess) return t;
+      return {
+        ...t,
+        title: '***',
+        amount: 0,
+        isMasked: true,
+      };
+    });
+
+    return new Response(JSON.stringify({ success: true, data, hasFullAccess }), {
+      headers: jsonHeaders(request, env),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ success: false, error: message }), {
+      status: 500,
+      headers: jsonHeaders(request, env),
+    });
+  }
+};
+
+// 支持通过 URL 路径中的 Token 追加账单数据: POST /api/transactions/<token>
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env, params } = context;
+  const tokenOrId = params.id as string;
+  const url = new URL(request.url);
+
+  const urlToken = cleanSecretString(tokenOrId);
+  const expectedAccessToken = cleanSecretString(env.ACCESS_TOKEN);
+
+  const isTokenAuthorized = !!(expectedAccessToken && urlToken && urlToken === expectedAccessToken);
+  const isAdmin = await isAdminAuthorized(env.DB, env, request, url);
+
+  if (!isTokenAuthorized && !isAdmin) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: '未授权：URL 中拼接的 Access Token 无效，校验未通过',
+      }),
+      { status: 401, headers: jsonHeaders(request, env) }
+    );
+  }
+
+  if (!env.DB) {
+    return new Response(JSON.stringify({ success: false, message: 'D1 DB binding not found' }), {
+      status: 500,
+      headers: jsonHeaders(request, env),
+    });
+  }
+
+  try {
+    const body = await request.json() as unknown;
+    const source: 'web' | 'api' = isTokenAuthorized ? 'api' : 'web';
+    const result = await insertTransactionsBatch(env.DB, body, source);
+
+    return new Response(JSON.stringify(result), {
+      status: result.status,
+      headers: jsonHeaders(request, env),
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ success: false, error: message }), {
+      status: 500,
+      headers: jsonHeaders(request, env),
+    });
+  }
+};
+
+// 管理员更新单条账目: PUT /api/transactions/:id
 export const onRequestPut: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
   const id = params.id as string;
@@ -66,6 +183,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
   }
 };
 
+// 管理员删除单条账目: DELETE /api/transactions/:id
 export const onRequestDelete: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
   const id = params.id as string;
@@ -86,7 +204,6 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    // 先查一下被删除的记录信息用于日志记录
     let targetTitle = id;
     try {
       const existing = await env.DB.prepare('SELECT title, amount FROM transactions WHERE id = ?')
@@ -101,7 +218,7 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
 
     await env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run();
 
-    // 记录删除日志 (网页端修改)
+    // 记录删除日志
     const logDetails = `删除账目 ID ${id}: ${targetTitle}`;
     await recordActivityLog(env.DB, 'web', 'delete', logDetails);
 

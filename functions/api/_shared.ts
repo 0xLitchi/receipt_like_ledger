@@ -168,3 +168,78 @@ export const deleteAdminSession = async (db: D1Database, token: string): Promise
     console.warn('Failed to delete session token', e);
   }
 };
+
+// 统一追加/插入账目核心处理逻辑（兼容 desc/title, amt/amount, tag/member, type: "账单/招商银行"）
+export const insertTransactionsBatch = async (
+  db: D1Database,
+  body: unknown,
+  source: 'web' | 'api'
+): Promise<{ success: boolean; status: number; message?: string; data?: TransactionRow | TransactionRow[] }> => {
+  const rawItems = Array.isArray(body) ? body : [body];
+  if (rawItems.length === 0) {
+    return { success: false, status: 400, message: '请求体不能为空' };
+  }
+
+  const insertedList: TransactionRow[] = [];
+
+  for (const rawItem of rawItems) {
+    if (typeof rawItem !== 'object' || rawItem === null) {
+      return { success: false, status: 400, message: '请求体必须是 JSON 对象或对象数组' };
+    }
+
+    const item = rawItem as Record<string, unknown>;
+    const id = typeof item.id === 'string' && item.id
+      ? item.id
+      : `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    const title = item.desc !== undefined ? String(item.desc) : (item.title !== undefined ? String(item.title) : '');
+    const date = typeof item.date === 'string' && item.date
+      ? item.date
+      : new Date().toISOString().split('T')[0];
+
+    const rawAmt = item.amt !== undefined ? item.amt : item.amount;
+    const amount = Number(rawAmt);
+    if (typeof amount !== 'number' || Number.isNaN(amount)) {
+      return { success: false, status: 400, message: `金额字段 amt/amount 非法: ${String(rawAmt)}` };
+    }
+
+    const member = item.tag !== undefined ? String(item.tag) : (item.member !== undefined ? String(item.member) : '默认');
+
+    let category = item.category !== undefined ? String(item.category) : '其它';
+    let subcategory = item.subcategory !== undefined ? String(item.subcategory) : '';
+
+    const typeStr = item.type !== undefined ? String(item.type).trim() : '';
+    if (typeStr) {
+      if (typeStr.includes('/')) {
+        const typeParts = typeStr.split('/');
+        category = typeParts[0].trim();
+        subcategory = typeParts.slice(1).join('/').trim();
+      } else {
+        category = typeStr;
+        subcategory = '';
+      }
+    }
+
+    const ledger = item.ledger !== undefined ? String(item.ledger) : 'Default';
+
+    await db.prepare(
+      `INSERT INTO transactions (id, title, date, amount, member, category, subcategory, ledger)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(id, title, date, amount, member, category, subcategory, ledger).run();
+
+    const inserted: TransactionRow = { id, title, date, amount, member, category, subcategory, ledger };
+    insertedList.push(inserted);
+
+    // 记录活动日志
+    const catLabel = subcategory ? `${category}/${subcategory}` : category;
+    const logDetails = `新增账目: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}) 日期:${date}`;
+    await recordActivityLog(db, source, 'create', logDetails);
+  }
+
+  return {
+    success: true,
+    status: 200,
+    message: `成功插入 ${insertedList.length} 条账目记录`,
+    data: Array.isArray(body) ? insertedList : insertedList[0],
+  };
+};
