@@ -42,7 +42,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
   // 激活的扇区索引
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  // 1. 数据统计处理：支出与收入完全独立计算，不正负抵消
+  // 1. 数据统计处理：支出与收入完全独立计算，小金额优化比例尺与最小 2% 渲染条
   const { expenses, incomes, grandExpenseTotal, grandIncomeTotal } = useMemo(() => {
     const expenseMap = new Map<string, { total: number; count: number }>();
     const incomeMap = new Map<string, { total: number; count: number }>();
@@ -69,23 +69,44 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
     });
 
     const expList = Array.from(expenseMap.entries())
-      .map(([name, stat]) => ({
-        name,
-        value: stat.total,
-        displayTotal: -stat.total,
-        count: stat.count,
-        ratio: gExpense > 0 ? Math.min(100, Math.round((stat.total / gExpense) * 100)) : 0,
-      }))
+      .map(([name, stat]) => {
+        const rawRatio = gExpense > 0 ? (stat.total / gExpense) * 100 : 0;
+        const ratio = Math.round(rawRatio);
+        // 小金额优化：保留最小 2.5% 的可见柱条宽度，避免小额完全消失
+        const barWidth = stat.total > 0 ? Math.max(2.5, Math.min(100, rawRatio)) : 0;
+        const ratioText = rawRatio > 0 && rawRatio < 1 ? '<1%' : `${ratio}%`;
+
+        return {
+          name,
+          value: stat.total,
+          displayTotal: -stat.total,
+          count: stat.count,
+          rawRatio,
+          ratio,
+          barWidth,
+          ratioText,
+        };
+      })
       .sort((a, b) => b.value - a.value);
 
     const incList = Array.from(incomeMap.entries())
-      .map(([name, stat]) => ({
-        name,
-        value: stat.total,
-        displayTotal: stat.total,
-        count: stat.count,
-        ratio: gIncome > 0 ? Math.min(100, Math.round((stat.total / gIncome) * 100)) : 0,
-      }))
+      .map(([name, stat]) => {
+        const rawRatio = gIncome > 0 ? (stat.total / gIncome) * 100 : 0;
+        const ratio = Math.round(rawRatio);
+        const barWidth = stat.total > 0 ? Math.max(2.5, Math.min(100, rawRatio)) : 0;
+        const ratioText = rawRatio > 0 && rawRatio < 1 ? '<1%' : `${ratio}%`;
+
+        return {
+          name,
+          value: stat.total,
+          displayTotal: stat.total,
+          count: stat.count,
+          rawRatio,
+          ratio,
+          barWidth,
+          ratioText,
+        };
+      })
       .sort((a, b) => b.value - a.value);
 
     return {
@@ -113,7 +134,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
           </div>
           <div className="flex items-center justify-between gap-3 mt-1 font-mono">
             <span className="text-amber-400 font-bold">￥{Math.abs(data.value).toFixed(2)}</span>
-            <span className="text-emerald-400 font-bold">{data.ratio}%</span>
+            <span className="text-emerald-400 font-bold">{data.ratioText}</span>
           </div>
         </div>
       );
@@ -168,7 +189,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
           </div>
         )}
 
-        {/* 视图模式切换：默认列表，支持一键切换到 饼图 / 柱状图 */}
+        {/* 视图模式切换 */}
         <div className="flex items-center gap-1 bg-current/10 p-0.5 rounded-lg border border-current/20">
           <button
             onClick={() => setViewType('list')}
@@ -204,7 +225,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
 
       {/* 核心展示区域 */}
       {viewType === 'list' ? (
-        // ==================== 1. 列表视图 (默认显示：收入和支出同时展示，无需点按钮切换) ====================
+        // ==================== 1. 列表视图 (支持最小 2.5% 柱条比例尺，小金额清晰可见) ====================
         <div className="space-y-2 pt-0.5">
           {/* 支出列表 */}
           {expenses.map((item) => (
@@ -223,14 +244,13 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                 </span>
               </div>
 
-              {item.ratio > 0 && (
-                <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
-                  <div
-                    className="h-full bg-rose-600/80 rounded-full transition-all duration-500"
-                    style={{ width: `${item.ratio}%` }}
-                  />
-                </div>
-              )}
+              {/* 进度条：始终渲染容器，保证极小金额也有 2.5% 的最小可见点阵线条 */}
+              <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
+                <div
+                  className="h-full bg-rose-600/80 rounded-full transition-all duration-500 min-w-[3px]"
+                  style={{ width: `${item.barWidth}%` }}
+                />
+              </div>
             </div>
           ))}
 
@@ -251,14 +271,12 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                 </span>
               </div>
 
-              {item.ratio > 0 && (
-                <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
-                  <div
-                    className="h-full bg-emerald-600/80 rounded-full transition-all duration-500"
-                    style={{ width: `${item.ratio}%` }}
-                  />
-                </div>
-              )}
+              <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
+                <div
+                  className="h-full bg-emerald-600/80 rounded-full transition-all duration-500 min-w-[3px]"
+                  style={{ width: `${item.barWidth}%` }}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -337,7 +355,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-mono text-[11px] opacity-75">{item.ratio}%</span>
+                    <span className="font-mono text-[11px] opacity-75">{item.ratioText}</span>
                     <span className={`font-bold font-mono ${item.displayTotal > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                       ￥{Math.abs(item.displayTotal).toFixed(2)}
                     </span>
