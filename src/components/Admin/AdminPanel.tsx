@@ -1332,7 +1332,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             {item.category}{item.subcategory ? `/${item.subcategory}` : ''}
                           </td>
                           <td className="py-2 px-3 border-r border-slate-200 text-slate-700 truncate max-w-[150px]">
-                            {item.title || '-'}
+                            {item.title}
                           </td>
                           <td
                             className={`py-2 px-3 text-right font-bold ${

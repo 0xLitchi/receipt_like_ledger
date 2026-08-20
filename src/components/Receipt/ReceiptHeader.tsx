@@ -15,9 +15,11 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
   hasFullAccess = true,
   isPrinting = false,
 }) => {
-  // 分类汇总计算
+  // 分类汇总：收入与支出不进行正负抵消，分别分类独立汇总
   const categoryStats = React.useMemo(() => {
-    const map = new Map<string, { total: number; count: number }>();
+    const expenseMap = new Map<string, { total: number; count: number }>();
+    const incomeMap = new Map<string, { total: number; count: number }>();
+
     let grandExpenseTotal = 0;
     let grandIncomeTotal = 0;
 
@@ -28,42 +30,43 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
       }
 
       const val = hasFullAccess ? t.amount : 0;
-      if (val < 0) grandExpenseTotal += Math.abs(val);
-      if (val > 0) grandIncomeTotal += val;
-
-      const prev = map.get(key) || { total: 0, count: 0 };
-      map.set(key, {
-        total: prev.total + val,
-        count: prev.count + 1,
-      });
+      if (val < 0) {
+        grandExpenseTotal += Math.abs(val);
+        const prev = expenseMap.get(key) || { total: 0, count: 0 };
+        expenseMap.set(key, {
+          total: prev.total + val,
+          count: prev.count + 1,
+        });
+      } else if (val > 0) {
+        grandIncomeTotal += val;
+        const prev = incomeMap.get(key) || { total: 0, count: 0 };
+        incomeMap.set(key, {
+          total: prev.total + val,
+          count: prev.count + 1,
+        });
+      }
     });
 
-    const allItems = Array.from(map.entries()).map(([name, stat]) => {
-      const absTotal = Math.abs(stat.total);
-      let ratio = 0;
-
-      if (stat.total < 0 && grandExpenseTotal > 0) {
-        ratio = Math.min(100, Math.round((absTotal / grandExpenseTotal) * 100));
-      } else if (stat.total > 0 && grandIncomeTotal > 0) {
-        ratio = Math.min(100, Math.round((stat.total / grandIncomeTotal) * 100));
-      }
-
-      return {
+    // 1. 支出类目（按绝对值由大到小排序）
+    const expenses = Array.from(expenseMap.entries())
+      .map(([name, stat]) => ({
         name,
         total: stat.total,
         count: stat.count,
-        ratio,
-      };
-    });
-
-    // 1. 支出由绝对值从大到小
-    const expenses = allItems
-      .filter((i) => i.total < 0)
+        ratio: grandExpenseTotal > 0 ? Math.min(100, Math.round((Math.abs(stat.total) / grandExpenseTotal) * 100)) : 0,
+        isIncome: false,
+      }))
       .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
 
-    // 2. 收入由大到小
-    const incomes = allItems
-      .filter((i) => i.total >= 0)
+    // 2. 收入类目（按金额由大到小排序）
+    const incomes = Array.from(incomeMap.entries())
+      .map(([name, stat]) => ({
+        name,
+        total: stat.total,
+        count: stat.count,
+        ratio: grandIncomeTotal > 0 ? Math.min(100, Math.round((stat.total / grandIncomeTotal) * 100)) : 0,
+        isIncome: true,
+      }))
       .sort((a, b) => b.total - a.total);
 
     return { list: [...expenses, ...incomes] };
@@ -82,8 +85,8 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
       {categoryStats.list.length > 0 && (
         <div className="my-3 p-3 border-2 border-current rounded-xl text-left font-pixel text-xs space-y-2 bg-current/5 shadow-xs">
           <div className="space-y-2">
-            {categoryStats.list.map((item) => (
-              <div key={item.name} className="space-y-0.5">
+            {categoryStats.list.map((item, idx) => (
+              <div key={`${item.name}_${item.isIncome ? 'inc' : 'exp'}_${idx}`} className="space-y-0.5">
                 <div className="flex justify-between items-center font-pixel text-xs">
                   <span className="font-bold">
                     {item.name} <span className="opacity-60 text-[10px]">({item.count}笔)</span>
@@ -93,17 +96,17 @@ export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({
                       value={item.total}
                       hasFullAccess={hasFullAccess}
                       isPrinting={isPrinting}
-                      className={item.total > 0 ? 'text-emerald-700' : 'text-rose-700'}
+                      className={item.isIncome ? 'text-emerald-700' : 'text-rose-700'}
                     />
                   </span>
                 </div>
 
-                {/* 支出与收入均显示占比进度条 */}
+                {/* 支出与收入均显示独立比例进度条 */}
                 {item.ratio > 0 && (
                   <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
-                        item.total > 0 ? 'bg-emerald-600/80' : 'bg-rose-600/80'
+                        item.isIncome ? 'bg-emerald-600/80' : 'bg-rose-600/80'
                       }`}
                       style={{ width: `${item.ratio}%` }}
                     />
