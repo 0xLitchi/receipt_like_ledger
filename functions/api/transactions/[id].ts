@@ -25,65 +25,7 @@ export const onRequestOptions: PagesFunction<Env> = async (context) => {
   });
 };
 
-// 支持通过 URL 路径中的 Token 读取完整解密账单数据: GET /api/transactions/<token>
-export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const { request, env, params } = context;
-  const tokenOrId = params.id as string;
-  const url = new URL(request.url);
-
-  const urlToken = cleanSecretString(tokenOrId);
-  const expectedAccessToken = cleanSecretString(env.ACCESS_TOKEN);
-
-  const isTokenAuthorized = !!(expectedAccessToken && urlToken && urlToken === expectedAccessToken);
-  const isAdmin = await isAdminAuthorized(env.DB, env, request, url);
-
-  const hasFullAccess = isTokenAuthorized || isAdmin;
-
-  if (!isTokenAuthorized && !isAdmin) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        message: '未授权：URL 中提供的 Access Token 无效或未设置',
-      }),
-      { status: 401, headers: jsonHeaders(request, env) }
-    );
-  }
-
-  if (!env.DB) {
-    return new Response(
-      JSON.stringify({ success: false, message: 'D1 DB binding not found', hasFullAccess }),
-      { status: 500, headers: jsonHeaders(request, env) }
-    );
-  }
-
-  try {
-    const { results } = await env.DB.prepare(
-      'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
-    ).all<TransactionRow>();
-
-    const data = (results || []).map((t) => {
-      if (hasFullAccess) return t;
-      return {
-        ...t,
-        title: '***',
-        amount: 0,
-        isMasked: true,
-      };
-    });
-
-    return new Response(JSON.stringify({ success: true, data, hasFullAccess }), {
-      headers: jsonHeaders(request, env),
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ success: false, error: message }), {
-      status: 500,
-      headers: jsonHeaders(request, env),
-    });
-  }
-};
-
-// 支持通过 URL 路径中的 Token 追加账单数据: POST /api/transactions/<token>
+// 通过 URL 路径中的 Token 追加账单数据: POST /api/transactions/<token>
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
   const tokenOrId = params.id as string;
