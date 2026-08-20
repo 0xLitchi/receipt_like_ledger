@@ -77,6 +77,7 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
               selectedMonth={selectedMonth}
               transactions={transactions}
               hasFullAccess={hasFullAccess}
+              themeStyle="gameboy"
             />
 
             {/* 结构化表格组件 */}

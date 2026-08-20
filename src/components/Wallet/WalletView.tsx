@@ -61,6 +61,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
             selectedMonth={selectedMonth}
             transactions={transactions}
             hasFullAccess={hasFullAccess}
+            themeStyle="wallet"
           />
 
           {/* 结构化表格组件 */}

@@ -72,6 +72,7 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
             selectedMonth={selectedMonth}
             transactions={transactions}
             hasFullAccess={hasFullAccess}
+            themeStyle="tractor"
           />
 
           {/* 结构化表格组件 */}

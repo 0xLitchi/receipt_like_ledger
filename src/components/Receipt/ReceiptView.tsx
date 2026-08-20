@@ -152,6 +152,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 transactions={transactions}
                 hasFullAccess={hasFullAccess}
                 isPrinting={isPrinting}
+                themeStyle="receipt"
               />
 
               {/* 明细清单框线表格 */}
