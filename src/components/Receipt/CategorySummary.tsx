@@ -42,7 +42,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
   // 激活的扇区索引
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  // 1. 数据统计处理：支出与收入完全独立计算，小金额优化比例尺与最小 2% 渲染条
+  // 1. 数据统计处理：支出与收入完全独立计算，小金额优化比例尺与最小 2.5% 渲染条
   const { expenses, incomes, grandExpenseTotal, grandIncomeTotal } = useMemo(() => {
     const expenseMap = new Map<string, { total: number; count: number }>();
     const incomeMap = new Map<string, { total: number; count: number }>();
@@ -72,7 +72,6 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
       .map(([name, stat]) => {
         const rawRatio = gExpense > 0 ? (stat.total / gExpense) * 100 : 0;
         const ratio = Math.round(rawRatio);
-        // 小金额优化：保留最小 2.5% 的可见柱条宽度，避免小额完全消失
         const barWidth = stat.total > 0 ? Math.max(2.5, Math.min(100, rawRatio)) : 0;
         const ratioText = rawRatio > 0 && rawRatio < 1 ? '<1%' : `${ratio}%`;
 
@@ -144,10 +143,10 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
 
   return (
     <div className="my-3 p-3 border-2 border-current rounded-xl text-left font-pixel text-xs space-y-2 bg-current/5 shadow-xs select-none">
-      {/* 顶部控制栏 */}
-      <div className="flex items-center justify-between border-b border-current/25 pb-2 font-pixel">
-        {/* 仅在 图表模式 (Pie / Bar) 下显示 支出/收入 单选切换；列表模式下同时展示 */}
-        {viewType !== 'list' ? (
+      {/* 顶部控制栏 (居中显示图表切换按钮，已移除“分类汇总明细”标题) */}
+      <div className="flex items-center justify-center gap-3 border-b border-current/25 pb-2 font-pixel">
+        {/* 仅在 图表模式 (Pie / Bar) 下显示 支出/收入 单选切换 */}
+        {viewType !== 'list' && (
           <div className="flex items-center gap-1 bg-current/10 p-0.5 rounded-lg border border-current/20">
             {expenses.length > 0 && (
               <button
@@ -183,13 +182,9 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
               </button>
             )}
           </div>
-        ) : (
-          <div className="text-[11px] font-bold opacity-80 uppercase tracking-wider font-pixel flex items-center gap-1">
-            <span>分类汇总明细</span>
-          </div>
         )}
 
-        {/* 视图模式切换 */}
+        {/* 居中对齐的视图模式切换 */}
         <div className="flex items-center gap-1 bg-current/10 p-0.5 rounded-lg border border-current/20">
           <button
             onClick={() => setViewType('list')}
@@ -225,7 +220,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
 
       {/* 核心展示区域 */}
       {viewType === 'list' ? (
-        // ==================== 1. 列表视图 (支持最小 2.5% 柱条比例尺，小金额清晰可见) ====================
+        // ==================== 1. 列表视图 (默认显示：收入和支出同时展示，无需点按钮切换) ====================
         <div className="space-y-2 pt-0.5">
           {/* 支出列表 */}
           {expenses.map((item) => (
@@ -244,7 +239,6 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                 </span>
               </div>
 
-              {/* 进度条：始终渲染容器，保证极小金额也有 2.5% 的最小可见点阵线条 */}
               <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
                 <div
                   className="h-full bg-rose-600/80 rounded-full transition-all duration-500 min-w-[3px]"
