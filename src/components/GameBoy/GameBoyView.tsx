@@ -97,7 +97,7 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
                 dateGroups.map((group) => (
                   <React.Fragment key={group.date}>
                     <div className="bg-[#c8e6a4] px-2.5 py-1 font-pixel text-xs font-black border-y border-[#2b582b] text-[#082008] text-left tracking-wider">
-                      <span>📅 {group.shortDate}</span>
+                      <span>{group.shortDate}</span>
                     </div>
 
                     {group.items.map((t) => (

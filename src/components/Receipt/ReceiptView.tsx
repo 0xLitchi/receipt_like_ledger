@@ -171,9 +171,9 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 ) : (
                   dateGroups.map((group) => (
                     <React.Fragment key={group.date}>
-                      {/* 日期子抬头 */}
+                      {/* 日期子抬头（无 emoji） */}
                       <div className="bg-current/10 px-2.5 py-1 font-pixel text-xs font-black border-y border-current/30 text-left tracking-wider opacity-85">
-                        <span>📅 {group.shortDate}</span>
+                        <span>{group.shortDate}</span>
                       </div>
 
                       {group.items.map((t) => (

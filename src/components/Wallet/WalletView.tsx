@@ -81,7 +81,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
               dateGroups.map((group) => (
                 <React.Fragment key={group.date}>
                   <div className="bg-slate-100 px-2.5 py-1 font-mono text-xs font-black border-y border-slate-300 text-slate-800 text-left tracking-wider">
-                    <span>📅 {group.shortDate}</span>
+                    <span>{group.shortDate}</span>
                   </div>
 
                   {group.items.map((t) => (

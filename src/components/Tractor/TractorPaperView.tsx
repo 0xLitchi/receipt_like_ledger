@@ -92,7 +92,7 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
               dateGroups.map((group) => (
                 <React.Fragment key={group.date}>
                   <div className="bg-slate-800/15 px-2.5 py-1 font-mono text-xs font-black border-y border-slate-800/40 text-slate-950 text-left tracking-wider">
-                    <span>📅 {group.shortDate}</span>
+                    <span>{group.shortDate}</span>
                   </div>
 
                   {group.items.map((t) => (
