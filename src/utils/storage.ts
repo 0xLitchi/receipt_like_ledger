@@ -15,6 +15,21 @@ export interface ActivityLog {
   created_at?: string;
 }
 
+export interface ApiRequestLog {
+  id: string;
+  timestamp: string;
+  method: string;
+  endpoint: string;
+  status_code: number;
+  success: number | boolean;
+  ip_address: string;
+  user_agent: string;
+  token_used: string;
+  payload_summary: string;
+  execution_ms: number;
+  created_at?: string;
+}
+
 export const storage = {
   // 获取/设置 UI 界面主题配置
   getThemeStyle(): ThemeStyle {
@@ -134,6 +149,30 @@ export const storage = {
       }
     } catch (e) {
       console.warn('API error fetching logs', e);
+    }
+    return [];
+  },
+
+  // 获取 API 请求调用日志 (Req Log)
+  async getApiLogs(): Promise<ApiRequestLog[]> {
+    const adminPassword = this.getSavedAdminPassword() || '';
+    if (!adminPassword) return [];
+
+    try {
+      const res = await fetch(`/api/api-logs?admin_password=${encodeURIComponent(adminPassword)}&_t=${Date.now()}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store',
+          'X-Admin-Password': adminPassword,
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          return json.data;
+        }
+      }
+    } catch (e) {
+      console.warn('API error fetching API logs', e);
     }
     return [];
   },

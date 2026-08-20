@@ -1,9 +1,11 @@
 import {
   cleanSecretString,
+  getClientIp,
   getCorsHeaders,
   insertTransactionsBatch,
   isAdminAuthorized,
   recordActivityLog,
+  recordApiRequestLog,
   type SharedEnv,
   type TransactionRow,
 } from '../_shared';
@@ -27,6 +29,7 @@ export const onRequestOptions: PagesFunction<Env> = async (context) => {
 
 // 支持通过 GET URL Query 参数追加账单数据: GET /api/transactions/<token>?desc=午餐&amt=-35&tag=荔枝&type=餐饮/外卖
 export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const startTime = Date.now();
   const { request, env, params } = context;
   const tokenOrId = params.id as string;
   const url = new URL(request.url);
@@ -37,12 +40,26 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const isTokenAuthorized = !!(expectedAccessToken && urlToken && urlToken === expectedAccessToken);
   const isAdmin = await isAdminAuthorized(env.DB, env, request, url);
 
+  const ipAddress = getClientIp(request);
+  const userAgent = request.headers.get('User-Agent') || '';
+  const endpoint = url.pathname + url.search;
+
   if (!isTokenAuthorized && !isAdmin) {
+    const errorMsg = '未授权：URL 中拼接的 Access Token 无效，校验未通过';
+    await recordApiRequestLog(env.DB, {
+      method: 'GET',
+      endpoint,
+      statusCode: 401,
+      success: false,
+      ipAddress,
+      userAgent,
+      tokenUsed: urlToken,
+      payloadSummary: errorMsg,
+      executionMs: Date.now() - startTime,
+    });
+
     return new Response(
-      JSON.stringify({
-        success: false,
-        message: '未授权：URL 中拼接的 Access Token 无效，校验未通过',
-      }),
+      JSON.stringify({ success: false, message: errorMsg }),
       { status: 401, headers: jsonHeaders(request, env) }
     );
   }
@@ -58,11 +75,21 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const desc = url.searchParams.get('desc') ?? url.searchParams.get('title');
 
   if (rawAmt === null && desc === null) {
+    const errorMsg = 'GET 追加数据请拼接参数，示例: /api/transactions/<token>?desc=午餐&amt=-35.5&tag=荔枝&type=餐饮/外卖';
+    await recordApiRequestLog(env.DB, {
+      method: 'GET',
+      endpoint,
+      statusCode: 400,
+      success: false,
+      ipAddress,
+      userAgent,
+      tokenUsed: urlToken,
+      payloadSummary: errorMsg,
+      executionMs: Date.now() - startTime,
+    });
+
     return new Response(
-      JSON.stringify({
-        success: false,
-        message: 'GET 追加数据请拼接参数，示例: /api/transactions/<token>?desc=午餐&amt=-35.5&tag=荔枝&type=餐饮/外卖',
-      }),
+      JSON.stringify({ success: false, message: errorMsg }),
       { status: 400, headers: jsonHeaders(request, env) }
     );
   }
@@ -82,12 +109,36 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const source: 'web' | 'api' = isTokenAuthorized ? 'api' : 'web';
     const result = await insertTransactionsBatch(env.DB, item, source);
 
+    await recordApiRequestLog(env.DB, {
+      method: 'GET',
+      endpoint,
+      statusCode: result.status,
+      success: result.success,
+      ipAddress,
+      userAgent,
+      tokenUsed: urlToken,
+      payloadSummary: result.summaryText || result.message || 'GET 追加账目',
+      executionMs: Date.now() - startTime,
+    });
+
     return new Response(JSON.stringify(result), {
       status: result.status,
       headers: jsonHeaders(request, env),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+    await recordApiRequestLog(env.DB, {
+      method: 'GET',
+      endpoint,
+      statusCode: 500,
+      success: false,
+      ipAddress,
+      userAgent,
+      tokenUsed: urlToken,
+      payloadSummary: `系统异常: ${message}`,
+      executionMs: Date.now() - startTime,
+    });
+
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
       headers: jsonHeaders(request, env),
@@ -97,6 +148,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
 // 通过 URL 路径中的 Token 追加账单数据: POST /api/transactions/<token>
 export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const startTime = Date.now();
   const { request, env, params } = context;
   const tokenOrId = params.id as string;
   const url = new URL(request.url);
@@ -107,12 +159,26 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const isTokenAuthorized = !!(expectedAccessToken && urlToken && urlToken === expectedAccessToken);
   const isAdmin = await isAdminAuthorized(env.DB, env, request, url);
 
+  const ipAddress = getClientIp(request);
+  const userAgent = request.headers.get('User-Agent') || '';
+  const endpoint = url.pathname + url.search;
+
   if (!isTokenAuthorized && !isAdmin) {
+    const errorMsg = '未授权：URL 中拼接的 Access Token 无效，校验未通过';
+    await recordApiRequestLog(env.DB, {
+      method: 'POST',
+      endpoint,
+      statusCode: 401,
+      success: false,
+      ipAddress,
+      userAgent,
+      tokenUsed: urlToken,
+      payloadSummary: errorMsg,
+      executionMs: Date.now() - startTime,
+    });
+
     return new Response(
-      JSON.stringify({
-        success: false,
-        message: '未授权：URL 中拼接的 Access Token 无效，校验未通过',
-      }),
+      JSON.stringify({ success: false, message: errorMsg }),
       { status: 401, headers: jsonHeaders(request, env) }
     );
   }
@@ -129,12 +195,36 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const source: 'web' | 'api' = isTokenAuthorized ? 'api' : 'web';
     const result = await insertTransactionsBatch(env.DB, body, source);
 
+    await recordApiRequestLog(env.DB, {
+      method: 'POST',
+      endpoint,
+      statusCode: result.status,
+      success: result.success,
+      ipAddress,
+      userAgent,
+      tokenUsed: urlToken,
+      payloadSummary: result.summaryText || result.message || 'POST 追加账目',
+      executionMs: Date.now() - startTime,
+    });
+
     return new Response(JSON.stringify(result), {
       status: result.status,
       headers: jsonHeaders(request, env),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+    await recordApiRequestLog(env.DB, {
+      method: 'POST',
+      endpoint,
+      statusCode: 500,
+      success: false,
+      ipAddress,
+      userAgent,
+      tokenUsed: urlToken,
+      payloadSummary: `解析 Body 或插入失败: ${message}`,
+      executionMs: Date.now() - startTime,
+    });
+
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
       headers: jsonHeaders(request, env),

@@ -1,4 +1,4 @@
-// Pages Functions 共享工具模块：密钥清洗、CORS 白名单、活动日志、管理员会话、类型约束
+// Pages Functions 共享工具模块：密钥清洗、CORS 白名单、活动日志、管理员会话、API 请求日志、类型约束
 
 export interface SharedEnv {
   DB?: D1Database;
@@ -19,10 +19,35 @@ export interface TransactionRow {
   created_at?: string;
 }
 
+export interface ApiRequestLogRow {
+  id: string;
+  timestamp: string;
+  method: string;
+  endpoint: string;
+  status_code: number;
+  success: number;
+  ip_address: string;
+  user_agent: string;
+  token_used: string;
+  payload_summary: string;
+  execution_ms: number;
+  created_at?: string;
+}
+
 // 剥离换行符 (\r, \n)、制表符、多余空格及引号
 export const cleanSecretString = (str?: string | null): string => {
   if (!str) return '';
   return str.replace(/[\r\n\t\s"']/g, '').trim();
+};
+
+// 读取 Client IP (支持 Cloudflare cf-connecting-ip)
+export const getClientIp = (request: Request): string => {
+  return (
+    request.headers.get('cf-connecting-ip') ||
+    request.headers.get('x-forwarded-for') ||
+    request.headers.get('x-real-ip') ||
+    '127.0.0.1'
+  );
 };
 
 // 读取管理员身份凭证（Header 优先，Query 仅兼容旧调用方）
@@ -66,7 +91,7 @@ export const getCorsHeaders = (request: Request, env: SharedEnv): Record<string,
   return {};
 };
 
-// 活动日志表（幂等建表）
+// 活动日志表（数据变更审计，幂等建表）
 export const ensureActivityLogsTable = async (db: D1Database): Promise<void> => {
   await db.prepare(
     `CREATE TABLE IF NOT EXISTS activity_logs (
@@ -80,7 +105,6 @@ export const ensureActivityLogsTable = async (db: D1Database): Promise<void> => 
   ).run();
 };
 
-// 动态创建并记录日志
 export const recordActivityLog = async (
   db: D1Database,
   source: 'web' | 'api' | 'import',
@@ -96,6 +120,71 @@ export const recordActivityLog = async (
     ).bind(id, timestamp, source, action, details).run();
   } catch (e) {
     console.warn('Failed to record log', e);
+  }
+};
+
+// API 请求日志表 (Req Log 幂等建表)
+export const ensureApiRequestLogsTable = async (db: D1Database): Promise<void> => {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS api_request_logs (
+      id TEXT PRIMARY KEY,
+      timestamp TEXT NOT NULL,
+      method TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      status_code INTEGER NOT NULL,
+      success INTEGER NOT NULL,
+      ip_address TEXT,
+      user_agent TEXT,
+      token_used TEXT,
+      payload_summary TEXT,
+      execution_ms INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`
+  ).run();
+};
+
+export const recordApiRequestLog = async (
+  db: D1Database | undefined,
+  logData: {
+    method: string;
+    endpoint: string;
+    statusCode: number;
+    success: boolean;
+    ipAddress?: string;
+    userAgent?: string;
+    tokenUsed?: string;
+    payloadSummary?: string;
+    executionMs?: number;
+  }
+): Promise<void> => {
+  if (!db) return;
+  try {
+    await ensureApiRequestLogsTable(db);
+    const id = `apilog_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const timestamp = new Date().toISOString();
+    const tokenMasked = logData.tokenUsed
+      ? (logData.tokenUsed.length > 6 ? `${logData.tokenUsed.substring(0, 3)}***` : '***')
+      : 'none';
+
+    await db.prepare(
+      `INSERT INTO api_request_logs
+       (id, timestamp, method, endpoint, status_code, success, ip_address, user_agent, token_used, payload_summary, execution_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id,
+      timestamp,
+      logData.method,
+      logData.endpoint,
+      logData.statusCode,
+      logData.success ? 1 : 0,
+      logData.ipAddress || 'unknown',
+      logData.userAgent || 'unknown',
+      tokenMasked,
+      logData.payloadSummary || '',
+      logData.executionMs || 0
+    ).run();
+  } catch (e) {
+    console.warn('Failed to record API request log', e);
   }
 };
 
@@ -174,13 +263,14 @@ export const insertTransactionsBatch = async (
   db: D1Database,
   body: unknown,
   source: 'web' | 'api'
-): Promise<{ success: boolean; status: number; message?: string; data?: TransactionRow | TransactionRow[] }> => {
+): Promise<{ success: boolean; status: number; message?: string; data?: TransactionRow | TransactionRow[]; summaryText?: string }> => {
   const rawItems = Array.isArray(body) ? body : [body];
   if (rawItems.length === 0) {
     return { success: false, status: 400, message: '请求体不能为空' };
   }
 
   const insertedList: TransactionRow[] = [];
+  const summaryParts: string[] = [];
 
   for (const rawItem of rawItems) {
     if (typeof rawItem !== 'object' || rawItem === null) {
@@ -230,8 +320,10 @@ export const insertTransactionsBatch = async (
     const inserted: TransactionRow = { id, title, date, amount, member, category, subcategory, ledger };
     insertedList.push(inserted);
 
-    // 记录活动日志
     const catLabel = subcategory ? `${category}/${subcategory}` : category;
+    summaryParts.push(`amt:${amount}, desc:"${title}", tag:"${member}", type:"${catLabel}", date:${date}`);
+
+    // 记录活动日志
     const logDetails = `新增账目: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}) 日期:${date}`;
     await recordActivityLog(db, source, 'create', logDetails);
   }
@@ -241,5 +333,6 @@ export const insertTransactionsBatch = async (
     status: 200,
     message: `成功插入 ${insertedList.length} 条账目记录`,
     data: Array.isArray(body) ? insertedList : insertedList[0],
+    summaryText: summaryParts.join('; '),
   };
 };

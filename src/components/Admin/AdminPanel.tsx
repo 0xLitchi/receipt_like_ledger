@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Transaction } from '../../types';
-import { storage, type ActivityLog, type ThemeStyle } from '../../utils/storage';
+import { storage, type ActivityLog, type ApiRequestLog, type ThemeStyle } from '../../utils/storage';
 import {
   Plus,
   Trash2,
@@ -17,6 +17,7 @@ import {
   X,
   RefreshCw,
   CheckCircle2,
+  XCircle,
   Database,
   History,
   Settings,
@@ -26,6 +27,8 @@ import {
   Printer,
   Zap,
   Globe,
+  Terminal,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -102,8 +105,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   themeStyle,
   onThemeStyleChange,
 }) => {
-  // 菜单 Tab 控制：'data' | 'log' | 'general'
-  const [activeTab, setActiveTab] = useState<'data' | 'log' | 'general'>('data');
+  // 菜单 Tab 控制：'data' | 'log' | 'reqlog' | 'general'
+  const [activeTab, setActiveTab] = useState<'data' | 'log' | 'reqlog' | 'general'>('data');
 
   const [rows, setRows] = useState<Transaction[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
@@ -124,6 +127,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logSearchQuery, setLogSearchQuery] = useState('');
 
+  // API 请求日志列表状态 (Req Log)
+  const [apiLogs, setApiLogs] = useState<ApiRequestLog[]>([]);
+  const [loadingApiLogs, setLoadingApiLogs] = useState(false);
+  const [apiLogSearchQuery, setApiLogSearchQuery] = useState('');
+
   // 解析文本导入弹窗状态
   const [showParseModal, setShowParseModal] = useState(false);
   const [rawText, setRawText] = useState('');
@@ -143,7 +151,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, [isOpen, transactions]);
 
-  // 加载日志
+  // 加载数据变更日志
   const loadLogs = useCallback(async () => {
     setLoadingLogs(true);
     const data = await storage.getLogs();
@@ -151,11 +159,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setLoadingLogs(false);
   }, []);
 
+  // 加载 API 请求日志 (Req Log)
+  const loadApiLogs = useCallback(async () => {
+    setLoadingApiLogs(true);
+    const data = await storage.getApiLogs();
+    setApiLogs(data);
+    setLoadingApiLogs(false);
+  }, []);
+
   useEffect(() => {
     if (isOpen && activeTab === 'log') {
       loadLogs();
+    } else if (isOpen && activeTab === 'reqlog') {
+      loadApiLogs();
     }
-  }, [isOpen, activeTab, loadLogs]);
+  }, [isOpen, activeTab, loadLogs, loadApiLogs]);
 
   // 高性能增量自动保存防抖提交
   const triggerAutoSave = useCallback(
@@ -346,6 +364,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   }, [logs, logSearchQuery]);
 
+  // 过滤 API 请求日志列表 (Req Log)
+  const filteredApiLogs = useMemo(() => {
+    if (!apiLogSearchQuery.trim()) return apiLogs;
+    const q = apiLogSearchQuery.toLowerCase().trim();
+    return apiLogs.filter(
+      (l) =>
+        l.method.toLowerCase().includes(q) ||
+        l.endpoint.toLowerCase().includes(q) ||
+        l.ip_address.toLowerCase().includes(q) ||
+        l.payload_summary.toLowerCase().includes(q) ||
+        l.user_agent.toLowerCase().includes(q) ||
+        String(l.status_code).includes(q)
+    );
+  }, [apiLogs, apiLogSearchQuery]);
+
   // 文本解析：点击“保存”按钮进入预览状态
   const handleStartParsePreview = () => {
     if (!rawText.trim()) {
@@ -432,7 +465,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-50 text-slate-800 flex font-mono day-admin-workbench select-none overflow-hidden">
-      {/* 侧边栏 (Sidebar Menu): Data, Log, General 三个子菜单 */}
+      {/* 侧边栏 (Sidebar Menu): Data, Log, Req Log, General 四个子菜单 */}
       <aside className="w-52 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col justify-between shrink-0">
         <div>
           <div className="p-4 border-b border-slate-800 flex items-center gap-2">
@@ -465,6 +498,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             >
               <History className="w-4 h-4" />
               <span>Log (变更日志)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('reqlog')}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                activeTab === 'reqlog'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Terminal className="w-4 h-4 text-purple-400" />
+              <span>Req Log (请求日志)</span>
             </button>
 
             <button
@@ -901,8 +946,145 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
           </>
+        ) : activeTab === 'reqlog' ? (
+          // ==================== TAB 3: REQ LOG API 请求日志审计 ====================
+          <>
+            <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between gap-4">
+              <div>
+                <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
+                  <Terminal className="w-5 h-5 text-purple-600" />
+                  Req Log API 请求日志
+                </h1>
+                <p className="text-xs font-mono text-slate-500 mt-0.5">
+                  记录外部通过 API 调用系统的详细日志（包含客户端 IP、请求参数、状态码、耗时等）
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="relative w-64">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={apiLogSearchQuery}
+                    onChange={(e) => setApiLogSearchQuery(e.target.value)}
+                    placeholder="搜索 IP、路径、参数..."
+                    className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-600 focus:bg-white"
+                  />
+                </div>
+
+                <button
+                  onClick={loadApiLogs}
+                  disabled={loadingApiLogs}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono font-bold transition-colors border border-slate-300 shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingApiLogs ? 'animate-spin' : ''}`} />
+                  刷新请求日志
+                </button>
+              </div>
+            </header>
+
+            <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10 font-bold tracking-wider">
+                      <th className="py-3 px-4 border-r border-slate-200 w-44">调用时间</th>
+                      <th className="py-3 px-3 border-r border-slate-200 w-24 text-center">方式</th>
+                      <th className="py-3 px-3 border-r border-slate-200 w-32 text-center">状态码</th>
+                      <th className="py-3 px-4 border-r border-slate-200 w-36">客户端 IP</th>
+                      <th className="py-3 px-4 border-r border-slate-200 w-64">请求路径</th>
+                      <th className="py-3 px-4 border-r border-slate-200 min-w-[200px]">数据载荷 / 参数摘要</th>
+                      <th className="py-3 px-3 border-r border-slate-200 w-24 text-right">耗时</th>
+                      <th className="py-3 px-4 w-48">User Agent</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {loadingApiLogs ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400 font-mono">
+                          正在加载 API 请求日志...
+                        </td>
+                      </tr>
+                    ) : filteredApiLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400 font-mono">
+                          暂无 API 请求调用日志
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredApiLogs.map((log) => {
+                        const dateStr = log.created_at || log.timestamp || '';
+                        const formattedTime = dateStr.length >= 19 ? dateStr.substring(0, 19).replace('T', ' ') : dateStr;
+
+                        const isSuccess = log.success === 1 || log.success === true || (log.status_code >= 200 && log.status_code < 300);
+
+                        return (
+                          <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-600">
+                              {formattedTime}
+                            </td>
+
+                            <td className="py-2.5 px-3 border-r border-slate-200 text-center font-bold">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-mono ${
+                                log.method === 'POST'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : log.method === 'GET'
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  : 'bg-slate-100 text-slate-800 border border-slate-200'
+                              }`}>
+                                {log.method}
+                              </span>
+                            </td>
+
+                            <td className="py-2.5 px-3 border-r border-slate-200 text-center font-bold">
+                              {isSuccess ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  {log.status_code || 200} OK
+                                </span>
+                              ) : log.status_code === 401 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-rose-50 text-rose-700 border border-rose-200">
+                                  <ShieldAlert className="w-3 h-3 text-rose-600" />
+                                  401 Unauthorized
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-amber-50 text-amber-700 border border-amber-200">
+                                  <XCircle className="w-3 h-3 text-amber-600" />
+                                  {log.status_code} Error
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-800 font-bold">
+                              {log.ip_address}
+                            </td>
+
+                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-700 truncate max-w-[240px]" title={log.endpoint}>
+                              {log.endpoint}
+                            </td>
+
+                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-900 font-medium truncate max-w-[320px]" title={log.payload_summary}>
+                              {log.payload_summary || '-'}
+                            </td>
+
+                            <td className="py-2.5 px-3 border-r border-slate-200 text-right font-mono text-slate-500">
+                              {log.execution_ms ? `${log.execution_ms}ms` : '<1ms'}
+                            </td>
+
+                            <td className="py-2.5 px-4 font-mono text-slate-400 text-[11px] truncate max-w-[200px]" title={log.user_agent}>
+                              {log.user_agent || 'Unknown UA'}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         ) : (
-          // ==================== TAB 3: GENERAL 通用设置 ====================
+          // ==================== TAB 4: GENERAL 通用设置 ====================
           <>
             <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm">
               <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
