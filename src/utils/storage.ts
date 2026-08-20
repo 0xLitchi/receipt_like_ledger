@@ -1,10 +1,8 @@
 import type { Transaction } from '../types';
 
 const LOCAL_STORAGE_KEY = 'receipt_ledger_transactions_v1';
-const LEGACY_AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
-const AUTH_TOKEN_KEY = 'receipt_ledger_admin_session';
+const AUTH_PASSWORD_KEY = 'receipt_ledger_admin_token';
 const THEME_STYLE_KEY = 'receipt_ledger_theme_style';
-const ALL_THEME_STYLES: ThemeStyle[] = ['receipt', 'gameboy', 'wallet', 'tractor'];
 
 export type ThemeStyle = 'receipt' | 'gameboy' | 'wallet' | 'tractor';
 
@@ -17,46 +15,6 @@ export interface ActivityLog {
   created_at?: string;
 }
 
-export interface GlobalSettings {
-  themeStyle: ThemeStyle;
-  fxSound: boolean;
-  fxPaperRain: boolean;
-  fxCoinRain: boolean;
-}
-
-export type FxSettingKey = 'fxSound' | 'fxPaperRain' | 'fxCoinRain';
-
-const SETTING_KEY_MAP: Record<string, string> = {
-  themeStyle: 'theme_style',
-  fxSound: 'fx_sound',
-  fxPaperRain: 'fx_paper_rain',
-  fxCoinRain: 'fx_coin_rain',
-};
-
-const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
-  themeStyle: 'receipt',
-  fxSound: true,
-  fxPaperRain: true,
-  fxCoinRain: true,
-};
-
-interface AuthResponse {
-  success: boolean;
-  token?: string;
-  message?: string;
-}
-
-// 统一的请求头：仅携带会话 token，绝不把密码放进 URL/Header
-const authHeaders = (token: string | null): Record<string, string> => {
-  const headers: Record<string, string> = {
-    'Cache-Control': 'no-cache, no-store',
-  };
-  if (token) {
-    headers['X-Admin-Token'] = token;
-  }
-  return headers;
-};
-
 export const storage = {
   // 获取/设置 UI 界面主题配置
   getThemeStyle(): ThemeStyle {
@@ -67,69 +25,68 @@ export const storage = {
     localStorage.setItem(THEME_STYLE_KEY, style);
   },
 
-  // 读取服务端持久化的全局设置（主题 + 特效开关，管理员配置后所有访客延续）
-  async getGlobalSettings(): Promise<GlobalSettings> {
-    const settings: GlobalSettings = {
-      ...DEFAULT_GLOBAL_SETTINGS,
-      themeStyle: this.getThemeStyle(),
-    };
-
+  // 从服务端拉取全局设置
+  async fetchSettings(): Promise<{ themeStyle: ThemeStyle }> {
     try {
-      const res = await fetch(`/api/settings?_t=${Date.now()}`, {
-        headers: { 'Cache-Control': 'no-cache, no-store' },
-      });
+      const res = await fetch(`/api/settings?_t=${Date.now()}`);
       if (res.ok) {
         const json = await res.json();
-        const data = json?.data || {};
-        const style = data.theme_style;
-        if (typeof style === 'string' && (ALL_THEME_STYLES as string[]).includes(style)) {
-          settings.themeStyle = style as ThemeStyle;
+        if (json.success && json.data) {
+          const themeStyle = (json.data.theme_style as ThemeStyle) || 'receipt';
+          this.setThemeStyle(themeStyle);
+          return { themeStyle };
         }
-        settings.fxSound = data.fx_sound !== 'off';
-        settings.fxPaperRain = data.fx_paper_rain !== 'off';
-        settings.fxCoinRain = data.fx_coin_rain !== 'off';
-        return settings;
       }
     } catch (e) {
-      console.warn('Failed to fetch global settings', e);
+      console.warn('API error fetching settings', e);
     }
-    return settings;
+    return {
+      themeStyle: this.getThemeStyle(),
+    };
   },
 
-  // 管理员将设置持久化到服务端（key 为前端友好名，如 fxSound）
-  async setGlobalSetting(key: keyof GlobalSettings, value: string): Promise<boolean> {
-    const token = this.getAdminToken();
-    const dbKey = SETTING_KEY_MAP[key];
-    if (!dbKey) return false;
+  // 保存设置到服务端
+  async updateSetting(key: 'theme_style', value: string): Promise<boolean> {
+    const adminPassword = this.getSavedAdminPassword() || '';
     try {
-      const res = await fetch('/api/settings', {
+      const res = await fetch(`/api/settings?admin_password=${encodeURIComponent(adminPassword)}`, {
         method: 'PUT',
-        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [dbKey]: value }),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Password': adminPassword,
+        },
+        body: JSON.stringify({ [key]: value }),
       });
       if (res.ok) {
         const json = await res.json();
         return json.success === true;
       }
     } catch (e) {
-      console.warn('Failed to persist global theme style', e);
+      console.warn('API error updating setting', key, e);
     }
     return false;
   },
 
   // 获取所有交易数据
   async getTransactions(): Promise<{ data: Transaction[]; hasFullAccess: boolean }> {
-    const token = this.getAdminToken();
+    const adminPassword = this.getSavedAdminPassword() || '';
 
     const urlObj = new URL(window.location.href);
     const searchParams = new URLSearchParams(urlObj.search);
+
     searchParams.set('_t', String(Date.now()));
+    if (adminPassword) {
+      searchParams.set('admin_password', adminPassword);
+    }
 
     const fetchUrl = `/api/transactions?${searchParams.toString()}`;
 
     try {
       const res = await fetch(fetchUrl, {
-        headers: authHeaders(token),
+        headers: {
+          'Cache-Control': 'no-cache, no-store',
+          'X-Admin-Password': adminPassword,
+        },
       });
       if (res.ok) {
         const json = await res.json();
@@ -144,27 +101,30 @@ export const storage = {
       console.warn('API error fetching transactions', e);
     }
 
-    // 本地缓存兜底：未登录时不信任缓存明文，交给前端脱敏渲染
+    // 本地缓存兜底
     const local = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (local) {
       try {
         const parsed = JSON.parse(local);
-        return { data: parsed, hasFullAccess: !!token };
+        return { data: parsed, hasFullAccess: true };
       } catch (err) {
         console.error('Failed to parse local storage', err);
       }
     }
-    return { data: [], hasFullAccess: !!token };
+    return { data: [], hasFullAccess: true };
   },
 
   // 获取数据变更日志
   async getLogs(): Promise<ActivityLog[]> {
-    const token = this.getAdminToken();
-    if (!token) return [];
+    const adminPassword = this.getSavedAdminPassword() || '';
+    if (!adminPassword) return [];
 
     try {
-      const res = await fetch(`/api/logs?_t=${Date.now()}`, {
-        headers: authHeaders(token),
+      const res = await fetch(`/api/logs?admin_password=${encodeURIComponent(adminPassword)}&_t=${Date.now()}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store',
+          'X-Admin-Password': adminPassword,
+        },
       });
       if (res.ok) {
         const json = await res.json();
@@ -178,7 +138,7 @@ export const storage = {
     return [];
   },
 
-  // 验证管理员密码，成功后服务端签发会话 token（仅 token 落本地存储）
+  // 验证管理员密码
   async verifyAdminPassword(password: string): Promise<boolean> {
     try {
       const res = await fetch('/api/auth/verify', {
@@ -187,10 +147,9 @@ export const storage = {
         body: JSON.stringify({ password }),
       });
       if (res.ok) {
-        const json = (await res.json()) as AuthResponse;
-        if (json.success && json.token) {
-          localStorage.setItem(AUTH_TOKEN_KEY, json.token);
-          localStorage.removeItem(LEGACY_AUTH_PASSWORD_KEY);
+        const json = await res.json();
+        if (json.success) {
+          localStorage.setItem(AUTH_PASSWORD_KEY, password);
           return true;
         }
       }
@@ -200,42 +159,24 @@ export const storage = {
     return false;
   },
 
-  // 读取会话 token；同时清理旧版明文密码缓存（旧会话失效需重新登录）
-  getAdminToken(): string | null {
-    const legacy = localStorage.getItem(LEGACY_AUTH_PASSWORD_KEY);
-    if (legacy) {
-      localStorage.removeItem(LEGACY_AUTH_PASSWORD_KEY);
-    }
-    return localStorage.getItem(AUTH_TOKEN_KEY);
+  getSavedAdminPassword(): string | null {
+    return localStorage.getItem(AUTH_PASSWORD_KEY);
   },
 
-  // 登出：通知服务端删除会话，并清除本地 token
-  async logoutAdmin(): Promise<void> {
-    const token = this.getAdminToken();
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(LEGACY_AUTH_PASSWORD_KEY);
-    if (!token) return;
-
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
-      });
-    } catch (e) {
-      console.warn('Logout API failed (local session cleared anyway)', e);
-    }
+  logoutAdmin() {
+    localStorage.removeItem(AUTH_PASSWORD_KEY);
   },
 
   // 高性能增量保存
   async batchSaveTransactions(changedItems: Transaction[], deletedIds: string[]): Promise<boolean> {
-    const token = this.getAdminToken();
+    const adminPassword = this.getSavedAdminPassword() || '';
 
     for (const delId of deletedIds) {
       if (!delId || delId.startsWith('new_') || delId.startsWith('parse_')) continue;
       try {
-        await fetch(`/api/transactions/${delId}`, {
+        await fetch(`/api/transactions/${delId}?admin_password=${encodeURIComponent(adminPassword)}`, {
           method: 'DELETE',
-          headers: authHeaders(token),
+          headers: { 'X-Admin-Password': adminPassword },
         });
       } catch (e) {
         console.warn('Failed to delete transaction ID', delId, e);
@@ -247,9 +188,12 @@ export const storage = {
 
       if (isNewItem) {
         try {
-          await fetch(`/api/transactions`, {
+          await fetch(`/api/transactions?admin_password=${encodeURIComponent(adminPassword)}`, {
             method: 'POST',
-            headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Admin-Password': adminPassword,
+            },
             body: JSON.stringify({ ...item, id: undefined }),
           });
         } catch (e) {
@@ -257,9 +201,12 @@ export const storage = {
         }
       } else {
         try {
-          await fetch(`/api/transactions/${item.id}`, {
+          await fetch(`/api/transactions/${item.id}?admin_password=${encodeURIComponent(adminPassword)}`, {
             method: 'PUT',
-            headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Admin-Password': adminPassword,
+            },
             body: JSON.stringify(item),
           });
         } catch (e) {

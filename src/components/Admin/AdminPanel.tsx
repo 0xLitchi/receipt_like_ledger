@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Transaction } from '../../types';
-import { storage, type ActivityLog, type FxSettingKey, type GlobalSettings, type ThemeStyle } from '../../utils/storage';
-import { parseRawLedgerText } from '../../utils/parser';
+import { storage, type ActivityLog, type ThemeStyle } from '../../utils/storage';
 import {
   Plus,
   Trash2,
@@ -27,9 +26,6 @@ import {
   Printer,
   Zap,
   Globe,
-  Volume2,
-  Feather,
-  Coins,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -40,43 +36,63 @@ interface AdminPanelProps {
   onLogout: () => void;
   themeStyle: ThemeStyle;
   onThemeStyleChange: (style: ThemeStyle) => void;
-  fxSettings: GlobalSettings;
-  onFxSettingChange: (key: FxSettingKey, value: boolean) => void;
 }
 
-// 趣味特效开关行
-const FxToggleRow: React.FC<{
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}> = ({ icon, title, desc, checked, onChange }) => (
-  <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-    <div className="flex items-start gap-3 min-w-0">
-      <div className="p-2 rounded-lg bg-fuchsia-100 text-fuchsia-700 shrink-0">{icon}</div>
-      <div className="min-w-0">
-        <div className="text-sm font-bold text-slate-900">{title}</div>
-        <div className="text-[11px] text-slate-500 leading-relaxed">{desc}</div>
-      </div>
-    </div>
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 cursor-pointer ${
-        checked ? 'bg-emerald-600' : 'bg-slate-300'
-      }`}
-    >
-      <span
-        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-          checked ? 'translate-x-5' : ''
-        }`}
-      />
-    </button>
-  </div>
-);
+// 文本数据解析器
+const parseRawLedgerText = (text: string): Transaction[] => {
+  const lines = text.split('\n');
+  const results: Transaction[] = [];
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    const parts = line.split('\t').map((p) => p.trim());
+    const fields = parts.length >= 3 ? parts : line.split(/\s{2,}/).map((p) => p.trim());
+
+    if (fields.length < 3) return;
+
+    let title = fields[0] || '';
+    let dateStr = fields[1] || '';
+    let rawAmount = fields[2] || '0';
+    let member = fields[3] || '默认';
+    let categoryFull = fields[4] || '其它';
+    let ledger = fields[5] || 'Default';
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fields[0])) {
+      title = '';
+      dateStr = fields[0];
+      rawAmount = fields[1] || '0';
+      member = fields[2] || '默认';
+      categoryFull = fields[3] || '其它';
+      ledger = fields[4] || 'Default';
+    }
+
+    const cleanAmountStr = rawAmount.replace(/[￥,]/g, '');
+    const amount = parseFloat(cleanAmountStr) || 0;
+
+    let category = categoryFull;
+    let subcategory = '';
+    if (categoryFull.includes('/')) {
+      const catParts = categoryFull.split('/');
+      category = catParts[0];
+      subcategory = catParts.slice(1).join('/');
+    }
+
+    results.push({
+      id: `parse_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+      title,
+      date: dateStr || new Date().toISOString().split('T')[0],
+      amount,
+      member,
+      category,
+      subcategory,
+      ledger,
+    });
+  });
+
+  return results;
+};
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   isOpen,
@@ -85,8 +101,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onBatchSave,
   themeStyle,
   onThemeStyleChange,
-  fxSettings,
-  onFxSettingChange,
 }) => {
   // 菜单 Tab 控制：'data' | 'log' | 'general'
   const [activeTab, setActiveTab] = useState<'data' | 'log' | 'general'>('data');
@@ -1036,48 +1050,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         )}
                       </div>
                       <p className="text-xs text-slate-500 leading-relaxed">
-                        绿白相间斑马条纹连打纸、两侧定位提纸圆孔与针式击打字体。
+                        暖黄米白斑马条纹连打纸、两侧定位提纸圆孔与针式击打字体。
                       </p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
                       状态: {themeStyle === 'tractor' ? '已应用' : '未选择'}
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* 趣味交互特效设置 (Fun FX) */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
-                  <Sparkles className="w-5 h-5 text-fuchsia-600" />
-                  <h3 className="text-sm font-bold text-slate-900">趣味交互特效 (Fun FX)</h3>
-                  <span className="ml-auto text-[11px] text-slate-400 font-mono">
-                    全局生效，所有访客延续
-                  </span>
-                </div>
-
-                <div className="space-y-3">
-                  <FxToggleRow
-                    icon={<Volume2 className="w-4 h-4" />}
-                    title="拟物音效"
-                    desc="收银机叮声、针式打印嗒嗒声、按键咔哒声（Howler.js，零素材文件）"
-                    checked={fxSettings.fxSound}
-                    onChange={(v) => onFxSettingChange('fxSound', v)}
-                  />
-                  <FxToggleRow
-                    icon={<Feather className="w-4 h-4" />}
-                    title="纸片飘落"
-                    desc="切换月份时账目纸片像小票一样物理飘落堆叠（Matter.js）"
-                    checked={fxSettings.fxPaperRain}
-                    onChange={(v) => onFxSettingChange('fxPaperRain', v)}
-                  />
-                  <FxToggleRow
-                    icon={<Coins className="w-4 h-4" />}
-                    title="硬币雨背景"
-                    desc="金黄色硬币持续从顶部飘落的低透明度背景粒子（PixiJS）"
-                    checked={fxSettings.fxCoinRain}
-                    onChange={(v) => onFxSettingChange('fxCoinRain', v)}
-                  />
                 </div>
               </div>
             </div>

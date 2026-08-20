@@ -7,12 +7,9 @@ import {
 interface Env extends SharedEnv {}
 
 const ALLOWED_THEME_STYLES = ['receipt', 'gameboy', 'wallet', 'tractor'] as const;
-const ALLOWED_KEYS = ['theme_style', 'fx_sound', 'fx_paper_rain', 'fx_coin_rain'] as const;
+const ALLOWED_KEYS = ['theme_style'] as const;
 const DEFAULT_SETTINGS: Record<string, string> = {
   theme_style: 'receipt',
-  fx_sound: 'on',
-  fx_paper_rain: 'on',
-  fx_coin_rain: 'on',
 };
 
 const jsonHeaders = (request: Request, env: Env, extra: Record<string, string> = {}): Record<string, string> => ({
@@ -37,10 +34,10 @@ const isValidValue = (key: string, value: string): boolean => {
   if (key === 'theme_style') {
     return (ALLOWED_THEME_STYLES as readonly string[]).includes(value);
   }
-  return value === 'on' || value === 'off';
+  return false;
 };
 
-// 公开读取全局设置（主题与特效开关不是敏感数据，无需鉴权）
+// 公开读取全局设置（主题设置无需敏感鉴权）
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const data: Record<string, string> = { ...DEFAULT_SETTINGS };
@@ -75,7 +72,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 };
 
-// 管理员写入全局设置（支持部分更新，body 如 { "fx_sound": "off" } 或 { "theme_style": "gameboy" }）
+// 管理员写入全局设置（支持 theme_style 设置）
 export const onRequestPut: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -116,9 +113,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       if (!isValidValue(key, value)) {
         return new Response(JSON.stringify({
           success: false,
-          message: key === 'theme_style'
-            ? `theme_style 必须是 ${ALLOWED_THEME_STYLES.join(', ')} 之一`
-            : `${key} 必须是 on 或 off`,
+          message: `theme_style 必须是 ${ALLOWED_THEME_STYLES.join(', ')} 之一`,
         }), {
           status: 400,
           headers: jsonHeaders(request, env),
