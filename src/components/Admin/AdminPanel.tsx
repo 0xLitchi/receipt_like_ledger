@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Transaction } from '../../types';
 import { storage, type ActivityLog, type ApiRequestLog, type ThemeStyle } from '../../utils/storage';
 import {
@@ -15,6 +15,7 @@ import {
   Sparkles,
   ArrowLeft,
   X,
+  Save,
   RefreshCw,
   CheckCircle2,
   XCircle,
@@ -29,6 +30,7 @@ import {
   Globe,
   Terminal,
   ShieldAlert,
+  Edit3,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -118,12 +120,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [sortField, setSortField] = useState<keyof Transaction | ''>('');
   const [sortAsc, setSortAsc] = useState(true);
 
-  // 高性能增量变动追踪集合
-  const dirtyRowIdsRef = useRef<Set<string>>(new Set());
-
   const [saving, setSaving] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // 保存预览二次确认弹窗
+  const [showSavePreviewModal, setShowSavePreviewModal] = useState(false);
 
   // 日志列表状态
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -141,7 +143,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [parseStep, setParseStep] = useState<'input' | 'preview'>('input');
   const [parsedPreviewList, setParsedPreviewList] = useState<Transaction[]>([]);
 
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 原始数据 Map 用于快速比对变动
+  const originalMap = useMemo(() => {
+    const map = new Map<string, Transaction>();
+    transactions.forEach((t) => {
+      map.set(t.id, t);
+    });
+    return map;
+  }, [transactions]);
 
   // 初始化加载数据
   useEffect(() => {
@@ -149,7 +158,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setRows(JSON.parse(JSON.stringify(transactions)));
       setDeletedIds([]);
       setSelectedIds(new Set());
-      dirtyRowIdsRef.current.clear();
       setStatusMsg(null);
     }
   }, [isOpen, transactions]);
@@ -166,7 +174,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         setRows(JSON.parse(JSON.stringify(res.data)));
         setDeletedIds([]);
         setSelectedIds(new Set());
-        dirtyRowIdsRef.current.clear();
       }
     } finally {
       setRefreshingData(false);
@@ -197,49 +204,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, [isOpen, activeTab, loadLogs, loadApiLogs]);
 
-  // 高性能增量自动保存防抖提交
-  const triggerAutoSave = useCallback(
-    (currentRows: Transaction[], currentDeleted: string[]) => {
-      setSaving(true);
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+  // 行变动类型判定: 'added' | 'modified' | 'unchanged'
+  const getRowChangeStatus = useCallback(
+    (row: Transaction): 'added' | 'modified' | 'unchanged' => {
+      const isNew = !row.id || row.id.startsWith('new_') || row.id.startsWith('parse_') || !originalMap.has(row.id);
+      if (isNew) return 'added';
 
-      autoSaveTimerRef.current = setTimeout(async () => {
-        const changedRows = currentRows.filter((r) => dirtyRowIdsRef.current.has(r.id));
-        if (changedRows.length === 0 && currentDeleted.length === 0) {
-          setSaving(false);
-          return;
-        }
+      const orig = originalMap.get(row.id);
+      if (!orig) return 'added';
 
-        try {
-          await onBatchSave(changedRows, currentDeleted);
+      const isModified =
+        (row.date || '') !== (orig.date || '') ||
+        (row.member || '') !== (orig.member || '') ||
+        (row.category || '') !== (orig.category || '') ||
+        (row.subcategory || '') !== (orig.subcategory || '') ||
+        (row.title || '') !== (orig.title || '') ||
+        Number(row.amount) !== Number(orig.amount);
 
-          dirtyRowIdsRef.current.clear();
-          setDeletedIds([]);
-
-          const now = new Date();
-          const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(
-            now.getMinutes()
-          ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-          setLastSavedTime(timeStr);
-
-          setStatusMsg({ type: 'success', text: `已自动保存 (${timeStr})` });
-          setTimeout(() => setStatusMsg(null), 2500);
-        } catch (err: any) {
-          setStatusMsg({ type: 'error', text: '自动保存失败: ' + (err.message || '网络或密码错误') });
-        } finally {
-          setSaving(false);
-        }
-      }, 600);
+      return isModified ? 'modified' : 'unchanged';
     },
-    [onBatchSave]
+    [originalMap]
   );
 
-  // 单元格修改并标记 dirty 触发自动保存
+  // 计算当前待保存的变动分类列表
+  const pendingChanges = useMemo(() => {
+    const addedList: Transaction[] = [];
+    const modifiedList: { current: Transaction; original: Transaction }[] = [];
+
+    rows.forEach((r) => {
+      const status = getRowChangeStatus(r);
+      if (status === 'added') {
+        addedList.push(r);
+      } else if (status === 'modified') {
+        const orig = originalMap.get(r.id)!;
+        modifiedList.push({ current: r, original: orig });
+      }
+    });
+
+    const deletedList: Transaction[] = deletedIds
+      .map((id) => originalMap.get(id))
+      .filter(Boolean) as Transaction[];
+
+    const totalCount = addedList.length + modifiedList.length + deletedList.length;
+
+    return {
+      added: addedList,
+      modified: modifiedList,
+      deleted: deletedList,
+      totalCount,
+    };
+  }, [rows, deletedIds, originalMap, getRowChangeStatus]);
+
+  // 单元格修改
   const handleCellChange = useCallback(
     (id: string, field: keyof Transaction, value: any) => {
-      dirtyRowIdsRef.current.add(id);
       setRows((prev) => {
-        const nextRows = prev.map((r) => {
+        return prev.map((r) => {
           if (r.id === id) {
             return {
               ...r,
@@ -248,14 +268,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           }
           return r;
         });
-        triggerAutoSave(nextRows, deletedIds);
-        return nextRows;
       });
     },
-    [deletedIds, triggerAutoSave]
+    []
   );
 
-  // 添加行并标记 dirty 自动保存
+  // 添加行
   const handleAddRow = () => {
     const newId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const newRow: Transaction = {
@@ -269,12 +287,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       ledger: 'Default',
     };
 
-    dirtyRowIdsRef.current.add(newId);
-
     setRows((prev) => {
-      const nextRows = [newRow, ...prev];
-      triggerAutoSave(nextRows, deletedIds);
-      return nextRows;
+      return [newRow, ...prev];
     });
   };
 
@@ -307,12 +321,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
-  // 批量删除选中行并自动保存
+  // 批量删除选中行
   const handleBulkDeleteSelected = () => {
     if (selectedIds.size === 0) return;
 
     const toDeleteDbIds = Array.from(selectedIds).filter(
-      (id) => id && !id.startsWith('new_') && !id.startsWith('parse_')
+      (id) => id && !id.startsWith('new_') && !id.startsWith('parse_') && originalMap.has(id)
     );
 
     const nextDeleted = Array.from(new Set([...deletedIds, ...toDeleteDbIds]));
@@ -321,7 +335,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setDeletedIds(nextDeleted);
     setRows(nextRows);
     setSelectedIds(new Set());
-    triggerAutoSave(nextRows, nextDeleted);
   };
 
   // 排序
@@ -418,18 +431,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setParseStep('preview');
   };
 
-  // 二次确认导入：保存提交
-  const handleConfirmImportParsedData = async () => {
+  // 二次确认导入：追加到当前编辑表格行中，标记为新增
+  const handleConfirmImportParsedData = () => {
     if (parsedPreviewList.length === 0) return;
 
-    setSaving(true);
-    setStatusMsg(null);
-
     const nextRows = [...parsedPreviewList, ...rows];
+    setRows(nextRows);
 
+    setRawText('');
+    setParsedPreviewList([]);
+    setParseStep('input');
+    setShowParseModal(false);
+
+    setStatusMsg({
+      type: 'success',
+      text: `已导入 ${parsedPreviewList.length} 条记录至编辑区，请点击“保存变动”提交保存！`,
+    });
+    setTimeout(() => setStatusMsg(null), 3500);
+  };
+
+  // 二次确认并正式保存提交所有变动
+  const handleConfirmSaveAllChanges = async () => {
+    if (pendingChanges.totalCount === 0) {
+      setShowSavePreviewModal(false);
+      return;
+    }
+
+    setSaving(true);
     try {
-      await onBatchSave(parsedPreviewList, deletedIds);
-      setRows(nextRows);
+      // 获取所有变更项（新增行 + 修改行）
+      const changedItems: Transaction[] = [
+        ...pendingChanges.added,
+        ...pendingChanges.modified.map((m) => m.current),
+      ];
+
+      await onBatchSave(changedItems, deletedIds);
+
+      setDeletedIds([]);
+      setShowSavePreviewModal(false);
 
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(
@@ -437,18 +476,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
       setLastSavedTime(timeStr);
 
-      setRawText('');
-      setParsedPreviewList([]);
-      setParseStep('input');
-      setShowParseModal(false);
-
-      setStatusMsg({
-        type: 'success',
-        text: `已成功保存导入 ${parsedPreviewList.length} 条账目数据！(${timeStr})`,
-      });
+      setStatusMsg({ type: 'success', text: `保存成功！共提交 ${pendingChanges.totalCount} 项变动 (${timeStr})` });
       setTimeout(() => setStatusMsg(null), 3500);
     } catch (err: any) {
-      setStatusMsg({ type: 'error', text: '保存失败: ' + (err.message || '网络错误') });
+      setStatusMsg({ type: 'error', text: '保存失败: ' + (err.message || '网络或凭证错误') });
     } finally {
       setSaving(false);
     }
@@ -575,19 +606,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {selectedIds.size > 0 && (
                     <span className="text-emerald-700 font-bold">已选 {selectedIds.size} 行</span>
                   )}
-                  <span className="ml-1 text-[11px] flex items-center gap-1 text-slate-500 font-mono">
-                    {saving ? (
-                      <>
-                        <RefreshCw className="w-3 h-3 animate-spin text-amber-600" />
-                        <span className="text-amber-700 font-bold">正在自动保存...</span>
-                      </>
+                  <span className="ml-1 text-[11px] flex items-center gap-1.5 font-mono">
+                    {pendingChanges.totalCount > 0 ? (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-300 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        未保存变动: {pendingChanges.totalCount} 项
+                        {pendingChanges.added.length > 0 && ` (+${pendingChanges.added.length})`}
+                        {pendingChanges.modified.length > 0 && ` (~${pendingChanges.modified.length})`}
+                        {pendingChanges.deleted.length > 0 && ` (-${pendingChanges.deleted.length})`}
+                      </span>
                     ) : (
-                      <>
+                      <span className="text-emerald-700 font-medium flex items-center gap-1">
                         <Check className="w-3 h-3 text-emerald-600" />
-                        <span className="text-emerald-700 font-medium">
-                          {lastSavedTime ? `已自动保存 (${lastSavedTime})` : '已自动保存'}
-                        </span>
-                      </>
+                        {lastSavedTime ? `所有变动已保存 (${lastSavedTime})` : '数据已就绪，无未保存变动'}
+                      </span>
                     )}
                   </span>
                 </div>
@@ -605,6 +637,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div className="flex items-center gap-2.5">
+                {/* 保存变动主按钮 */}
+                <button
+                  onClick={() => setShowSavePreviewModal(true)}
+                  disabled={pendingChanges.totalCount === 0 || saving}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all shadow-sm cursor-pointer ${
+                    pendingChanges.totalCount > 0
+                      ? 'bg-amber-600 hover:bg-amber-500 text-white ring-2 ring-amber-400/50 shadow-amber-600/20 animate-pulse'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                  }`}
+                  title={pendingChanges.totalCount > 0 ? '预览并保存变动' : '暂无数据变动'}
+                >
+                  <Save className="w-4 h-4" />
+                  <span>
+                    保存变动 {pendingChanges.totalCount > 0 ? `(${pendingChanges.totalCount})` : ''}
+                  </span>
+                </button>
+
                 <button
                   onClick={handleRefreshData}
                   disabled={refreshingData || saving}
@@ -773,14 +822,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <tbody className="divide-y divide-slate-200">
                     {processedRows.map((row, idx) => {
                       const isSelected = selectedIds.has(row.id);
+                      const changeStatus = getRowChangeStatus(row);
+
+                      let rowBgClass = 'hover:bg-slate-50';
+                      let statusTag = null;
+
+                      if (changeStatus === 'added') {
+                        rowBgClass = 'bg-emerald-50/70 hover:bg-emerald-100/70 border-l-4 border-l-emerald-500';
+                        statusTag = (
+                          <span className="px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-300">
+                            新增
+                          </span>
+                        );
+                      } else if (changeStatus === 'modified') {
+                        rowBgClass = 'bg-amber-50/70 hover:bg-amber-100/70 border-l-4 border-l-amber-500';
+                        statusTag = (
+                          <span className="px-1 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300">
+                            修改
+                          </span>
+                        );
+                      }
+
                       return (
                         <tr
                           key={row.id}
-                          className={`transition-colors ${
-                            isSelected
-                              ? 'bg-emerald-50 hover:bg-emerald-100/60'
-                              : 'hover:bg-slate-50'
-                          }`}
+                          className={`transition-colors ${isSelected ? 'bg-indigo-50 hover:bg-indigo-100/60' : rowBgClass}`}
                         >
                           <td className="py-1 px-3 border-r border-slate-200 text-center">
                             <input
@@ -791,7 +857,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             />
                           </td>
 
-                          <td className="py-1 px-2 border-r border-slate-200 text-center opacity-40 bg-slate-50/50">
+                          <td className="py-1 px-2 border-r border-slate-200 text-center text-slate-500 bg-slate-50/50">
+                            {statusTag && <div className="mb-0.5">{statusTag}</div>}
                             {idx + 1}
                           </td>
 
@@ -1278,6 +1345,211 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
       </div>
 
+      {/* 保存变动预览与二次确认弹窗 (Save Changes Diff Preview Modal) */}
+      {showSavePreviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-4xl p-6 shadow-2xl text-slate-800 relative max-h-[88vh] flex flex-col font-mono">
+            <button
+              onClick={() => setShowSavePreviewModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-3">
+              <h3 className="text-base font-bold flex items-center gap-2 text-slate-900">
+                <Save className="w-5 h-5 text-amber-600" />
+                保存变动预览与二次确认
+              </h3>
+              <span className="text-xs text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-300 font-bold">
+                共 {pendingChanges.totalCount} 项变动
+                {pendingChanges.added.length > 0 && ` (+${pendingChanges.added.length} 新增)`}
+                {pendingChanges.modified.length > 0 && ` (~${pendingChanges.modified.length} 修改)`}
+                {pendingChanges.deleted.length > 0 && ` (-${pendingChanges.deleted.length} 删除)`}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 mb-3">
+              请在提交前核对所有新增、修改和删除项。确认无误后点击“确认提交保存”，数据将同步至云端数据库：
+            </p>
+
+            <div className="flex-1 overflow-auto space-y-4 pr-1 mb-4">
+              {/* 1. 新增项列表 */}
+              {pendingChanges.added.length > 0 && (
+                <div className="border border-emerald-200 rounded-xl overflow-hidden bg-emerald-50/20">
+                  <div className="px-3 py-2 bg-emerald-100/80 border-b border-emerald-200 font-bold text-xs text-emerald-900 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Plus className="w-4 h-4 text-emerald-700" />
+                      新增记录 ({pendingChanges.added.length} 条)
+                    </span>
+                  </div>
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-emerald-50/50 text-emerald-800 text-[11px] border-b border-emerald-200 font-bold">
+                        <th className="py-2 px-3 border-r border-emerald-200">日期</th>
+                        <th className="py-2 px-3 border-r border-emerald-200">成员</th>
+                        <th className="py-2 px-3 border-r border-emerald-200">分类</th>
+                        <th className="py-2 px-3 border-r border-emerald-200">备注</th>
+                        <th className="py-2 px-3 text-right">金额</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-emerald-100 bg-white">
+                      {pendingChanges.added.map((item) => (
+                        <tr key={item.id} className="hover:bg-emerald-50/40">
+                          <td className="py-2 px-3 border-r border-emerald-100 text-slate-800">{item.date}</td>
+                          <td className="py-2 px-3 border-r border-emerald-100 font-bold text-slate-900">{item.member}</td>
+                          <td className="py-2 px-3 border-r border-emerald-100 text-slate-700">
+                            {item.category}{item.subcategory ? `/${item.subcategory}` : ''}
+                          </td>
+                          <td className="py-2 px-3 border-r border-emerald-100 text-slate-700">{item.title || '-'}</td>
+                          <td className={`py-2 px-3 text-right font-bold ${item.amount > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            ￥{item.amount.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 2. 修改项列表 */}
+              {pendingChanges.modified.length > 0 && (
+                <div className="border border-amber-200 rounded-xl overflow-hidden bg-amber-50/20">
+                  <div className="px-3 py-2 bg-amber-100/80 border-b border-amber-200 font-bold text-xs text-amber-900 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Edit3 className="w-4 h-4 text-amber-700" />
+                      修改记录 ({pendingChanges.modified.length} 条)
+                    </span>
+                  </div>
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-amber-50/50 text-amber-800 text-[11px] border-b border-amber-200 font-bold">
+                        <th className="py-2 px-3 border-r border-amber-200 w-24">日期</th>
+                        <th className="py-2 px-3 border-r border-amber-200 w-20">成员</th>
+                        <th className="py-2 px-3 border-r border-amber-200 w-32">分类</th>
+                        <th className="py-2 px-3 border-r border-amber-200">备注</th>
+                        <th className="py-2 px-3 text-right w-28">金额 (变更前 → 变更后)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100 bg-white">
+                      {pendingChanges.modified.map(({ current, original }) => (
+                        <tr key={current.id} className="hover:bg-amber-50/40">
+                          <td className="py-2 px-3 border-r border-amber-100 text-slate-800">
+                            {current.date !== original.date ? (
+                              <span className="text-amber-800 font-bold">{current.date}</span>
+                            ) : (
+                              current.date
+                            )}
+                          </td>
+                          <td className="py-2 px-3 border-r border-amber-100 text-slate-900">
+                            {current.member !== original.member ? (
+                              <span className="text-amber-800 font-bold">{current.member}</span>
+                            ) : (
+                              current.member
+                            )}
+                          </td>
+                          <td className="py-2 px-3 border-r border-amber-100 text-slate-700">
+                            {current.category}{current.subcategory ? `/${current.subcategory}` : ''}
+                          </td>
+                          <td className="py-2 px-3 border-r border-amber-100 text-slate-700">
+                            {current.title !== original.title ? (
+                              <span className="text-amber-800 font-bold">{current.title || '-'}</span>
+                            ) : (
+                              current.title || '-'
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-right font-bold text-slate-800">
+                            {current.amount !== original.amount ? (
+                              <span>
+                                <span className="line-through text-slate-400 text-[10px] mr-1">￥{original.amount.toFixed(2)}</span>
+                                <span className={current.amount > 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                                  ￥{current.amount.toFixed(2)}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className={current.amount > 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                                ￥{current.amount.toFixed(2)}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 3. 删除项列表 */}
+              {pendingChanges.deleted.length > 0 && (
+                <div className="border border-rose-200 rounded-xl overflow-hidden bg-rose-50/20">
+                  <div className="px-3 py-2 bg-rose-100/80 border-b border-rose-200 font-bold text-xs text-rose-900 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Trash2 className="w-4 h-4 text-rose-700" />
+                      待删除记录 ({pendingChanges.deleted.length} 条)
+                    </span>
+                  </div>
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-rose-50/50 text-rose-800 text-[11px] border-b border-rose-200 font-bold">
+                        <th className="py-2 px-3 border-r border-rose-200">日期</th>
+                        <th className="py-2 px-3 border-r border-rose-200">成员</th>
+                        <th className="py-2 px-3 border-r border-rose-200">分类</th>
+                        <th className="py-2 px-3 border-r border-rose-200">备注</th>
+                        <th className="py-2 px-3 text-right">金额</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-rose-100 bg-white">
+                      {pendingChanges.deleted.map((item) => (
+                        <tr key={item.id} className="hover:bg-rose-50/40 opacity-75">
+                          <td className="py-2 px-3 border-r border-rose-100 text-slate-800 line-through">{item.date}</td>
+                          <td className="py-2 px-3 border-r border-rose-100 font-bold text-slate-900 line-through">{item.member}</td>
+                          <td className="py-2 px-3 border-r border-rose-100 text-slate-700 line-through">
+                            {item.category}{item.subcategory ? `/${item.subcategory}` : ''}
+                          </td>
+                          <td className="py-2 px-3 border-r border-rose-100 text-slate-700 line-through">{item.title || '-'}</td>
+                          <td className="py-2 px-3 text-right font-bold text-rose-800 line-through">
+                            ￥{item.amount.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200 font-mono">
+              <button
+                type="button"
+                onClick={() => setShowSavePreviewModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono font-bold transition-colors cursor-pointer"
+              >
+                返回继续编辑
+              </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleConfirmSaveAllChanges}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold shadow-md cursor-pointer flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>正在保存中...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>确认提交保存 ({pendingChanges.totalCount})</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 解析文本导入弹窗 */}
       {showParseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -1390,12 +1662,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   <button
                     type="button"
-                    disabled={saving}
                     onClick={handleConfirmImportParsedData}
-                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold shadow-md cursor-pointer flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-mono font-bold shadow-md cursor-pointer flex items-center gap-1.5 transition-colors"
                   >
                     <Check className="w-4 h-4" />
-                    <span>{saving ? '正在提交...' : '确认保存导入'}</span>
+                    <span>确认追加到编辑表格</span>
                   </button>
                 </div>
               </>
