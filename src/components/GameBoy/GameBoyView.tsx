@@ -20,7 +20,6 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
   hasFullAccess = true,
   isAdmin = false,
 }) => {
-  // 分组日期倒序
   const dateGroups = React.useMemo(() => {
     const map = new Map<string, Transaction[]>();
     transactions.forEach((t) => {
@@ -40,10 +39,8 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
   const currentMode = isAdmin ? 'ADMIN' : hasFullAccess ? 'DECRYPTED' : 'MASKED';
 
   return (
-    <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto select-none">
-      {/* GameBoy 经典 DMG 掌上游戏机外壳 */}
+    <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto select-none font-mono">
       <div className="w-full bg-[#d0d0d7] border-4 border-[#b0b0b8] rounded-[36px] p-5 shadow-2xl relative overflow-hidden flex flex-col items-center">
-        {/* 顶部左侧斜切纹路装饰 */}
         <div className="w-full flex justify-between items-center mb-3 px-2">
           <div className="flex items-center gap-1.5 text-[11px] font-pixel font-bold text-slate-700 tracking-widest uppercase">
             <Gamepad2 className="w-4 h-4 text-rose-600" />
@@ -55,12 +52,9 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
           </div>
         </div>
 
-        {/* 屏幕外框 (Dot Matrix Bezel) */}
         <div className="w-full bg-[#525266] rounded-2xl p-4 border-2 border-slate-700 shadow-inner relative overflow-hidden">
-          {/* 经典 DOT MATRIX WITH STEREO SOUND 标语 */}
           <div className="flex justify-between items-center mb-2 px-1 text-[9px] font-pixel tracking-widest">
             <div className="flex items-center gap-1.5">
-              {/* 电量/模式指示灯 */}
               <div className="w-2 h-2 rounded-full bg-red-600 shadow-[0_0_8px_#ef4444] animate-pulse" />
               <span className="text-slate-300 font-bold">BATTERY</span>
             </div>
@@ -69,12 +63,9 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
             </div>
           </div>
 
-          {/* 🕹️ GameBoy LCD 高清清爽绿光屏幕 */}
           <div className="w-full bg-[#e2f4c7] text-[#082008] font-pixel p-3.5 rounded-lg border-4 border-[#2b582b] gameboy-lcd-shadow relative overflow-hidden min-h-[360px]">
-            {/* 屏幕 Scanline 微粒感 */}
             <div className="absolute inset-0 gameboy-scanline pointer-events-none z-10" />
 
-            {/* 屏幕顶端模式 Token Badge */}
             <div className="flex justify-between items-center border-b-2 border-[#2b582b] pb-1.5 mb-2.5 text-xs font-black tracking-widest">
               <span className="text-[#082008] font-bold">★ 8-BIT LEDGER ★</span>
               <span className="px-2 py-0.5 bg-[#c8e6a4] border border-[#2b582b] rounded text-[10px] font-bold text-[#082008]">
@@ -82,14 +73,21 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
               </span>
             </div>
 
-            {/* 账单内容（在高对比度清爽屏幕下无比清晰） */}
             <ReceiptHeader
               selectedMonth={selectedMonth}
               transactions={transactions}
               hasFullAccess={hasFullAccess}
             />
 
-            <div className="my-2 min-h-[140px]">
+            {/* 结构化表格组件 */}
+            <div className="my-3 border-2 border-[#2b582b] rounded-xl overflow-hidden bg-[#d8ecc0]/50">
+              <div className="grid grid-cols-4 divide-x divide-[#2b582b] border-b-2 border-[#2b582b] text-center text-xs font-black py-1.5 bg-[#c8e6a4] tracking-widest uppercase">
+                <div>备注</div>
+                <div>金额</div>
+                <div>成员</div>
+                <div>分类</div>
+              </div>
+
               {dateGroups.length === 0 ? (
                 <div className="py-12 text-center text-xs font-pixel flex flex-col items-center gap-2 text-[#2b582b]">
                   <PackageOpen className="w-7 h-7 text-[#2b582b]" />
@@ -97,9 +95,9 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
                 </div>
               ) : (
                 dateGroups.map((group) => (
-                  <div key={group.date} className="my-2">
-                    <div className="bg-[#c8e6a4] py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-[#2b582b] text-[#3f6f3f] text-left tracking-wider">
-                      <span>{group.shortDate}</span>
+                  <React.Fragment key={group.date}>
+                    <div className="bg-[#c8e6a4] px-2.5 py-1 font-pixel text-xs font-black border-y border-[#2b582b] text-[#082008] text-left tracking-wider">
+                      <span>📅 {group.shortDate}</span>
                     </div>
 
                     {group.items.map((t) => (
@@ -109,7 +107,7 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
                         hasFullAccess={hasFullAccess}
                       />
                     ))}
-                  </div>
+                  </React.Fragment>
                 ))
               )}
             </div>
@@ -121,16 +119,13 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
           </div>
         </div>
 
-        {/* GameBoy 底部物理按键区装饰 (十字键 + A/B 键) */}
         <div className="w-full flex justify-between items-center mt-5 px-3">
-          {/* 左侧：黑灰 3D 十字键 (D-Pad) */}
           <div className="relative w-16 h-16 flex items-center justify-center">
             <div className="absolute w-16 h-5 bg-[#3a3a42] rounded-sm border border-slate-700 shadow-md" />
             <div className="absolute w-5 h-16 bg-[#3a3a42] rounded-sm border border-slate-700 shadow-md" />
             <div className="absolute w-3 h-3 bg-slate-800 rounded-full" />
           </div>
 
-          {/* 右侧：经典暗红紫 A/B 按键 */}
           <div className="flex gap-3 transform -rotate-12">
             <div className="flex flex-col items-center">
               <div className="w-10 h-10 rounded-full bg-[#8c1d40] border-2 border-[#61122a] shadow-md flex items-center justify-center font-bold text-white text-xs font-mono">
@@ -145,7 +140,6 @@ export const GameBoyView: React.FC<GameBoyViewProps> = ({
           </div>
         </div>
 
-        {/* SELECT / START 按键 */}
         <div className="flex gap-4 mt-4">
           <div className="flex flex-col items-center">
             <div className="w-10 h-3 bg-[#71717a] rounded-full border border-slate-600 transform -rotate-25 shadow-inner" />

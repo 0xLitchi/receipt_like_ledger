@@ -56,10 +56,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
     }));
   }, [transactions]);
 
-  // 2. 根据当前模式决定打印机图标与指示灯颜色：
-  // 绿色 = 管理员模式 (isAdmin)
-  // 蓝色 = 解密模式 (hasFullAccess && !isAdmin)
-  // 红色 = 脱敏模式 (!hasFullAccess)
   const currentMode = isAdmin
     ? 'admin'
     : hasFullAccess
@@ -95,13 +91,12 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto">
-      {/* 顶部拟真热敏打印机机头（通过打印机图标与指示灯颜色提示当前模式） */}
+      {/* 顶部拟真热敏打印机机头 */}
       <div
         className={`w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-pixel relative no-print mb-[-6px] transition-transform ${
           isPrinting ? 'animate-machine-vibrate' : ''
         }`}
       >
-        {/* 左侧打印机图标（🔴红色=脱敏，🔵蓝色=解密，🟢绿色=管理员） */}
         <div className="flex items-center gap-1.5">
           <Printer className={`w-4 h-4 ${printerIconColorClass} transition-colors duration-300 animate-pulse`} />
           <span className={`text-[10px] font-mono font-bold tracking-wider opacity-75 ${printerIconColorClass}`}>
@@ -109,18 +104,15 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           </span>
         </div>
 
-        {/* 右侧模式指示灯 */}
         <div className="flex items-center">
           <div className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${indicatorLedClass}`} />
         </div>
 
-        {/* 出纸缝隙 */}
         <div className="absolute inset-x-3 bottom-0 h-1 bg-black rounded-full shadow-inner border-t border-slate-900" />
       </div>
 
       {/* 小票展示区域 */}
       <div className="w-full relative overflow-hidden pt-1 min-h-[300px]">
-        {/* 激光打字高亮光束 */}
         {isPrinting && (
           <div
             className={`absolute inset-x-0 h-2 bg-gradient-to-r from-transparent ${laserBeamClass} to-transparent pointer-events-none z-50 animate-laser-scan-slow`}
@@ -162,7 +154,15 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 isPrinting={isPrinting}
               />
 
-              <div className="my-2 min-h-[140px]">
+              {/* 明细清单框线表格 */}
+              <div className="my-3 border-2 border-current/40 rounded-xl overflow-hidden shadow-xs">
+                <div className="grid grid-cols-4 divide-x divide-current/30 border-b-2 border-current/40 text-center text-xs font-black py-1.5 bg-current/10 font-pixel tracking-widest uppercase">
+                  <div>备注</div>
+                  <div>金额</div>
+                  <div>成员</div>
+                  <div>分类</div>
+                </div>
+
                 {dateGroups.length === 0 ? (
                   <div className="py-12 text-center text-xs opacity-50 font-pixel flex flex-col items-center gap-2">
                     <PackageOpen className="w-7 h-7 opacity-40" />
@@ -170,9 +170,10 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                   </div>
                 ) : (
                   dateGroups.map((group) => (
-                    <div key={group.date} className="my-2">
-                      <div className="bg-black/5 py-0.5 px-2 my-1 font-pixel text-xs font-black border-y border-dashed border-current/20 text-left tracking-wider opacity-60">
-                        <span>{group.shortDate}</span>
+                    <React.Fragment key={group.date}>
+                      {/* 日期子抬头 */}
+                      <div className="bg-current/10 px-2.5 py-1 font-pixel text-xs font-black border-y border-current/30 text-left tracking-wider opacity-85">
+                        <span>📅 {group.shortDate}</span>
                       </div>
 
                       {group.items.map((t) => (
@@ -183,7 +184,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                           isPrinting={isPrinting}
                         />
                       ))}
-                    </div>
+                    </React.Fragment>
                   ))
                 )}
               </div>

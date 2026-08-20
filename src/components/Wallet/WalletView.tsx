@@ -20,7 +20,6 @@ export const WalletView: React.FC<WalletViewProps> = ({
   hasFullAccess = true,
   isAdmin = false,
 }) => {
-  // 按日期分组
   const dateGroups = React.useMemo(() => {
     const map = new Map<string, Transaction[]>();
     transactions.forEach((t) => {
@@ -41,71 +40,67 @@ export const WalletView: React.FC<WalletViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto select-none font-sans">
-      {/* iOS 极简 Apple Wallet 纯白卡片 */}
-      <div className="w-full bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[32px] p-6 shadow-[0_20px_50px_rgba(15,23,42,0.35)] relative overflow-hidden text-slate-800">
-        {/* 顶部 Apple Pass 卡片顶栏 */}
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-700 text-white rounded-2xl shadow-md">
-              <CreditCard className="w-5 h-5 text-emerald-400" />
+      <div className="w-full bg-slate-900/90 backdrop-blur-xl border border-slate-700/60 rounded-3xl p-5 shadow-2xl relative overflow-hidden flex flex-col text-slate-100">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl shadow-md">
+              <CreditCard className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="font-bold text-sm text-slate-900 tracking-tight">Apple Wallet Ledger</h2>
-              <p className="text-[11px] text-slate-400 font-mono">Receipt-Like Pass</p>
+              <h2 className="text-sm font-bold tracking-tight text-white">Apple Wallet Pass</h2>
+              <p className="text-[11px] text-slate-400 font-mono">Monthly Statement</p>
             </div>
           </div>
-
-          <span
-            className={`px-3 py-1 rounded-full text-[11px] font-mono font-bold tracking-wider ${
-              currentMode === 'ADMIN'
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : currentMode === 'DECRYPTED'
-                ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                : 'bg-rose-50 text-rose-700 border border-rose-200'
-            }`}
-          >
+          <span className="px-2.5 py-1 bg-slate-800 text-slate-300 text-[10px] font-mono font-bold rounded-full border border-slate-700">
             {currentMode}
           </span>
         </div>
 
-        {/* 账单 Header */}
-        <ReceiptHeader
-          selectedMonth={selectedMonth}
-          transactions={transactions}
-          hasFullAccess={hasFullAccess}
-        />
+        <div className="bg-white text-slate-900 rounded-2xl p-4 shadow-xl border border-slate-200">
+          <ReceiptHeader
+            selectedMonth={selectedMonth}
+            transactions={transactions}
+            hasFullAccess={hasFullAccess}
+          />
 
-        {/* 账单列表项 */}
-        <div className="my-3 min-h-[140px]">
-          {dateGroups.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400 flex flex-col items-center gap-2">
-              <PackageOpen className="w-7 h-7 text-slate-300" />
-              <span>暂无本月账单数据</span>
+          {/* 结构化表格组件 */}
+          <div className="my-3 border-2 border-slate-300 rounded-xl overflow-hidden shadow-xs">
+            <div className="grid grid-cols-4 divide-x divide-slate-300 border-b-2 border-slate-300 text-center text-xs font-black py-1.5 bg-slate-100 tracking-widest uppercase">
+              <div>备注</div>
+              <div>金额</div>
+              <div>成员</div>
+              <div>分类</div>
             </div>
-          ) : (
-            dateGroups.map((group) => (
-              <div key={group.date} className="my-3">
-                <div className="px-3 py-1 bg-slate-100/60 rounded-lg text-[11px] font-mono font-bold text-slate-400 my-1.5 text-left w-fit">
-                  {group.shortDate}
-                </div>
 
-                {group.items.map((t) => (
-                  <ReceiptItem
-                    key={t.id}
-                    transaction={t}
-                    hasFullAccess={hasFullAccess}
-                  />
-                ))}
+            {dateGroups.length === 0 ? (
+              <div className="py-12 text-center text-xs font-pixel flex flex-col items-center gap-2 text-slate-400">
+                <PackageOpen className="w-7 h-7 text-slate-300" />
+                <span>本月暂无记账明细</span>
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+              dateGroups.map((group) => (
+                <React.Fragment key={group.date}>
+                  <div className="bg-slate-100 px-2.5 py-1 font-mono text-xs font-black border-y border-slate-300 text-slate-800 text-left tracking-wider">
+                    <span>📅 {group.shortDate}</span>
+                  </div>
 
-        {/* 账单 Footer 汇总 */}
-        <ReceiptFooter
-          stats={stats}
-          hasFullAccess={hasFullAccess}
-        />
+                  {group.items.map((t) => (
+                    <ReceiptItem
+                      key={t.id}
+                      transaction={t}
+                      hasFullAccess={hasFullAccess}
+                    />
+                  ))}
+                </React.Fragment>
+              ))
+            )}
+          </div>
+
+          <ReceiptFooter
+            stats={stats}
+            hasFullAccess={hasFullAccess}
+          />
+        </div>
       </div>
     </div>
   );

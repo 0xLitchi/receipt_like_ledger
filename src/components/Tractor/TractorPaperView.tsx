@@ -43,9 +43,9 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto select-none font-mono">
-      {/* 90s 复古针式连续打印纸 (经典暖黄白斑马条纹纸 + 深灰定位边孔，绝不混色，高对比度清晰大字) */}
+      {/* 90s 复古针式连续打印纸 */}
       <div className="w-full bg-[#fbf9f4] border-2 border-slate-700/40 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden flex text-slate-900 rounded-sm">
-        {/* 左侧连打拉纸边框 (Left Tractor Feed Margin) */}
+        {/* 左侧连打拉纸边框 */}
         <div className="w-7 border-r-2 border-dashed border-slate-400/40 bg-[#eee9dc] flex flex-col justify-between py-4 items-center shrink-0">
           {holes.map((_, i) => (
             <div
@@ -55,7 +55,7 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
           ))}
         </div>
 
-        {/* 中间主打印区 (斑马线淡黄白相间纸面) */}
+        {/* 中间主打印区 */}
         <div className="flex-1 p-4 bg-[linear-gradient(to_bottom,#fbf9f4_50%,#f1ece0_50%)] bg-[length:100%_48px] overflow-hidden">
           {/* 顶栏 */}
           <div className="flex items-center justify-between border-b-2 border-slate-900/40 pb-2 mb-3">
@@ -74,7 +74,15 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
             hasFullAccess={hasFullAccess}
           />
 
-          <div className="my-3 min-h-[140px]">
+          {/* 结构化表格组件 */}
+          <div className="my-3 border-2 border-slate-800/60 rounded-xl overflow-hidden shadow-xs bg-[#f7f3e8]">
+            <div className="grid grid-cols-4 divide-x divide-slate-800/40 border-b-2 border-slate-800/60 text-center text-xs font-black py-1.5 bg-slate-800/15 tracking-widest uppercase">
+              <div>备注</div>
+              <div>金额</div>
+              <div>成员</div>
+              <div>分类</div>
+            </div>
+
             {dateGroups.length === 0 ? (
               <div className="py-12 text-center text-xs text-slate-600 flex flex-col items-center gap-2">
                 <PackageOpen className="w-7 h-7 text-slate-500" />
@@ -82,9 +90,9 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
               </div>
             ) : (
               dateGroups.map((group) => (
-                <div key={group.date} className="my-2">
-                  <div className="py-0.5 px-2 bg-slate-900/5 border-y border-slate-900/20 text-slate-500 font-bold text-xs my-1 text-left">
-                    === {group.shortDate} ===
+                <React.Fragment key={group.date}>
+                  <div className="bg-slate-800/15 px-2.5 py-1 font-mono text-xs font-black border-y border-slate-800/40 text-slate-950 text-left tracking-wider">
+                    <span>📅 {group.shortDate}</span>
                   </div>
 
                   {group.items.map((t) => (
@@ -94,7 +102,7 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
                       hasFullAccess={hasFullAccess}
                     />
                   ))}
-                </div>
+                </React.Fragment>
               ))
             )}
           </div>
@@ -105,7 +113,7 @@ export const TractorPaperView: React.FC<TractorPaperViewProps> = ({
           />
         </div>
 
-        {/* 右侧连打拉纸边框 (Right Tractor Feed Margin) */}
+        {/* 右侧连打拉纸边框 */}
         <div className="w-7 border-l-2 border-dashed border-slate-400/40 bg-[#eee9dc] flex flex-col justify-between py-4 items-center shrink-0">
           {holes.map((_, i) => (
             <div
