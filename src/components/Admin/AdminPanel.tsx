@@ -23,8 +23,6 @@ import {
   History,
   Settings,
   Receipt,
-  Gamepad2,
-  CreditCard,
   Printer,
   Zap,
   Globe,
@@ -1234,74 +1232,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                     <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
                       状态: {themeStyle === 'receipt' ? '已应用' : '未选择'}
-                    </div>
-                  </div>
-
-                  {/* 主题 2: GameBoy 绿屏 */}
-                  <div
-                    onClick={() => {
-                      onThemeStyleChange('gameboy');
-                    }}
-                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                      themeStyle === 'gameboy'
-                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
-                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
-                            <Gamepad2 className="w-5 h-5" />
-                          </div>
-                          <span className="font-bold text-sm text-slate-900">80s GameBoy 像素绿屏</span>
-                        </div>
-                        {themeStyle === 'gameboy' && (
-                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
-                            <Check className="w-3.5 h-3.5" />
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-500 leading-relaxed">
-                        复古 DMG-01 灰白掌机机身、8-Bit 像素点阵清爽淡绿屏幕与 A/B 按键。
-                      </p>
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
-                      状态: {themeStyle === 'gameboy' ? '已应用' : '未选择'}
-                    </div>
-                  </div>
-
-                  {/* 主题 3: iOS Apple Wallet 卡片 */}
-                  <div
-                    onClick={() => {
-                      onThemeStyleChange('wallet');
-                    }}
-                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                      themeStyle === 'wallet'
-                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
-                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
-                            <CreditCard className="w-5 h-5" />
-                          </div>
-                          <span className="font-bold text-sm text-slate-900">iOS Apple Wallet 卡片</span>
-                        </div>
-                        {themeStyle === 'wallet' && (
-                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
-                            <Check className="w-3.5 h-3.5" />
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-500 leading-relaxed">
-                        Apple Pass 纯白高斯模糊卡片、极致软圆角与现代化清爽数据展示。
-                      </p>
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
-                      状态: {themeStyle === 'wallet' ? '已应用' : '未选择'}
                     </div>
                   </div>
 

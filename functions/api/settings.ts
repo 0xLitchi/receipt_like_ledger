@@ -6,7 +6,7 @@ import {
 
 interface Env extends SharedEnv {}
 
-const ALLOWED_THEME_STYLES = ['receipt', 'gameboy', 'wallet', 'tractor'] as const;
+const ALLOWED_THEME_STYLES = ['receipt', 'tractor'] as const;
 const ALLOWED_KEYS = ['theme_style'] as const;
 const DEFAULT_SETTINGS: Record<string, string> = {
   theme_style: 'receipt',

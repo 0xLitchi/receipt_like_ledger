@@ -1,6 +1,6 @@
 # 小票记账本 (Receipt Like Ledger)
 
-个人/情侣自用的拟物化记账本：把月度账单渲染成热敏小票、80 年代 GameBoy、Apple Wallet 卡片或针式打印机连续纸。后端使用 Cloudflare Pages Functions + D1 数据库。
+个人/情侣自用的拟物化记账本：把月度账单渲染成热敏小票或针式打印机连续纸。后端使用 Cloudflare Pages Functions + D1 数据库。
 
 ## 技术栈
 
@@ -51,7 +51,7 @@ npx wrangler d1 execute receipt_ledger_db --remote --file=db/seed.sql
 
 ## 功能概览
 
-- 4 种拟物 UI 主题（小票 / GameBoy / Wallet / 连续纸），后台可切换
+- 2 种拟物 UI 主题（小票 / 连续纸），后台可切换
 - 月份拟物滑块切换，切换时触发打印/出纸动画
 - 按 `.` 键快速呼出后台；后台支持增删改查、原始文本批量导入、CSV 导出、审计日志
 - 未登录访问时金额/标题脱敏；管理员登录后显示明文

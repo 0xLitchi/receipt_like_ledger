@@ -18,14 +18,12 @@ interface CategorySummaryProps {
   transactions: Transaction[];
   hasFullAccess?: boolean;
   isPrinting?: boolean;
-  themeStyle?: 'receipt' | 'gameboy' | 'wallet' | 'tractor';
+  themeStyle?: 'receipt' | 'tractor';
 }
 
 // 主题专属图表调色板
 const THEME_PALETTES = {
   receipt: ['#0f172a', '#334155', '#475569', '#64748b', '#94a3b8', '#cbd5e1'],
-  gameboy: ['#1b381b', '#2b582b', '#3d6c3d', '#4c7c4c', '#609060', '#7aa07a'],
-  wallet: ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'],
   tractor: ['#0f766e', '#0369a1', '#1d4ed8', '#4338ca', '#6b21a8', '#991b1b'],
 };
 

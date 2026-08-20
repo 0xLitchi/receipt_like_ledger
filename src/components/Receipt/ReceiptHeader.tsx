@@ -8,7 +8,7 @@ interface ReceiptHeaderProps {
   transactions: Transaction[];
   hasFullAccess?: boolean;
   isPrinting?: boolean;
-  themeStyle?: 'receipt' | 'gameboy' | 'wallet' | 'tractor';
+  themeStyle?: 'receipt' | 'tractor';
 }
 
 export const ReceiptHeader: React.FC<ReceiptHeaderProps> = ({

@@ -2,8 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Transaction, SummaryStats } from './types';
 import { storage, type ThemeStyle } from './utils/storage';
 import { ReceiptView } from './components/Receipt/ReceiptView';
-import { GameBoyView } from './components/GameBoy/GameBoyView';
-import { WalletView } from './components/Wallet/WalletView';
 import { TractorPaperView } from './components/Tractor/TractorPaperView';
 import { FilterBar } from './components/FilterBar';
 import { AdminAuthModal } from './components/Admin/AdminAuthModal';
@@ -14,7 +12,7 @@ export function App() {
   const [hasFullAccess, setHasFullAccess] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
 
-  // UI 界面风格状态 ('receipt' | 'gameboy' | 'wallet' | 'tractor')
+  // UI 界面风格状态 ('receipt' | 'tractor')
   const [themeStyle, setThemeStyle] = useState<ThemeStyle>(() => storage.getThemeStyle());
 
   // 强制白天模式
@@ -167,28 +165,12 @@ export function App() {
         recentMonths={recentMonths}
       />
 
-      {/* 动态 4 大 UI 主题展示区 */}
+      {/* 动态 UI 主题展示区 */}
       <main className="w-full max-w-md mx-auto">
         {loading ? (
           <div className="py-20 text-center font-mono text-slate-500 text-xs">
             加载中...
           </div>
-        ) : themeStyle === 'gameboy' ? (
-          <GameBoyView
-            transactions={filteredTransactions}
-            stats={stats}
-            selectedMonth={selectedMonth || (recentMonths[0] || '')}
-            hasFullAccess={hasFullAccess}
-            isAdmin={isAdmin}
-          />
-        ) : themeStyle === 'wallet' ? (
-          <WalletView
-            transactions={filteredTransactions}
-            stats={stats}
-            selectedMonth={selectedMonth || (recentMonths[0] || '')}
-            hasFullAccess={hasFullAccess}
-            isAdmin={isAdmin}
-          />
         ) : themeStyle === 'tractor' ? (
           <TractorPaperView
             transactions={filteredTransactions}
