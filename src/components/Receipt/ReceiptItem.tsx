@@ -24,7 +24,7 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
   const titleText = hasFullAccess ? rawTitle : '***';
 
   return (
-    <div className="grid grid-cols-4 divide-x divide-current/30 border-b border-current/30 text-xs font-pixel select-none hover:bg-current/5 transition-colors leading-snug items-center py-1.5 bg-current/[0.01]">
+    <div className="grid grid-cols-4 divide-x divide-current/30 border-b border-current/30 text-xs font-pixel select-none hover:bg-current/15 hover:shadow-xs transition-all duration-150 leading-snug items-center py-1.5 bg-current/[0.01]">
       {/* 1. 备注 */}
       <div className="font-bold text-[12px] opacity-95 truncate px-2 text-left min-w-0 min-h-[18px]" title={titleText}>
         {titleText || '\u00A0'}
