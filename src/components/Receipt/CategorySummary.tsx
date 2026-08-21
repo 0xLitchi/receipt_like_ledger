@@ -159,21 +159,13 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
       {viewType === 'list' ? (
         // ==================== 1. 列表视图 (按分类名称排序 + 进场平滑过渡条) ====================
         <div className="space-y-2 pt-0.5">
-          {categories.map((item, index) => {
-            const color = palette[index % palette.length];
-            return (
+          {categories.map((item) => (
+            
               <div key={item.name} className="space-y-1 group">
                 <div className="flex justify-between items-center font-pixel text-xs">
                   {/* 分类名称与调色圆点 */}
-                  <div className="flex items-center gap-1.5 min-w-0 pr-2">
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0 border border-black/20 opacity-80"
-                      style={{ backgroundColor: color }}
-                    />
+                  <div className="flex items-center min-w-0 pr-2">
                     <span className="font-bold truncate">{item.name}</span>
-                    <span className="text-[10px] font-mono opacity-60 shrink-0">
-                      ({item.ratioText})
-                    </span>
                   </div>
 
                   {/* 汇总金额 */}
@@ -199,8 +191,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                   />
                 </div>
               </div>
-            );
-          })}
+          ))}
         </div>
       ) : viewType === 'pie' ? (
         // ==================== 2. 交互式环形饼图 (Recharts PieChart) ====================
