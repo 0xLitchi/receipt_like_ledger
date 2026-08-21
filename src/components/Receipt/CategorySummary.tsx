@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   PieChart,
   Pie,
@@ -40,8 +40,19 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
   const [viewType, setViewType] = useState<'pie' | 'bar' | 'list'>('list');
   // 激活的扇区索引
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  // 进场/切换月份进度条过渡动画
+  const [isAnimated, setIsAnimated] = useState(false);
 
-  // 按分类汇总金额，并按金额数值从小到大排序 (不考虑绝对值，如 -1200.00 -> -350.00 -> 100.00)
+  // 监听 transactions 与视图切换，触发进度条从 0 到目标的平滑过渡
+  useEffect(() => {
+    setIsAnimated(false);
+    const timer = setTimeout(() => {
+      setIsAnimated(true);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [transactions, viewType]);
+
+  // 按分类汇总金额，并按分类名称拼音/字符升序排序
   const categories = useMemo(() => {
     const categoryMap = new Map<string, number>();
     let totalAbsSum = 0;
@@ -77,7 +88,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
           ratioText,
         };
       })
-      .sort((a, b) => a.netTotal - b.netTotal); // 不考虑绝对值，按金额从最小到最大升序排序
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')); // 按分类名称排序
 
     return catList;
   }, [transactions, hasFullAccess]);
@@ -146,36 +157,50 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
 
       {/* 核心展示区域 */}
       {viewType === 'list' ? (
-        // ==================== 1. 列表视图 (按金额从小到大排序，不考虑绝对值) ====================
+        // ==================== 1. 列表视图 (按分类名称排序 + 进场平滑过渡条) ====================
         <div className="space-y-2 pt-0.5">
-          {categories.map((item) => (
-            <div key={item.name} className="space-y-0.5">
-              <div className="flex justify-between items-center font-pixel text-xs">
-                {/* 分类名称 */}
-                <span className="font-bold">{item.name}</span>
+          {categories.map((item, index) => {
+            const color = palette[index % palette.length];
+            return (
+              <div key={item.name} className="space-y-1 group">
+                <div className="flex justify-between items-center font-pixel text-xs">
+                  {/* 分类名称与调色圆点 */}
+                  <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0 border border-black/20 opacity-80"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="font-bold truncate">{item.name}</span>
+                    <span className="text-[10px] font-mono opacity-60 shrink-0">
+                      ({item.ratioText})
+                    </span>
+                  </div>
 
-                {/* 汇总金额 */}
-                <span className="font-black tracking-tight">
-                  <AnimatedNumber
-                    value={item.netTotal}
-                    hasFullAccess={hasFullAccess}
-                    isPrinting={isPrinting}
-                    className={item.netTotal >= 0 ? 'text-emerald-700' : 'text-rose-700'}
+                  {/* 汇总金额 */}
+                  <span className="font-black tracking-tight shrink-0 font-mono">
+                    <AnimatedNumber
+                      value={item.netTotal}
+                      hasFullAccess={hasFullAccess}
+                      isPrinting={isPrinting}
+                      className={item.netTotal >= 0 ? 'text-emerald-700' : 'text-rose-700'}
+                    />
+                  </span>
+                </div>
+
+                {/* 占比进度条 (平滑从无到有过渡) */}
+                <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ease-out min-w-0 ${
+                      item.netTotal >= 0 ? 'bg-emerald-600/80' : 'bg-rose-600/80'
+                    }`}
+                    style={{
+                      width: isAnimated ? `${item.barWidth}%` : '0%',
+                    }}
                   />
-                </span>
+                </div>
               </div>
-
-              {/* 占比进度条 */}
-              <div className="w-full h-1.5 bg-current/15 rounded-full overflow-hidden flex">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 min-w-[3px] ${
-                    item.netTotal >= 0 ? 'bg-emerald-600/80' : 'bg-rose-600/80'
-                  }`}
-                  style={{ width: `${item.barWidth}%` }}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : viewType === 'pie' ? (
         // ==================== 2. 交互式环形饼图 (Recharts PieChart) ====================
