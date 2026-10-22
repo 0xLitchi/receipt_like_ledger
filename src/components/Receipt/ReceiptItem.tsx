@@ -73,7 +73,7 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
           hasFullAccess={hasFullAccess}
           isPrinting={isPrinting}
           showSymbol={false}
-          className={amountColor(transaction.amount)}
+          className={amountColor(transaction.amount, hasFullAccess)}
         />
       </div>
     </div>

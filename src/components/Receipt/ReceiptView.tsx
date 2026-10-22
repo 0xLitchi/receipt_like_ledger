@@ -6,8 +6,8 @@ import { CategorySummary } from './CategorySummary';
 import { ReceiptItem } from './ReceiptItem';
 import { ReceiptFooter } from './ReceiptFooter';
 import { TransactionDetailSheet } from './TransactionDetailSheet';
-import { ACCESS_MODE_LABEL, resolveAccessMode } from '../../features/ledger/access-mode';
-import { PackageOpen, Printer, SlidersHorizontal } from 'lucide-react';
+import { resolveAccessMode } from '../../features/ledger/access-mode';
+import { PackageOpen, Printer } from 'lucide-react';
 
 interface ReceiptViewProps {
   /** 已按日期分组的交易（由 use-ledger 统一计算） */
@@ -18,11 +18,9 @@ interface ReceiptViewProps {
   selectedMonth: string;
   hasFullAccess?: boolean;
   isAdmin?: boolean;
-  /** 是否有筛选条件生效（用于空态文案） */
-  isFiltered?: boolean;
+  /** 当前选中的分类，用于汇总面板高亮 */
   activeCategory?: string;
   onSelectCategory?: (category: string) => void;
-  onResetFilters?: () => void;
 }
 
 export const ReceiptView: React.FC<ReceiptViewProps> = ({
@@ -32,10 +30,8 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   selectedMonth,
   hasFullAccess = true,
   isAdmin = false,
-  isFiltered = false,
   activeCategory = 'ALL',
   onSelectCategory,
-  onResetFilters,
 }) => {
   const [isPrinting, setIsPrinting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -55,7 +51,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   }, [selectedMonth]);
 
   const currentMode = resolveAccessMode(isAdmin, hasFullAccess);
-  const modeLabel = ACCESS_MODE_LABEL[currentMode];
 
   const printerIconColorClass =
     currentMode === 'admin'
@@ -92,16 +87,9 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           isPrinting ? 'animate-machine-vibrate' : ''
         }`}
       >
-        <div className="flex items-center gap-1.5">
-          <Printer className={`w-4 h-4 ${printerIconColorClass} transition-colors duration-300 animate-pulse`} />
-          <span className={`text-[10px] font-mono font-bold tracking-wider opacity-75 ${printerIconColorClass}`}>
-            {modeLabel}
-          </span>
-        </div>
+        <Printer className={`w-4 h-4 mx-auto ${printerIconColorClass} transition-colors duration-300 animate-pulse`} />
 
-        <div className="flex items-center">
-          <div className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${indicatorLedClass}`} />
-        </div>
+        <div className={`absolute right-3 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full transition-all duration-300 ${indicatorLedClass}`} />
 
         <div className="absolute inset-x-3 bottom-0 h-1 bg-black rounded-full shadow-inner border-t border-slate-900" />
       </div>
@@ -142,7 +130,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
             <div className={isPrinting ? 'animate-ink-develop' : ''}>
-              <ReceiptHeader selectedMonth={selectedMonth} hasFullAccess={hasFullAccess} />
+              <ReceiptHeader />
 
               <CategorySummary
                 transactions={transactions}
@@ -164,17 +152,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 {dateGroups.length === 0 ? (
                   <div className="py-12 text-center text-xs opacity-50 font-pixel flex flex-col items-center gap-2">
                     <PackageOpen className="w-7 h-7 opacity-40" />
-                    <span>{isFiltered ? '当前筛选条件下没有记录' : '本月暂无记账明细'}</span>
-                    {isFiltered && onResetFilters && (
-                      <button
-                        type="button"
-                        onClick={onResetFilters}
-                        className="mt-1 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-current/30 text-[11px] hover:bg-current/10 transition-colors cursor-pointer no-print"
-                      >
-                        <SlidersHorizontal className="w-3 h-3" />
-                        清除筛选
-                      </button>
-                    )}
+                    <span>本月暂无记账明细</span>
                   </div>
                 ) : (
                   dateGroups.map((group) => (

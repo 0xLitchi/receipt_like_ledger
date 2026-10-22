@@ -1,9 +1,8 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { queryClient } from './lib/query-client';
 import { LedgerPage } from './routes/LedgerPage';
-
 
 // 后台体量大且仅管理员使用，单独拆包
 const AdminPage = lazy(() =>
@@ -11,16 +10,11 @@ const AdminPage = lazy(() =>
 );
 
 export function App() {
-  const [commandOpen, setCommandOpen] = useState(false);
-
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route
-            path="/"
-            element={<LedgerPage commandOpen={commandOpen} setCommandOpen={setCommandOpen} />}
-          />
+          <Route path="/" element={<LedgerPage />} />
           <Route
             path="/admin"
             element={

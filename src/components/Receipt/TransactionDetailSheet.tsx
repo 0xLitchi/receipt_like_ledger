@@ -72,7 +72,7 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
                     value={transaction.amount}
                     hasFullAccess={hasFullAccess}
                     isPrinting={isPrinting}
-                    className={`font-pixel text-sm ${amountColor(transaction.amount)}`}
+                    className={`font-pixel text-sm ${amountColor(transaction.amount, hasFullAccess)}`}
                   />
                 }
               />

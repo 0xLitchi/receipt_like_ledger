@@ -6,7 +6,7 @@
 
 - 前端：React 19 + TypeScript + Vite 8 + Tailwind CSS 4
 - 路由与数据：react-router（`/` 账本页、`/admin` 后台）、@tanstack/react-query（缓存 / 失效 / 重试）
-- 交互：cmdk（⌘K 命令面板）、framer-motion、lucide-react、recharts
+- 交互：framer-motion、lucide-react、recharts
 - 后端：Cloudflare Pages Functions（`functions/api/`）+ D1（`wrangler.toml`）
 - 质量：oxlint、vitest、双份 tsconfig 类型检查（`src` 与 `functions`）
 
@@ -17,9 +17,8 @@ src/
   app/            入口（App.tsx 装配 Provider + 路由）
   routes/         LedgerPage（账本）/ AdminPage（后台，按需加载）
   features/ledger/ 派生数据（筛选、统计、按日分组）与 URL 筛选状态
-  components/     Receipt 小票视图、筛选条、命令面板、骨架屏、Admin 后台
+  components/     Receipt 小票视图、月份滑块、骨架屏、Admin 后台
   lib/            api-client（统一 fetch/鉴权）、queries（React Query hooks）
-  hooks/          键盘快捷键
   utils/          formatters、parser（含单测）
 ```
 
@@ -68,10 +67,10 @@ npx wrangler d1 execute receipt_ledger_db --remote --file=db/seed.sql
 
 - 拟真热敏小票主题（单一主题，针式纸 / 存折 / VFD / 登机牌已下线）
 - 月份拟物滑块切换，切换时触发打印/出纸动画
-- 筛选条件写入 URL（`?month=&member=&category=&type=&q=`），可刷新 / 可分享 / 可后退
-- 明细行点击展开详情；点击分类汇总联动过滤明细
-- ⌘K / Ctrl+K 命令面板：跳月份、搜备注、进后台、清筛选
-- 按 `.` 键快速呼出后台；后台支持增删改查、原始文本批量导入、CSV 导出、审计日志
+- 页面保持极简：仅保留月份滑块与小票本体，无导航、无筛选条、无描述性文字
+- 月份写入 URL（`?month=`），可刷新 / 可分享 / 可后退
+- 明细行点击展开详情；点击分类汇总联动过滤明细（再点一次取消）
+- 按 `.` 键呼出后台；后台支持增删改查、原始文本批量导入、CSV 导出、审计日志
 - 未登录访问时金额/标题脱敏；管理员登录后显示明文
 - 外部调用方可通过 `Authorization: Bearer ACCESS_TOKEN` 追加账目（来源记为 `api`）
 

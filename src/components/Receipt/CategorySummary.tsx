@@ -152,7 +152,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                       value={item.netTotal}
                       hasFullAccess={hasFullAccess}
                       isPrinting={isPrinting}
-                      className={amountColor(item.netTotal)}
+                      className={amountColor(item.netTotal, hasFullAccess)}
                     />
                   </span>
                 </div>
@@ -240,7 +240,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="font-mono text-[11px] opacity-75">{item.ratioText}</span>
-                    <span className={`font-bold font-mono ${amountColor(item.netTotal)}`}>
+                    <span className={`font-bold font-mono ${amountColor(item.netTotal, hasFullAccess)}`}>
                       ￥{item.netTotal.toFixed(2)}
                     </span>
                   </div>
