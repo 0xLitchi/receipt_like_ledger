@@ -16,8 +16,8 @@ interface TransactionDetailSheetProps {
 
 const Field: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div className="flex items-baseline justify-between gap-3 py-1.5 border-b border-current/15 last:border-0">
-    <span className="text-[11px] opacity-60 shrink-0 tracking-wide">{label}</span>
-    <span className="text-xs font-bold text-right break-all">{value || '—'}</span>
+    <span className="text-[0.747em] opacity-60 shrink-0 tracking-wide">{label}</span>
+    <span className="text-[0.815em] font-bold text-right break-all">{value || '—'}</span>
   </div>
 );
 
@@ -55,7 +55,7 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
               ) : (
                 <ArrowUpRight className="w-3.5 h-3.5 text-rose-700 shrink-0" />
               )}
-              <span className="text-xs font-black truncate">
+              <span className="text-[0.815em] font-black truncate">
                 {hasFullAccess ? getTransactionName(transaction) : '***'}
               </span>
             </div>
@@ -72,7 +72,7 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
                     value={transaction.amount}
                     hasFullAccess={hasFullAccess}
                     isPrinting={isPrinting}
-                    className={`font-pixel text-sm ${amountColor(transaction.amount, hasFullAccess)}`}
+                    className={`font-pixel text-[0.951em] ${amountColor(transaction.amount, hasFullAccess)}`}
                   />
                 }
               />
@@ -81,7 +81,7 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
               )}
             </div>
 
-            <div className="mt-2 pt-1.5 border-t border-dashed border-current/30 text-[10px] opacity-50 tracking-wide truncate">
+            <div className="mt-2 pt-1.5 border-t border-dashed border-current/30 text-[0.679em] opacity-50 tracking-wide truncate">
               ID · {transaction.id}
             </div>
           </div>

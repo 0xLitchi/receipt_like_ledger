@@ -36,6 +36,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   const [isPrinting, setIsPrinting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const prevMonthRef = useRef(selectedMonth);
+  const expandedRef = useRef<HTMLDivElement | null>(null);
 
   // 当切换月份时触发 1.65s 的激光打字与出纸效果
   useEffect(() => {
@@ -49,6 +50,29 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
       return () => clearTimeout(timer);
     }
   }, [selectedMonth]);
+
+  /**
+   * 点击展开区域以外的地方收起明细。
+   * 用 pointerdown 而非 click：行自身的 onClick 在 click 阶段会先切换状态，
+   * 若在 click 里判断，会把「刚被点上那一行」误判为仍在展开区内。
+   * 点在别的行上时，这里先收起，再由该行 onClick 重新展开，最终效果就是切换。
+   */
+  useEffect(() => {
+    if (!expandedId) return;
+    const handlePress = (e: Event) => {
+      const target = e.target as Node | null;
+      if (target && expandedRef.current?.contains(target)) return;
+      setExpandedId(null);
+    };
+    document.addEventListener('pointerdown', handlePress, true);
+    document.addEventListener('mousedown', handlePress, true);
+    document.addEventListener('touchstart', handlePress, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('pointerdown', handlePress, true);
+      document.removeEventListener('mousedown', handlePress, true);
+      document.removeEventListener('touchstart', handlePress, true);
+    };
+  }, [expandedId]);
 
   const currentMode = resolveAccessMode(isAdmin, hasFullAccess);
 
@@ -148,7 +172,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
               {/* 明细清单框线表格 */}
               <div className="my-3 border-2 border-current/40 rounded-xl overflow-hidden shadow-xs">
-                <div className={`grid grid-cols-[1.9fr_0.9fr_1.25fr_1.15fr] divide-x divide-current/30 border-b-2 border-current/40 text-center text-xs font-black py-1.5 bg-current/10 font-pixel tracking-wide transition-all duration-300 ${
+                <div className={`grid grid-cols-[1.9fr_0.9fr_1.25fr_1.15fr] divide-x divide-current/30 border-b-2 border-current/40 text-center text-[0.815em] font-black py-1.5 bg-current/10 font-pixel tracking-wide transition-all duration-300 ${
                   expandedId ? 'opacity-45 blur-[2px]' : 'opacity-100 blur-none'
                 }`}>
                   <div>备注</div>
@@ -158,7 +182,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 </div>
 
                 {dateGroups.length === 0 ? (
-                  <div className="py-12 text-center text-xs opacity-50 font-pixel flex flex-col items-center gap-2">
+                  <div className="py-12 text-center text-[0.815em] opacity-50 font-pixel flex flex-col items-center gap-2">
                     <PackageOpen className="w-7 h-7 opacity-40" />
                     <span>本月暂无记账明细</span>
                   </div>
@@ -166,7 +190,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                   dateGroups.map((group) => (
                     <React.Fragment key={group.date}>
                       {/* 日期子抬头 */}
-                      <div className={`bg-current/20 px-2.5 py-1 font-pixel text-xs font-black border-y border-current/30 text-center tracking-normal shadow-inner transition-all duration-300 ${
+                      <div className={`bg-current/20 px-2.5 py-1 font-pixel text-[0.815em] font-black border-y border-current/30 text-center tracking-normal shadow-inner transition-all duration-300 ${
                         expandedId ? 'opacity-40 blur-[2px]' : 'opacity-90 blur-none'
                       }`}>
                         <span>{group.shortDate}</span>
@@ -175,6 +199,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                       {group.items.map((t) => (
                         <div
                           key={t.id}
+                          ref={expandedId === t.id ? expandedRef : undefined}
                           className={`relative transition-all duration-300 ${
                             expandedId === t.id
                               ? 'z-50 opacity-100 blur-none shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]'

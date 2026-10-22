@@ -56,6 +56,8 @@
 :root {
   /* 西文/数字用 JetBrains Mono，中文回落到 Noto Sans SC，两者字重对齐 */
   --font-mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* 小票内部字号全局比例：调整整体字号只改这里 */
+  --receipt-font-scale: 0.92;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
@@ -75,6 +77,7 @@ body {
 
 /* 小票纸张：米色纸面 + 墨色文字（独立于全局配色，避免被暗色主题吞掉） */
 .receipt-paper-box {
+  font-size: calc(1rem * var(--receipt-font-scale));
   background-color: #faf7f0;
   background-image: 
     repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.012) 3px, transparent 4px),

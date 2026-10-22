@@ -85,7 +85,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-slate-900/90 text-white px-3 py-2 rounded-lg text-xs font-mono shadow-xl border border-slate-700 backdrop-blur-sm z-50">
+        <div className="bg-slate-900/90 text-white px-3 py-2 rounded-lg text-[0.815em] font-mono shadow-xl border border-slate-700 backdrop-blur-sm z-50">
           <div className="font-bold">{data.name}</div>
           <div className="flex items-center justify-between gap-3 mt-1 font-mono">
             <span className={`font-bold ${data.netTotal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -100,7 +100,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
   };
 
   return (
-    <div className="my-3 p-3 border-2 border-current rounded-xl text-left font-pixel text-xs space-y-2 bg-current/5 shadow-xs select-none">
+    <div className="my-3 p-3 border-2 border-current rounded-xl text-left font-pixel text-[0.815em] space-y-2 bg-current/5 shadow-xs select-none">
       {/* 顶部控制栏 */}
       <div className="flex items-center justify-center gap-3 border-b border-current/25 pb-2 font-pixel">
         <div className="flex items-center gap-1 bg-current/10 p-0.5 rounded-lg border border-current/20">
@@ -141,7 +141,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                 }`}
                 title={isActive ? '取消分类筛选' : `只看 ${item.name}`}
               >
-                <div className="flex justify-between items-center font-pixel text-xs">
+                <div className="flex justify-between items-center font-pixel text-[0.815em]">
                   <div className="flex items-center min-w-0 pr-2">
                     <span className={`truncate ${isActive ? 'font-black underline decoration-dotted underline-offset-2' : 'font-bold'}`}>
                       {item.name}
@@ -214,7 +214,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
             </ResponsiveContainer>
           </div>
 
-          <div className="flex-1 w-full space-y-1.5 overflow-y-auto max-h-36 pr-1 font-pixel text-xs">
+          <div className="flex-1 w-full space-y-1.5 overflow-y-auto max-h-36 pr-1 font-pixel text-[0.815em]">
             {categories.map((item, index) => {
               const color = RECEIPT_PALETTE[index % RECEIPT_PALETTE.length];
               const isHovered = activeIndex === index;
@@ -239,7 +239,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                     <span className="truncate">{item.name}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-mono text-[11px] opacity-75">{item.ratioText}</span>
+                    <span className="font-mono text-[0.747em] opacity-75">{item.ratioText}</span>
                     <span className={`font-bold font-mono ${amountColor(item.netTotal, hasFullAccess)}`}>
                       ￥{item.netTotal.toFixed(2)}
                     </span>
