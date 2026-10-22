@@ -31,9 +31,14 @@ export const tokenStore = {
       /* noop */
     }
   },
-  /** 是否有可用的管理员会话（决定是否展示后台入口） */
-  has(): boolean {
+  /** 是否已通过密码换到会话令牌（可以进入后台） */
+  hasSession(): boolean {
     return !!tokenStore.get();
+  },
+
+  /** 是否能读到明文：会话令牌，或 URL 上的访问令牌 */
+  has(): boolean {
+    return tokenStore.hasSession() || !!readUrlCredential('admin_token') || !!urlAccessToken();
   },
 };
 
@@ -54,6 +59,24 @@ interface ApiEnvelope<T> {
   hasFullAccess?: boolean;
 }
 
+/**
+ * 页面 URL 上的令牌参数。
+ * 支持老式 `?token=` / `?access_token=` 直接访问（服务端把它当作 ACCESS_TOKEN 校验），
+ * 也兼容 `?admin_token=` 形式的会话令牌。
+ */
+function readUrlCredential(name: 'token' | 'access_token' | 'admin_token'): string {
+  try {
+    return new URLSearchParams(window.location.search).get(name)?.trim() || '';
+  } catch {
+    return '';
+  }
+}
+
+/** URL 上携带的 ACCESS_TOKEN（用于直接分享链接访问明文） */
+export function urlAccessToken(): string {
+  return readUrlCredential('token') || readUrlCredential('access_token');
+}
+
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
@@ -72,6 +95,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
 
   const url = new URL(path, window.location.origin);
   url.searchParams.set('_t', String(Date.now()));
+
+  // 把页面 URL 上的令牌参数透传给 API，保持 `?token=xxx` 直接访问的老用法可用
+  const accessToken = auth ? urlAccessToken() : '';
+  if (accessToken) url.searchParams.set('token', accessToken);
+  const adminTokenParam = auth ? readUrlCredential('admin_token') : '';
+  if (adminTokenParam) url.searchParams.set('admin_token', adminTokenParam);
+
   if (query) {
     Object.entries(query).forEach(([k, v]) => {
       if (v !== undefined && v !== '') url.searchParams.set(k, v);
@@ -83,7 +113,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
   };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
-  const token = auth ? tokenStore.get() : null;
+  const token = auth ? tokenStore.get() || adminTokenParam : null;
   if (token) headers['X-Admin-Token'] = token;
 
   let res: Response;

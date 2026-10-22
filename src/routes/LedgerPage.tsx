@@ -16,7 +16,8 @@ export const LedgerPage: React.FC = () => {
 
   const [showAuthModal, setShowAuthModal] = useState(false);
   // token 变化后（login/logout）需要重新判断权限；路由切回本页时会重新渲染
-  const isAdmin = tokenStore.has();
+  // 是否为管理员会话（能进后台）。URL 上的 access token 只解锁数据，不等于管理员
+  const isAdmin = tokenStore.hasSession();
 
   const transactions = useMemo(() => data?.data ?? [], [data]);
   const hasFullAccess = data?.hasFullAccess ?? true;
@@ -37,7 +38,7 @@ export const LedgerPage: React.FC = () => {
   }, [filters.month, months, patch]);
 
   const openAdmin = useCallback(() => {
-    if (tokenStore.has()) navigate('/admin');
+    if (tokenStore.hasSession()) navigate('/admin');
     else setShowAuthModal(true);
   }, [navigate]);
 

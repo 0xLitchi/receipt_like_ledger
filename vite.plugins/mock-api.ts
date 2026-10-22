@@ -15,6 +15,8 @@ const sample = [
 ];
 
 let mockAuthed = true;
+// 模拟服务端 ACCESS_TOKEN 校验：?token= 命中才返回明文
+const mockAccessToken = 'mock_access_token';
 
 export function mockApi(): Plugin {
   return {
@@ -51,9 +53,11 @@ export function mockApi(): Plugin {
             ],
           });
         if (url.startsWith('/api/transactions')) {
+          const q = new URL(url, 'http://localhost').searchParams.get('token');
+          const viaToken = q === mockAccessToken;
           return json({
             success: true,
-            hasFullAccess: authed,
+            hasFullAccess: authed || viaToken,
             data: sample.map((t, i) => ({ id: `t${i}`, ...t })),
           });
         }

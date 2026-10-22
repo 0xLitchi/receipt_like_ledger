@@ -14,7 +14,7 @@ export const AdminPage: React.FC = () => {
 
   // 没有会话 token 时不允许停留在此路由（例如直接输入 /admin）
   React.useEffect(() => {
-    if (!tokenStore.has()) navigate('/', { replace: true });
+    if (!tokenStore.hasSession()) navigate('/', { replace: true });
   }, [navigate]);
 
   return (
