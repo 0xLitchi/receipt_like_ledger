@@ -81,6 +81,9 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
 
   if (categories.length === 0) return null;
 
+  // 是否处于「已选中某个分类」的过滤状态，用于淡化其余分类
+  const hasSelection = activeCategory !== 'ALL' && categories.some((c) => c.name === activeCategory);
+
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -136,18 +139,23 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                 type="button"
                 aria-pressed={isActive}
                 onClick={() => onSelectCategory?.(isActive ? 'ALL' : item.name)}
-                className={`block w-full text-left space-y-1 group rounded-md px-1 py-0.5 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-current/40 ${
-                  isActive ? 'bg-current/10' : 'hover:bg-current/5'
+                className={`block w-full text-left space-y-1 group rounded-md px-1 py-0.5 transition-all duration-200 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-current/40 ${
+                  isActive ? 'bg-current/10' : hasSelection ? 'opacity-35 hover:opacity-70' : 'hover:bg-current/5'
                 }`}
                 title={isActive ? '取消分类筛选' : `只看 ${item.name}`}
               >
                 <div className="flex justify-between items-center font-pixel text-[0.815em]">
                   <div className="flex items-center min-w-0 pr-2">
-                    <span className={`truncate ${isActive ? 'font-black underline decoration-dotted underline-offset-2' : 'font-bold'}`}>
+                    {/* 选中项加粗并用下划线强调，未选中项退后 */}
+                    <span
+                      className={`truncate transition-all duration-200 ${
+                        isActive ? 'font-black underline decoration-dotted underline-offset-2' : 'font-bold'
+                      }`}
+                    >
                       {item.name}
                     </span>
                   </div>
-                  <span className="font-black tracking-tight shrink-0 font-mono">
+                  <span className={`tracking-tight shrink-0 font-mono ${isActive ? 'font-black' : 'font-bold'}`}>
                     <AnimatedNumber
                       value={item.netTotal}
                       hasFullAccess={hasFullAccess}
@@ -187,6 +195,8 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                   outerRadius={56}
                   paddingAngle={3}
                   dataKey="value"
+                  nameKey="name"
+                  isAnimationActive={false}
                   onMouseEnter={(_: unknown, index: number) => setActiveIndex(index)}
                   onMouseLeave={() => setActiveIndex(null)}
                   onClick={(_: unknown, index: number) => {
@@ -204,7 +214,8 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                       style={{
                         transform: activeIndex === index ? 'scale(1.06)' : 'scale(1)',
                         transformOrigin: 'center center',
-                        transition: 'transform 0.2s ease-in-out',
+                        transition: 'transform 0.2s ease-in-out, opacity 0.2s ease-in-out',
+                        opacity: activeCategory === 'ALL' || activeCategory === item.name ? 1 : 0.35,
                         cursor: 'pointer',
                       }}
                     />
@@ -227,8 +238,14 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                   onMouseEnter={() => setActiveIndex(index)}
                   onMouseLeave={() => setActiveIndex(null)}
                   onClick={() => onSelectCategory?.(isActive ? 'ALL' : item.name)}
-                  className={`w-full flex items-center justify-between p-1 rounded transition-colors cursor-pointer text-left outline-none focus-visible:ring-2 focus-visible:ring-current/40 ${
-                    isHovered || isActive ? 'bg-current/10 font-bold' : 'hover:bg-current/5'
+                  className={`w-full flex items-center justify-between p-1 rounded transition-all duration-200 cursor-pointer text-left outline-none focus-visible:ring-2 focus-visible:ring-current/40 ${
+                    isActive
+                      ? 'bg-current/10 font-black'
+                      : isHovered
+                      ? 'bg-current/5 font-bold'
+                      : hasSelection
+                      ? 'opacity-35 font-bold hover:opacity-70'
+                      : 'font-bold hover:bg-current/5'
                   }`}
                 >
                   <div className="flex items-center gap-1.5 truncate">
@@ -236,11 +253,13 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                       className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/20"
                       style={{ backgroundColor: color }}
                     />
-                    <span className="truncate">{item.name}</span>
+                    <span className={`truncate ${isActive ? 'underline decoration-dotted underline-offset-2' : ''}`}>
+                      {item.name}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="font-mono text-[0.747em] opacity-75">{item.ratioText}</span>
-                    <span className={`font-bold font-mono ${amountColor(item.netTotal, hasFullAccess)}`}>
+                    <span className={`font-mono ${isActive ? 'font-black' : 'font-bold'} ${amountColor(item.netTotal, hasFullAccess)}`}>
                       ￥{item.netTotal.toFixed(2)}
                     </span>
                   </div>
