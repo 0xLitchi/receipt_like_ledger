@@ -16,7 +16,7 @@ interface TransactionDetailSheetProps {
 
 const Field: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div className="flex items-baseline justify-between gap-3 py-1.5 border-b border-current/15 last:border-0">
-    <span className="text-[11px] opacity-60 shrink-0 tracking-widest">{label}</span>
+    <span className="text-[11px] opacity-60 shrink-0 tracking-wide">{label}</span>
     <span className="text-xs font-bold text-right break-all">{value || '—'}</span>
   </div>
 );
@@ -81,7 +81,7 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
               )}
             </div>
 
-            <div className="mt-2 pt-1.5 border-t border-dashed border-current/30 text-[10px] opacity-50 tracking-widest truncate">
+            <div className="mt-2 pt-1.5 border-t border-dashed border-current/30 text-[10px] opacity-50 tracking-wide truncate">
               ID · {transaction.id}
             </div>
           </div>

@@ -142,7 +142,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
               {/* 明细清单框线表格 */}
               <div className="my-3 border-2 border-current/40 rounded-xl overflow-hidden shadow-xs">
-                <div className="grid grid-cols-[2fr_1fr_1.3fr_1fr] divide-x divide-current/30 border-b-2 border-current/40 text-center text-xs font-black py-1.5 bg-current/10 font-pixel tracking-[0.2em]">
+                <div className="grid grid-cols-[1.9fr_0.9fr_1.25fr_1.15fr] divide-x divide-current/30 border-b-2 border-current/40 text-center text-xs font-black py-1.5 bg-current/10 font-pixel tracking-wide">
                   <div>备注</div>
                   <div>成员</div>
                   <div>分类</div>
@@ -158,7 +158,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                   dateGroups.map((group) => (
                     <React.Fragment key={group.date}>
                       {/* 日期子抬头 */}
-                      <div className="bg-current/20 px-2.5 py-1 font-pixel text-xs font-black border-y border-current/30 text-center tracking-wider opacity-90 shadow-inner">
+                      <div className="bg-current/20 px-2.5 py-1 font-pixel text-xs font-black border-y border-current/30 text-center tracking-normal opacity-90 shadow-inner">
                         <span>{group.shortDate}</span>
                       </div>
 

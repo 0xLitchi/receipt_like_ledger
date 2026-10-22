@@ -14,6 +14,8 @@ const sample = [
   { title: '午饭', date: '2026-09-12', amount: -32, member: '荔枝', category: '餐饮', subcategory: '午餐', ledger: 'Default' },
 ];
 
+let mockAuthed = true;
+
 export function mockApi(): Plugin {
   return {
     name: 'mock-api',
@@ -22,13 +24,16 @@ export function mockApi(): Plugin {
         const url = req.url || '';
         if (!url.startsWith('/api/')) return next();
         // 带会话头即视为已登录，返回明文数据（模拟真实后端行为）
-        const authed = Boolean(req.headers['x-admin-token']);
+        const authed = mockAuthed;
 
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         const json = (body: unknown) => res.end(JSON.stringify(body));
 
         if (url.startsWith('/api/settings')) return json({ success: true, data: { theme_style: 'receipt' } });
-        if (url.startsWith('/api/auth/verify')) return json({ success: true, token: 'sess_mock' });
+        if (url.startsWith('/api/auth/verify')) {
+          mockAuthed = true;
+          return json({ success: true, token: 'sess_mock' });
+        }
         if (url.startsWith('/api/auth/logout')) return json({ success: true });
         if (url.startsWith('/api/logs'))
           return json({

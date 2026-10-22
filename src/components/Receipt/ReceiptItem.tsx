@@ -42,7 +42,7 @@ export const ReceiptItem: React.FC<ReceiptItemProps> = ({
         }
       }}
       aria-expanded={onClick ? isActive : undefined}
-      className={`group grid grid-cols-[2fr_1fr_1.3fr_1fr] divide-x divide-current/30 border-b border-current/30 text-xs font-pixel select-none transition-all duration-150 leading-snug items-center py-1.5 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-current/40 focus-visible:ring-inset ${
+      className={`group grid grid-cols-[1.9fr_0.9fr_1.25fr_1.15fr] divide-x divide-current/30 border-b border-current/30 text-xs font-pixel select-none transition-all duration-150 leading-snug items-center py-1.5 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-current/40 focus-visible:ring-inset ${
         isActive ? 'bg-current/15' : 'bg-current/[0.01] hover:bg-current/10'
       }`}
     >

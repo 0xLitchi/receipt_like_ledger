@@ -14,7 +14,7 @@ export const ReceiptFooter: React.FC<ReceiptFooterProps> = ({
   isPrinting = false,
 }) => {
   return (
-    <div className="pt-2 pb-2 px-2 font-pixel text-xs select-none tracking-wider">
+    <div className="pt-2 pb-2 px-2 font-pixel text-xs select-none tracking-normal">
       <div className="thermal-dashed-line my-2" />
 
       {/* 像素风统计总计 */}

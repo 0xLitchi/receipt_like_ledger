@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 @layer utilities {
+  /* 兼容别名：拟物部件（打印机机头、小票纸张）统一使用与正文相同的等宽字体 */
   .font-pixel {
-    font-family: 'VT323', 'Space Mono', 'Courier Prime', monospace;
+    font-family: var(--font-mono);
   }
 
   /* 拟物化小票边缘：齿面 */
@@ -53,7 +54,12 @@
 }
 
 :root {
-  font-family: 'Space Mono', 'Courier Prime', 'VT323', 'Noto Sans SC', monospace, sans-serif;
+  /* 西文/数字用 JetBrains Mono，中文回落到 Noto Sans SC，两者字重对齐 */
+  --font-mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* 页面底色：深色网格，衬托米色小票（不再依赖 body class，避免 SPA 路由切换时丢失） */
