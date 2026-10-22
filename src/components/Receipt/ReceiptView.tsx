@@ -1,27 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Transaction, SummaryStats } from '../../types';
+import type { DateGroup, SummaryStats, Transaction } from '../../types';
 import { ReceiptHeader } from './ReceiptHeader';
+import { CategorySummary } from './CategorySummary';
 import { ReceiptItem } from './ReceiptItem';
 import { ReceiptFooter } from './ReceiptFooter';
-import { PackageOpen, Printer } from 'lucide-react';
+import { TransactionDetailSheet } from './TransactionDetailSheet';
+import { ACCESS_MODE_LABEL, resolveAccessMode } from '../../features/ledger/access-mode';
+import { PackageOpen, Printer, SlidersHorizontal } from 'lucide-react';
 
 interface ReceiptViewProps {
+  /** 已按日期分组的交易（由 use-ledger 统一计算） */
+  dateGroups: DateGroup[];
+  /** 当前筛选后的交易，用于分类汇总 */
   transactions: Transaction[];
   stats: SummaryStats;
   selectedMonth: string;
   hasFullAccess?: boolean;
   isAdmin?: boolean;
+  /** 是否有筛选条件生效（用于空态文案） */
+  isFiltered?: boolean;
+  activeCategory?: string;
+  onSelectCategory?: (category: string) => void;
+  onResetFilters?: () => void;
 }
 
 export const ReceiptView: React.FC<ReceiptViewProps> = ({
+  dateGroups,
   transactions,
   stats,
   selectedMonth,
   hasFullAccess = true,
   isAdmin = false,
+  isFiltered = false,
+  activeCategory = 'ALL',
+  onSelectCategory,
+  onResetFilters,
 }) => {
   const [isPrinting, setIsPrinting] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const prevMonthRef = useRef(selectedMonth);
 
   // 当切换月份时触发 1.65s 的激光打字与出纸效果
@@ -29,6 +46,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
     if (prevMonthRef.current !== selectedMonth) {
       prevMonthRef.current = selectedMonth;
       setIsPrinting(true);
+      setExpandedId(null);
       const timer = setTimeout(() => {
         setIsPrinting(false);
       }, 1650);
@@ -36,31 +54,8 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
     }
   }, [selectedMonth]);
 
-  // 将交易记录按日期分组倒序排列
-  const dateGroups = React.useMemo(() => {
-    const map = new Map<string, Transaction[]>();
-
-    transactions.forEach((t) => {
-      const d = t.date || '未知日期';
-      const list = map.get(d) || [];
-      list.push(t);
-      map.set(d, list);
-    });
-
-    const sortedDates = Array.from(map.keys()).sort().reverse();
-
-    return sortedDates.map((d) => ({
-      date: d,
-      shortDate: d.length >= 10 ? d.substring(5) : d,
-      items: map.get(d) || [],
-    }));
-  }, [transactions]);
-
-  const currentMode = isAdmin
-    ? 'admin'
-    : hasFullAccess
-    ? 'decrypted'
-    : 'masked';
+  const currentMode = resolveAccessMode(isAdmin, hasFullAccess);
+  const modeLabel = ACCESS_MODE_LABEL[currentMode];
 
   const printerIconColorClass =
     currentMode === 'admin'
@@ -100,7 +95,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
         <div className="flex items-center gap-1.5">
           <Printer className={`w-4 h-4 ${printerIconColorClass} transition-colors duration-300 animate-pulse`} />
           <span className={`text-[10px] font-mono font-bold tracking-wider opacity-75 ${printerIconColorClass}`}>
-            {currentMode === 'admin' ? 'ADMIN' : currentMode === 'decrypted' ? 'DECRYPTED' : 'MASKED'}
+            {modeLabel}
           </span>
         </div>
 
@@ -121,7 +116,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
-            key={selectedMonth}
+            key={selectedMonth || 'all'}
             initial={{
               opacity: 0.1,
               y: -90,
@@ -147,17 +142,19 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
             <div className={isPrinting ? 'animate-ink-develop' : ''}>
-              <ReceiptHeader
-                selectedMonth={selectedMonth}
+              <ReceiptHeader selectedMonth={selectedMonth} hasFullAccess={hasFullAccess} />
+
+              <CategorySummary
                 transactions={transactions}
                 hasFullAccess={hasFullAccess}
                 isPrinting={isPrinting}
-                themeStyle="receipt"
+                activeCategory={activeCategory}
+                onSelectCategory={onSelectCategory}
               />
 
               {/* 明细清单框线表格 */}
               <div className="my-3 border-2 border-current/40 rounded-xl overflow-hidden shadow-xs">
-                <div className="grid grid-cols-4 divide-x divide-current/30 border-b-2 border-current/40 text-center text-xs font-black py-1.5 bg-current/10 font-pixel tracking-widest uppercase">
+                <div className="grid grid-cols-[2fr_1fr_1.3fr_1fr] divide-x divide-current/30 border-b-2 border-current/40 text-center text-xs font-black py-1.5 bg-current/10 font-pixel tracking-[0.2em]">
                   <div>备注</div>
                   <div>成员</div>
                   <div>分类</div>
@@ -167,23 +164,44 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 {dateGroups.length === 0 ? (
                   <div className="py-12 text-center text-xs opacity-50 font-pixel flex flex-col items-center gap-2">
                     <PackageOpen className="w-7 h-7 opacity-40" />
-                    <span>本月暂无记账明细</span>
+                    <span>{isFiltered ? '当前筛选条件下没有记录' : '本月暂无记账明细'}</span>
+                    {isFiltered && onResetFilters && (
+                      <button
+                        type="button"
+                        onClick={onResetFilters}
+                        className="mt-1 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-current/30 text-[11px] hover:bg-current/10 transition-colors cursor-pointer no-print"
+                      >
+                        <SlidersHorizontal className="w-3 h-3" />
+                        清除筛选
+                      </button>
+                    )}
                   </div>
                 ) : (
                   dateGroups.map((group) => (
                     <React.Fragment key={group.date}>
-                      {/* 日期子抬头（无 emoji） */}
+                      {/* 日期子抬头 */}
                       <div className="bg-current/20 px-2.5 py-1 font-pixel text-xs font-black border-y border-current/30 text-center tracking-wider opacity-90 shadow-inner">
                         <span>{group.shortDate}</span>
                       </div>
 
                       {group.items.map((t) => (
-                        <ReceiptItem
-                          key={t.id}
-                          transaction={t}
-                          hasFullAccess={hasFullAccess}
-                          isPrinting={isPrinting}
-                        />
+                        <React.Fragment key={t.id}>
+                          <ReceiptItem
+                            transaction={t}
+                            hasFullAccess={hasFullAccess}
+                            isPrinting={isPrinting}
+                            isActive={expandedId === t.id}
+                            onClick={() => setExpandedId((prev) => (prev === t.id ? null : t.id))}
+                          />
+                          {expandedId === t.id && (
+                            <TransactionDetailSheet
+                              transaction={t}
+                              hasFullAccess={hasFullAccess}
+                              isPrinting={isPrinting}
+                              onClose={() => setExpandedId(null)}
+                            />
+                          )}
+                        </React.Fragment>
                       ))}
                     </React.Fragment>
                   ))

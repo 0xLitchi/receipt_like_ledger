@@ -6,7 +6,8 @@ import {
 
 interface Env extends SharedEnv {}
 
-const ALLOWED_THEME_STYLES = ['receipt', 'tractor', 'passbook', 'vfd', 'boarding_pass'] as const;
+// 目前仅保留「拟真热敏小票」一种主题；历史数据若为已下线主题，读取时回退为 receipt
+const ALLOWED_THEME_STYLES = ['receipt'] as const;
 const ALLOWED_KEYS = ['theme_style'] as const;
 const DEFAULT_SETTINGS: Record<string, string> = {
   theme_style: 'receipt',
@@ -55,9 +56,11 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     ).all<{ key: string; value: string }>();
 
     (results || []).forEach((row) => {
-      if (row.key in DEFAULT_SETTINGS) {
-        data[row.key] = row.value;
-      }
+      if (!(row.key in DEFAULT_SETTINGS)) return;
+      const allowed = row.key === 'theme_style'
+        ? (ALLOWED_THEME_STYLES as readonly string[]).includes(row.value)
+        : true;
+      if (allowed) data[row.key] = row.value;
     });
 
     return new Response(JSON.stringify({ success: true, data }), {
@@ -130,9 +133,11 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
     ).all<{ key: string; value: string }>();
     const data: Record<string, string> = { ...DEFAULT_SETTINGS };
     (results || []).forEach((row) => {
-      if (row.key in DEFAULT_SETTINGS) {
-        data[row.key] = row.value;
-      }
+      if (!(row.key in DEFAULT_SETTINGS)) return;
+      const allowed = row.key === 'theme_style'
+        ? (ALLOWED_THEME_STYLES as readonly string[]).includes(row.value)
+        : true;
+      if (allowed) data[row.key] = row.value;
     });
 
     return new Response(JSON.stringify({ success: true, data }), {
