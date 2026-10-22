@@ -40,7 +40,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               <button
                 key={m}
                 onClick={() => onSelectMonth(m)}
-                className={`py-2 px-1 rounded-lg text-xs font-mono font-black tracking-wider transition-colors duration-200 cursor-pointer ${
+                className={`py-2 px-1 rounded-lg text-xs font-mono font-black tracking-normal transition-colors duration-200 cursor-pointer ${
                   isActive
                     ? 'text-slate-950 font-extrabold scale-105'
                     : 'text-slate-400 hover:text-slate-200'

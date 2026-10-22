@@ -1,9 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=VT323&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Courier+Prime:wght@400;700&family=Noto+Sans+SC:wght@400;700;900&display=swap');
 @import "tailwindcss";
 
 @layer utilities {
+  /* 兼容别名：拟物部件（打印机机头、小票纸张）统一使用与正文相同的等宽字体 */
   .font-pixel {
-    font-family: 'VT323', 'Space Mono', 'Courier Prime', monospace;
+    font-family: var(--font-mono);
   }
 
   /* 拟物化小票边缘：齿面 */
@@ -54,24 +54,35 @@
 }
 
 :root {
-  font-family: 'Space Mono', 'Courier Prime', 'VT323', 'Noto Sans SC', monospace, sans-serif;
+  /* 西文/数字用 JetBrains Mono，中文回落到 Noto Sans SC，两者字重对齐 */
+  --font-mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* 小票内部字号全局比例：调整整体字号只改这里 */
+  --receipt-font-scale: 0.92;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-body.mode-day {
+/* 页面底色：深色网格，衬托米色小票（不再依赖 body class，避免 SPA 路由切换时丢失） */
+body {
   background-color: #0f172a;
-  background-image: 
+  background-image:
     radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, #0f172a, #0b1120);
   background-size: 16px 16px, 100% 100%;
-  color: #0f172a;
+  background-attachment: fixed;
+  color: #e2e8f0;
 }
 
-body.mode-day .receipt-paper-box {
+/* 小票纸张：米色纸面 + 墨色文字（独立于全局配色，避免被暗色主题吞掉） */
+.receipt-paper-box {
+  font-size: calc(1rem * var(--receipt-font-scale));
   background-color: #faf7f0;
   background-image: 
-    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.015) 3px, transparent 4px),
-    radial-gradient(#000 0.5px, transparent 0.5px);
-  background-size: 100% 100%, 4px 4px;
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.012) 3px, transparent 4px),
+    radial-gradient(rgba(0, 0, 0, 0.14) 0.4px, transparent 0.5px);
+  background-size: 100% 100%, 5px 5px;
   color: #111827;
   box-shadow:
     0 1px 1px rgba(0,0,0,0.15),
@@ -131,6 +142,16 @@ body.mode-day .receipt-paper-box {
 
 .animate-machine-vibrate {
   animation: machineVibrate 0.12s infinite linear;
+}
+
+/* 明细聚焦遮罩淡入 */
+@keyframes focusFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-focus-fade {
+  animation: focusFade 0.22s ease-out;
 }
 
 /* 拍立得暗房热感显影激光扫线 */

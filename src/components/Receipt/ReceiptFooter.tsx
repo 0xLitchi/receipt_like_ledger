@@ -14,17 +14,17 @@ export const ReceiptFooter: React.FC<ReceiptFooterProps> = ({
   isPrinting = false,
 }) => {
   return (
-    <div className="pt-2 pb-2 px-2 font-pixel text-xs select-none tracking-wider">
+    <div className="pt-2 pb-2 px-2 font-pixel text-[0.815em] select-none tracking-normal">
       <div className="thermal-dashed-line my-2" />
 
       {/* 像素风统计总计 */}
       <div className="space-y-1 text-right my-1 opacity-95">
-        <div className="flex justify-between font-pixel text-xs">
+        <div className="flex justify-between font-pixel text-[0.815em]">
           <span className="opacity-75">交易共计:</span>
           <span className="font-bold">{stats.count} 笔</span>
         </div>
 
-        <div className="flex justify-between text-sm font-black pt-1 border-t border-dashed border-current/30 mt-1.5 font-pixel">
+        <div className="flex justify-between text-[0.951em] font-black pt-1 border-t border-dashed border-current/30 mt-1.5 font-pixel">
           <span>净计:</span>
           <AnimatedNumber
             value={stats.netBalance}

@@ -1,248 +1,38 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Transaction, SummaryStats } from './types';
-import { storage, type ThemeStyle } from './utils/storage';
-import { ReceiptView } from './components/Receipt/ReceiptView';
-import { TractorPaperView } from './components/Tractor/TractorPaperView';
-import { PassbookView } from './components/Passbook/PassbookView';
-import { VfdView } from './components/VFD/VfdView';
-import { BoardingPassView } from './components/BoardingPass/BoardingPassView';
-import { FilterBar } from './components/FilterBar';
-import { AdminAuthModal } from './components/Admin/AdminAuthModal';
-import { AdminPanel } from './components/Admin/AdminPanel';
+import { lazy, Suspense } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { queryClient } from './lib/query-client';
+import { LedgerPage } from './routes/LedgerPage';
+
+// 后台体量大且仅管理员使用，单独拆包
+const AdminPage = lazy(() =>
+  import('./routes/AdminPage').then((m) => ({ default: m.AdminPage }))
+);
 
 export function App() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [hasFullAccess, setHasFullAccess] = useState<boolean>(true);
-  const [loading, setLoading] = useState(true);
-
-  // UI 界面风格状态 ('receipt' | 'tractor' | 'passbook' | 'vfd' | 'boarding_pass')
-  const [themeStyle, setThemeStyle] = useState<ThemeStyle>(() => storage.getThemeStyle());
-
-  // 强制白天模式
-  useEffect(() => {
-    document.body.classList.remove('mode-night');
-    document.body.classList.add('mode-day');
-  }, []);
-
-  // 弹窗与视图控制
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
-
-  // 1. 加载交易数据
-  const loadData = async () => {
-    setLoading(true);
-    const [result, settingsResult] = await Promise.all([
-      storage.getTransactions(),
-      storage.fetchSettings(),
-    ]);
-
-    setTransactions(result.data);
-    setHasFullAccess(result.hasFullAccess);
-    setThemeStyle(settingsResult.themeStyle);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  // 修改主题风格
-  const handleThemeStyleChange = useCallback((newStyle: ThemeStyle) => {
-    setThemeStyle(newStyle);
-    storage.setThemeStyle(newStyle);
-    void storage.updateSetting('theme_style', newStyle);
-  }, []);
-
-  // 当前是否具备管理员凭证
-  const isAdmin = !!storage.getSavedAdminPassword();
-
-  // 动态提取最近三个月 YYYY-MM
-  const recentMonths = useMemo(() => {
-    const monthSet = new Set<string>();
-
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth() + 1;
-
-    for (let i = 0; i < 3; i++) {
-      const d = new Date(curYear, curMonth - 1 - i, 1);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      monthSet.add(`${y}-${m}`);
-    }
-
-    transactions.forEach((t) => {
-      if (t.date && t.date.length >= 7) {
-        monthSet.add(t.date.substring(0, 7));
-      }
-    });
-
-    return Array.from(monthSet).sort().reverse().slice(0, 3);
-  }, [transactions]);
-
-  // 选中的月份
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-
-  useEffect(() => {
-    if (recentMonths.length > 0 && !selectedMonth) {
-      setSelectedMonth(recentMonths[0]);
-    }
-  }, [recentMonths, selectedMonth]);
-
-  // 按选中月份过滤
-  const filteredTransactions = useMemo(() => {
-    if (!selectedMonth) return transactions;
-    return transactions.filter((t) => t.date && t.date.startsWith(selectedMonth));
-  }, [transactions, selectedMonth]);
-
-  // 统计数值
-  const stats: SummaryStats = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-
-    filteredTransactions.forEach((t) => {
-      if (t.amount > 0) {
-        income += t.amount;
-      } else {
-        expense += Math.abs(t.amount);
-      }
-    });
-
-    return {
-      totalIncome: income,
-      totalExpense: expense,
-      netBalance: income - expense,
-      count: filteredTransactions.length,
-    };
-  }, [filteredTransactions]);
-
-  // 快捷触发后台模式（按 "." 键触发）
-  const handleAdminToggle = useCallback(() => {
-    if (storage.getSavedAdminPassword()) {
-      setShowAdminPanel(true);
-    } else {
-      setShowAuthModal(true);
-    }
-  }, []);
-
-  // 全局键盘监听 "." 按键触发后台
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-
-      if (e.key === '.' || e.code === 'Period' || e.code === 'NumpadDecimal') {
-        e.preventDefault();
-        handleAdminToggle();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleAdminToggle]);
-
-  // Excel 批量保存处理
-  const handleBatchSave = async (items: Transaction[], deletedIds: string[]) => {
-    await storage.batchSaveTransactions(items, deletedIds);
-    await loadData();
-  };
-
-  const handleAdminLogout = () => {
-    storage.logoutAdmin();
-    setShowAdminPanel(false);
-    loadData();
-  };
-
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start py-6 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
-      {/* 纯粹拟物化月份滑动切换控件 */}
-      <FilterBar
-        selectedMonth={selectedMonth || (recentMonths[0] || '')}
-        onSelectMonth={setSelectedMonth}
-        recentMonths={recentMonths}
-      />
-
-      {/* 动态 UI 主题展示区 */}
-      <main className="w-full max-w-md mx-auto">
-        {loading ? (
-          <div className="py-20 text-center font-mono text-slate-500 text-xs">
-            加载中...
-          </div>
-        ) : themeStyle === 'passbook' ? (
-          <PassbookView
-            transactions={filteredTransactions}
-            stats={stats}
-            selectedMonth={selectedMonth || (recentMonths[0] || '')}
-            hasFullAccess={hasFullAccess}
-            isAdmin={isAdmin}
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<LedgerPage />} />
+          <Route
+            path="/admin"
+            element={
+              <Suspense
+                fallback={
+                  <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400 font-mono text-xs">
+                    正在载入后台…
+                  </div>
+                }
+              >
+                <AdminPage />
+              </Suspense>
+            }
           />
-        ) : themeStyle === 'vfd' ? (
-          <VfdView
-            transactions={filteredTransactions}
-            stats={stats}
-            selectedMonth={selectedMonth || (recentMonths[0] || '')}
-            hasFullAccess={hasFullAccess}
-            isAdmin={isAdmin}
-          />
-        ) : themeStyle === 'boarding_pass' ? (
-          <BoardingPassView
-            transactions={filteredTransactions}
-            stats={stats}
-            selectedMonth={selectedMonth || (recentMonths[0] || '')}
-            hasFullAccess={hasFullAccess}
-            isAdmin={isAdmin}
-          />
-        ) : themeStyle === 'tractor' ? (
-          <TractorPaperView
-            transactions={filteredTransactions}
-            stats={stats}
-            selectedMonth={selectedMonth || (recentMonths[0] || '')}
-            hasFullAccess={hasFullAccess}
-            isAdmin={isAdmin}
-          />
-        ) : (
-          <ReceiptView
-            transactions={filteredTransactions}
-            stats={stats}
-            selectedMonth={selectedMonth || (recentMonths[0] || '')}
-            hasFullAccess={hasFullAccess}
-            isAdmin={isAdmin}
-          />
-        )}
-      </main>
-
-      {/* 管理员验证弹窗 */}
-      <AdminAuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onSuccess={async () => {
-          setShowAuthModal(false);
-          setShowAdminPanel(true);
-          await loadData();
-        }}
-      />
-
-      {/* Admin Panel 全屏整页后台管理 */}
-      <AdminPanel
-        isOpen={showAdminPanel}
-        onClose={() => {
-          setShowAdminPanel(false);
-          loadData();
-        }}
-        transactions={transactions}
-        onRefresh={loadData}
-        onBatchSave={handleBatchSave}
-        onLogout={handleAdminLogout}
-        themeStyle={themeStyle}
-        onThemeStyleChange={handleThemeStyleChange}
-      />
-    </div>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
 

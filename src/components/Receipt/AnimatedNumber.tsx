@@ -48,15 +48,20 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
     }
   }, [value, isPrinting, hasFullAccess]);
 
+  // 脱敏态锁定字宽与不换行，避免等宽字体下 '*.' 被当成对齐符号拆行
   if (!hasFullAccess) {
-    return <span className={className}>{showSymbol ? '￥***.**' : '***.**'}</span>;
+    return (
+      <span className={`${className} whitespace-nowrap`} style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {showSymbol ? '￥***.**' : '***.**'}
+      </span>
+    );
   }
 
   const formatted = formatCurrency(displayValue, false, showSymbol);
 
   return (
     <span
-      className={`${className} inline-block transition-all ${
+      className={`${className} inline-block whitespace-nowrap tabular-nums transition-all ${
         isSpinning
           ? 'scale-110 opacity-90 text-amber-600 animate-pulse font-pixel tracking-tighter'
           : 'scale-100 opacity-100'
