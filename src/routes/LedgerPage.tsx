@@ -30,7 +30,7 @@ export const LedgerPage: React.FC = () => {
     [transactions, filters.month]
   );
 
-  // URL 里没有月份时，回填最近一个月（用 replace，不污染历史记录）
+  // 尚未选择月份时，回填最近一个月
   useEffect(() => {
     if (!filters.month && months.length > 0) {
       patch({ month: months[0] });
