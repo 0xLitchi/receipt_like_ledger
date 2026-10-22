@@ -132,6 +132,11 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             <div className={isPrinting ? 'animate-ink-develop' : ''}>
               <ReceiptHeader />
 
+              <div
+                className={`transition-all duration-300 ${
+                  expandedId ? 'opacity-40 blur-[2px]' : 'opacity-100 blur-none'
+                }`}
+              >
               <CategorySummary
                 transactions={transactions}
                 hasFullAccess={hasFullAccess}
@@ -139,10 +144,13 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 activeCategory={activeCategory}
                 onSelectCategory={onSelectCategory}
               />
+              </div>
 
               {/* 明细清单框线表格 */}
               <div className="my-3 border-2 border-current/40 rounded-xl overflow-hidden shadow-xs">
-                <div className="grid grid-cols-[1.9fr_0.9fr_1.25fr_1.15fr] divide-x divide-current/30 border-b-2 border-current/40 text-center text-xs font-black py-1.5 bg-current/10 font-pixel tracking-wide">
+                <div className={`grid grid-cols-[1.9fr_0.9fr_1.25fr_1.15fr] divide-x divide-current/30 border-b-2 border-current/40 text-center text-xs font-black py-1.5 bg-current/10 font-pixel tracking-wide transition-all duration-300 ${
+                  expandedId ? 'opacity-45 blur-[2px]' : 'opacity-100 blur-none'
+                }`}>
                   <div>备注</div>
                   <div>成员</div>
                   <div>分类</div>
@@ -158,12 +166,23 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                   dateGroups.map((group) => (
                     <React.Fragment key={group.date}>
                       {/* 日期子抬头 */}
-                      <div className="bg-current/20 px-2.5 py-1 font-pixel text-xs font-black border-y border-current/30 text-center tracking-normal opacity-90 shadow-inner">
+                      <div className={`bg-current/20 px-2.5 py-1 font-pixel text-xs font-black border-y border-current/30 text-center tracking-normal shadow-inner transition-all duration-300 ${
+                        expandedId ? 'opacity-40 blur-[2px]' : 'opacity-90 blur-none'
+                      }`}>
                         <span>{group.shortDate}</span>
                       </div>
 
                       {group.items.map((t) => (
-                        <React.Fragment key={t.id}>
+                        <div
+                          key={t.id}
+                          className={`relative transition-all duration-300 ${
+                            expandedId === t.id
+                              ? 'z-50 opacity-100 blur-none shadow-[0_8px_24px_-8px_rgba(0,0,0,0.35)]'
+                              : expandedId
+                              ? 'z-0 opacity-45 blur-[2px]'
+                              : 'z-0 opacity-100 blur-none'
+                          }`}
+                        >
                           <ReceiptItem
                             transaction={t}
                             hasFullAccess={hasFullAccess}
@@ -179,18 +198,24 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                               onClose={() => setExpandedId(null)}
                             />
                           )}
-                        </React.Fragment>
+                        </div>
                       ))}
                     </React.Fragment>
                   ))
                 )}
               </div>
 
-              <ReceiptFooter
-                stats={stats}
-                hasFullAccess={hasFullAccess}
-                isPrinting={isPrinting}
-              />
+              <div
+                className={`transition-all duration-300 ${
+                  expandedId ? 'opacity-40 blur-[2px]' : 'opacity-100 blur-none'
+                }`}
+              >
+                <ReceiptFooter
+                  stats={stats}
+                  hasFullAccess={hasFullAccess}
+                  isPrinting={isPrinting}
+                />
+              </div>
             </div>
 
             <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
