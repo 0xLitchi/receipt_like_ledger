@@ -49,6 +49,16 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   const [isPrinting, setIsPrinting] = useState(true);
   /** 切换月份时的两段式：先回卷旧纸，再吐出新的 */
   const [phase, setPhase] = useState<'idle' | 'retracting' | 'feeding'>('feeding');
+  /**
+   * 冻结的快照：回卷期间继续显示「上一张纸」的内容，
+   * 否则会先闪一下新数据再开始收卷。
+   */
+  const [snapshot, setSnapshot] = useState<{
+    month: string;
+    dateGroups: DateGroup[];
+    transactions: Transaction[];
+    stats: SummaryStats;
+  } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expandedRef = useRef<HTMLDivElement | null>(null);
 
@@ -67,6 +77,12 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
    * 切换月份：先回卷旧纸（retracting），回卷结束后再吐出新纸（feeding）。
    * 首屏不做回卷，直接进入吐纸阶段。
    */
+  // 持续记录「上一次渲染的 props」，供切换时冻结成快照
+  const lastPropsRef = useRef({ month: selectedMonth, dateGroups, transactions, stats });
+  useEffect(() => {
+    lastPropsRef.current = { month: selectedMonth, dateGroups, transactions, stats };
+  });
+
   const isFirstRender = useRef(true);
   useEffect(() => {
     if (isFirstRender.current) {
@@ -74,11 +90,24 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
       setPhase('feeding');
       return;
     }
+    // 冻结切换前的那一屏，回卷期间继续显示，避免闪到新数据
+    setSnapshot(lastPropsRef.current);
     setExpandedId(null);
     setPhase('retracting');
-    const timer = window.setTimeout(() => setPhase('feeding'), PRINT_RETRACT_S * 1000);
+    const timer = window.setTimeout(() => {
+      setSnapshot(null);
+      setPhase('feeding');
+    }, PRINT_RETRACT_S * 1000);
     return () => window.clearTimeout(timer);
+    // 仅在月份变化时触发；快照内容取变化前的 props
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
+
+  /** 回卷期间显示快照，吐出时显示真实数据 */
+  const shown =
+    snapshot && phase === 'retracting'
+      ? snapshot
+      : { month: selectedMonth, dateGroups, transactions, stats };
 
   /**
    * 点击展开区域以外的地方收起明细。
@@ -168,8 +197,10 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             key 换月即重挂载，直接播放「回卷 + 吐出」完整序列，不再依赖 AnimatePresence
             的退出状态机（它的 wait 模式曾导致切月后不渲染）。 */}
         <motion.div
-            key={`${selectedMonth || 'all'}:${phase}`}
-            initial={{ height: phase === 'feeding' ? 0 : 'auto' }}
+            // key 只在「吐出」时变化，回卷复用同一元素，避免重挂载闪现满高纸
+            key={phase === 'feeding' ? `feed:${selectedMonth || 'all'}` : 'retract'}
+            // 吐出阶段从 0 展开；回卷阶段沿用当前高度，不重挂载
+            initial={phase === 'feeding' ? { height: 0 } : false}
             animate={{ height: phase === 'feeding' ? 'auto' : 0 }}
             transition={
               phase === 'feeding'
@@ -200,7 +231,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 }`}
               >
                 <MonthSwitcher
-                  selectedMonth={selectedMonth}
+                  selectedMonth={shown.month}
                   months={months}
                   onChange={onSelectMonth}
                 />
@@ -212,7 +243,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 }`}
               >
               <CategorySummary
-                transactions={transactions}
+                transactions={shown.transactions}
                 hasFullAccess={hasFullAccess}
                 isPrinting={isPrinting}
                 activeCategory={activeCategory}
@@ -231,13 +262,13 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                   <div>金额</div>
                 </div>
 
-                {dateGroups.length === 0 ? (
+                {shown.dateGroups.length === 0 ? (
                   <div className="py-12 text-center text-[0.815em] opacity-50 font-pixel flex flex-col items-center gap-2">
                     <PackageOpen className="w-7 h-7 opacity-40" />
                     <span>本月暂无记账明细</span>
                   </div>
                 ) : (
-                  dateGroups.map((group) => (
+                  shown.dateGroups.map((group) => (
                     <React.Fragment key={group.date}>
                       {/* 日期子抬头 */}
                       <div className={`bg-current/20 px-2.5 py-1 font-pixel text-[0.815em] font-black border-y border-current/30 text-center tracking-normal shadow-inner transition-all duration-300 ${
@@ -286,7 +317,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 }`}
               >
                 <ReceiptFooter
-                  stats={stats}
+                  stats={shown.stats}
                   hasFullAccess={hasFullAccess}
                   isPrinting={isPrinting}
                 />
