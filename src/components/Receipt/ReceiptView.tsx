@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { DateGroup, SummaryStats, Transaction } from '../../types';
 import { MonthSwitcher } from './MonthSwitcher';
 import { CategorySummary } from './CategorySummary';
@@ -8,6 +8,13 @@ import { ReceiptFooter } from './ReceiptFooter';
 import { TransactionDetailSheet } from './TransactionDetailSheet';
 import { resolveAccessMode } from '../../features/ledger/access-mode';
 import { PackageOpen, Printer } from 'lucide-react';
+
+/** 回卷时长（秒） */
+const PRINT_RETRACT_S = 0.26;
+/** 出纸时长（秒） */
+const PRINT_FEED_S = 2.2;
+const PRINT_START_MS = PRINT_RETRACT_S * 1000;
+const PRINT_FEED_MS = PRINT_FEED_S * 1000;
 
 interface ReceiptViewProps {
   /** 已按日期分组的交易（由 use-ledger 统一计算） */
@@ -40,17 +47,37 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 }) => {
   // 首次渲染即为「正在打印」，切换月份时同样进入打印态
   const [isPrinting, setIsPrinting] = useState(true);
+  /** 切换月份时的两段式：先回卷旧纸，再吐出新的 */
+  const [phase, setPhase] = useState<'idle' | 'retracting' | 'feeding'>('feeding');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const prevMonthRef = useRef(selectedMonth);
   const expandedRef = useRef<HTMLDivElement | null>(null);
 
-  // 切换月份：收起明细并重新出纸（打印态在动画完成回调里结束）
+  /**
+   * 打印态（指示灯闪烁 + 扫描线）的生命周期。
+   * 单独用定时器控制，避免依赖 motion 的动画回调——内层动画的完成事件
+   * 会冒泡到外层容器，导致打印态被提前结束、进而卡住 AnimatePresence。
+   */
   useEffect(() => {
-    if (prevMonthRef.current !== selectedMonth) {
-      prevMonthRef.current = selectedMonth;
-      setIsPrinting(true);
-      setExpandedId(null);
+    setIsPrinting(true);
+    const timer = window.setTimeout(() => setIsPrinting(false), PRINT_START_MS + PRINT_FEED_MS);
+    return () => window.clearTimeout(timer);
+  }, [selectedMonth]);
+
+  /**
+   * 切换月份：先回卷旧纸（retracting），回卷结束后再吐出新纸（feeding）。
+   * 首屏不做回卷，直接进入吐纸阶段。
+   */
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      setPhase('feeding');
+      return;
     }
+    setExpandedId(null);
+    setPhase('retracting');
+    const timer = window.setTimeout(() => setPhase('feeding'), PRINT_RETRACT_S * 1000);
+    return () => window.clearTimeout(timer);
   }, [selectedMonth]);
 
   /**
@@ -123,9 +150,8 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
       {/* 出纸缝：金属槽口，纸张从这条缝里吐出 */}
       <div className="relative z-30 w-[98%] h-2.5 -mt-px no-print printer-slot-lip" />
 
-      {/* 小票展示区域：出纸过程中高度随纸张增长，不留大块空白。
-          layout 让旧纸回卷后腾出的空间立刻被新纸接上，切换月份时不会塌陷。 */}
-      <motion.div layout className="w-full relative overflow-hidden">
+      {/* 小票展示区域：出纸过程中高度随纸张增长，不留大块空白 */}
+      <div className="w-full relative overflow-hidden">
         {/* 缝口基线：纸被收走后仍有一条暗色底边，机器不会悬空 */}
         <div className="pointer-events-none absolute inset-x-[1%] top-0 h-1.5 rounded-b-[3px] bg-gradient-to-b from-black/55 to-black/10 no-print z-20" />
         {/* 出纸缝处的热感扫描线：纸张吐出时同步下移 */}
@@ -133,40 +159,34 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           <motion.div
             initial={{ top: 0, opacity: 0 }}
             animate={{ top: ['0%', '0%', '100%'], opacity: [0.95, 0.95, 0] }}
-            transition={{ duration: 2.28, times: [0, 0.03, 0.5, 1], ease: ['linear', 'linear', 'linear'] }}
+            transition={{ duration: PRINT_FEED_S, times: [0, 0.03, 0.5, 1], ease: ['linear', 'linear', 'linear'] }}
             className={`absolute inset-x-0 h-1.5 bg-gradient-to-r from-transparent ${laserBeamClass} to-transparent pointer-events-none z-50`}
           />
         )}
 
-        <AnimatePresence mode="popLayout" initial={true}>
-          {/* 出纸：外层高度从 0 长到内容高度，纸面贴顶不动，像被一点点吐出 */}
-          <motion.div
-            key={selectedMonth || 'all'}
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{
-              // 回卷：高度收到 0（纸被吸回缝里）。比出纸快得多，且越收越快
-              height: 0,
-              transition: { duration: 0.26, ease: [0.32, 0, 0.85, 0.45] },
-            }}
-            transition={{
-              // 预热 → 匀速吐出（匀速最能体现「纸在持续送出来」）→ 末尾极轻收住
-              // delay 与回卷重叠一小段，衔接更连续，几乎没有空档
-              duration: 2.2,
-              delay: 0.06,
-              times: [0, 0.06, 0.94, 1],
-              ease: ['easeOut', 'linear', 'linear', 'easeInOut'],
-            }}
-            onAnimationComplete={() => setIsPrinting(false)}
-            onAnimationStart={() => setIsPrinting(true)}
+        {/* 出纸：外层高度从 0 长到内容高度，纸面贴顶不动，像被一点点吐出。
+            key 换月即重挂载，直接播放「回卷 + 吐出」完整序列，不再依赖 AnimatePresence
+            的退出状态机（它的 wait 模式曾导致切月后不渲染）。 */}
+        <motion.div
+            key={`${selectedMonth || 'all'}:${phase}`}
+            initial={{ height: phase === 'feeding' ? 0 : 'auto' }}
+            animate={{ height: phase === 'feeding' ? 'auto' : 0 }}
+            transition={
+              phase === 'feeding'
+                ? {
+                    // 预热 → 匀速吐出（匀速最能体现「纸在持续送出来」）→ 末尾极轻收住
+                    duration: PRINT_FEED_S,
+                    times: [0, 0.06, 0.94, 1],
+                    ease: ['easeOut', 'linear', 'linear', 'easeInOut'],
+                  }
+                : { duration: PRINT_RETRACT_S, ease: [0.32, 0, 0.85, 0.45] }
+            }
             className="relative w-full overflow-hidden"
           >
             <motion.div
               initial={{ y: -6 }}
               animate={{ y: 0 }}
-              // 回卷时纸面反向贴回缝口，和出纸的位移对称
-              exit={{ y: 4, transition: { duration: 0.26, ease: [0.32, 0, 0.85, 0.45] } }}
-              transition={{ duration: 2.2, delay: 0.06, ease: 'linear' }}
+              transition={{ duration: PRINT_FEED_S, ease: 'linear' }}
               className="receipt-container receipt-paper-box receipt-both-sawtooth font-pixel relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
             >
             {/* 纸从缝口出来的地方压一道阴影，强化「被夹住」的层次 */}
@@ -275,9 +295,8 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
             <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
             </motion.div>
-          </motion.div>
-        </AnimatePresence>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 };
