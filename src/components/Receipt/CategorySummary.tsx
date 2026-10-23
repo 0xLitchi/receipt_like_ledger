@@ -18,7 +18,6 @@ interface CategoryItem {
   name: string;
   netTotal: number;
   absVal: number;
-  ratioText: string;
   /** 相对最大分类的宽度百分比 */
   barWidth: number;
 }
@@ -42,23 +41,19 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
 
   const categories = useMemo<CategoryItem[]>(() => {
     const map = new Map<string, number>();
-    let totalAbs = 0;
 
     transactions.forEach((t) => {
       const key = summaryKey(t);
       const value = hasFullAccess ? t.amount : 0;
       map.set(key, (map.get(key) || 0) + value);
-      totalAbs += Math.abs(value);
     });
 
     const list = Array.from(map.entries()).map(([name, netTotal]) => {
       const absVal = Math.abs(netTotal);
-      const raw = totalAbs > 0 ? (absVal / totalAbs) * 100 : 0;
       return {
         name,
         netTotal,
         absVal,
-        ratioText: raw > 0 && raw < 1 ? '<1%' : `${Math.round(raw)}%`,
         barWidth: 0,
       };
     });
@@ -105,8 +100,7 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                 >
                   {item.name}
                 </span>
-                <span className="shrink-0 flex items-baseline gap-1.5 font-mono">
-                  <span className="text-[0.815em] opacity-50">{item.ratioText}</span>
+                <span className="shrink-0 font-mono">
                   <AnimatedNumber
                     value={item.netTotal}
                     hasFullAccess={hasFullAccess}

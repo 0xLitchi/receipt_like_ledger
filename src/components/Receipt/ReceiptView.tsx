@@ -38,21 +38,18 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   activeCategory = 'ALL',
   onSelectCategory,
 }) => {
-  const [isPrinting, setIsPrinting] = useState(false);
+  // 首次渲染即为「正在打印」，切换月份时同样进入打印态
+  const [isPrinting, setIsPrinting] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const prevMonthRef = useRef(selectedMonth);
   const expandedRef = useRef<HTMLDivElement | null>(null);
 
-  // 当切换月份时触发 1.65s 的激光打字与出纸效果
+  // 切换月份：收起明细并重新出纸（打印态在动画完成回调里结束）
   useEffect(() => {
     if (prevMonthRef.current !== selectedMonth) {
       prevMonthRef.current = selectedMonth;
       setIsPrinting(true);
       setExpandedId(null);
-      const timer = setTimeout(() => {
-        setIsPrinting(false);
-      }, 1650);
-      return () => clearTimeout(timer);
     }
   }, [selectedMonth]);
 
@@ -123,42 +120,43 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
         <div className="absolute inset-x-3 bottom-0 h-1 bg-black rounded-full shadow-inner border-t border-slate-900" />
       </div>
 
+      {/* 出纸缝：金属槽口，纸张从这条缝里吐出 */}
+      <div className="relative z-30 w-[98%] h-2.5 -mt-px no-print printer-slot-lip" />
+
       {/* 小票展示区域 */}
-      <div className="w-full relative overflow-hidden pt-1 min-h-[300px]">
+      <div className="w-full relative overflow-hidden min-h-[300px]">
+        {/* 出纸缝处的热感扫描线：纸张吐出时同步下移 */}
         {isPrinting && (
-          <div
-            className={`absolute inset-x-0 h-2 bg-gradient-to-r from-transparent ${laserBeamClass} to-transparent pointer-events-none z-50 animate-laser-scan-slow`}
+          <motion.div
+            initial={{ top: 0, opacity: 0.9 }}
+            animate={{ top: '100%', opacity: 0 }}
+            transition={{ duration: 1.15, ease: [0.16, 0.84, 0.32, 1] }}
+            className={`absolute inset-x-0 h-3 bg-gradient-to-r from-transparent ${laserBeamClass} to-transparent pointer-events-none z-50`}
           />
         )}
 
-        <AnimatePresence mode="popLayout" initial={false}>
+        <AnimatePresence mode="wait" initial={true}>
+          {/* 出纸：外层高度从 0 长到内容高度，纸面贴顶不动，像被一点点吐出 */}
           <motion.div
             key={selectedMonth || 'all'}
-            initial={{
-              opacity: 0.1,
-              y: -90,
-              clipPath: 'inset(0% 0% 100% 0%)',
-            }}
-            animate={{
-              opacity: 1,
-              y: 0,
-              clipPath: 'inset(0% 0% 0% 0%)',
-            }}
-            exit={{
-              opacity: 0,
-              y: 120,
-              scale: 0.94,
-              transition: { duration: 0.3, ease: 'easeIn' },
-            }}
-            transition={{
-              duration: 1.65,
-              ease: [0.25, 1, 0.5, 1],
-            }}
-            className="receipt-container receipt-paper-box receipt-both-sawtooth font-pixel relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0, transition: { duration: 0.26, ease: [0.4, 0, 1, 1] } }}
+            transition={{ duration: 1.15, ease: [0.16, 0.84, 0.32, 1] }}
+            onAnimationComplete={() => setIsPrinting(false)}
+            className="relative w-full overflow-hidden"
           >
-            <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
+            <motion.div
+              initial={{ y: -12 }}
+              animate={{ y: 0 }}
+              exit={{ y: -12 }}
+              transition={{ duration: 1.15, ease: [0.16, 0.84, 0.32, 1] }}
+              className="receipt-container receipt-paper-box receipt-both-sawtooth font-pixel relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
+            >
+            {/* 纸从缝口出来的地方压一道阴影，强化「被夹住」的层次 */}
+            <div className="absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-black/25 via-black/10 to-transparent pointer-events-none z-10" />
 
-            <div className={isPrinting ? 'animate-ink-develop' : ''}>
+            <div>
               {/* 纸面顶部的月份切换：左右箭头 + 当前月份 */}
               <div
                 className={`mb-2 transition-all duration-300 ${
@@ -260,6 +258,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             </div>
 
             <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
+            </motion.div>
           </motion.div>
         </AnimatePresence>
       </div>
