@@ -123,15 +123,15 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
       {/* 出纸缝：金属槽口，纸张从这条缝里吐出 */}
       <div className="relative z-30 w-[98%] h-2.5 -mt-px no-print printer-slot-lip" />
 
-      {/* 小票展示区域 */}
-      <div className="w-full relative overflow-hidden min-h-[300px]">
+      {/* 小票展示区域：出纸过程中高度随纸张增长，不留大块空白 */}
+      <div className="w-full relative overflow-hidden">
         {/* 出纸缝处的热感扫描线：纸张吐出时同步下移 */}
         {isPrinting && (
           <motion.div
-            initial={{ top: 0, opacity: 0.9 }}
-            animate={{ top: '100%', opacity: 0 }}
-            transition={{ duration: 1.15, ease: [0.16, 0.84, 0.32, 1] }}
-            className={`absolute inset-x-0 h-3 bg-gradient-to-r from-transparent ${laserBeamClass} to-transparent pointer-events-none z-50`}
+            initial={{ top: 0, opacity: 0 }}
+            animate={{ top: ['0%', '0%', '100%'], opacity: [0.95, 0.95, 0] }}
+            transition={{ duration: 2.28, times: [0, 0.035, 0.5, 1], ease: ['linear', 'linear', 'linear'] }}
+            className={`absolute inset-x-0 h-1.5 bg-gradient-to-r from-transparent ${laserBeamClass} to-transparent pointer-events-none z-50`}
           />
         )}
 
@@ -141,16 +141,22 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             key={selectedMonth || 'all'}
             initial={{ height: 0 }}
             animate={{ height: 'auto' }}
-            exit={{ height: 0, transition: { duration: 0.26, ease: [0.4, 0, 1, 1] } }}
-            transition={{ duration: 1.15, ease: [0.16, 0.84, 0.32, 1] }}
+            exit={{ height: 0, transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
+            transition={{
+              // 预热 0.08s → 匀速吐出（匀速最能体现「纸在持续送出来」）→ 末尾极轻收住
+              duration: 2.2,
+              delay: 0.08,
+              times: [0, 0.06, 0.94, 1],
+              ease: ['easeOut', 'linear', 'linear', 'easeInOut'],
+            }}
             onAnimationComplete={() => setIsPrinting(false)}
             className="relative w-full overflow-hidden"
           >
             <motion.div
-              initial={{ y: -12 }}
+              initial={{ y: -6 }}
               animate={{ y: 0 }}
-              exit={{ y: -12 }}
-              transition={{ duration: 1.15, ease: [0.16, 0.84, 0.32, 1] }}
+              exit={{ y: -6 }}
+              transition={{ duration: 2.2, delay: 0.08, ease: 'linear' }}
               className="receipt-container receipt-paper-box receipt-both-sawtooth font-pixel relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
             >
             {/* 纸从缝口出来的地方压一道阴影，强化「被夹住」的层次 */}

@@ -8,6 +8,8 @@ import type {
 
 /** localStorage 中保存管理员会话 token 的键名 */
 const TOKEN_STORAGE_KEY = 'receipt_ledger_admin_token';
+/** localStorage 中保存 URL 访问令牌的键名（?token= 首次访问后落盘） */
+const ACCESS_TOKEN_KEY = 'receipt_ledger_access_token';
 
 export const tokenStore = {
   get(): string | null {
@@ -72,9 +74,25 @@ function readUrlCredential(name: 'token' | 'access_token' | 'admin_token'): stri
   }
 }
 
-/** URL 上携带的 ACCESS_TOKEN（用于直接分享链接访问明文） */
+/**
+ * 访问令牌：优先取地址栏，其次取已落盘的副本。
+ * `?token=` 只在首次访问时出现，之后即便地址栏被浏览器/App 抹掉也能继续读到明文。
+ */
 export function urlAccessToken(): string {
-  return readUrlCredential('token') || readUrlCredential('access_token');
+  const fromUrl = readUrlCredential('token') || readUrlCredential('access_token');
+  if (fromUrl) {
+    try {
+      localStorage.setItem(ACCESS_TOKEN_KEY, fromUrl);
+    } catch {
+      /* 隐私模式下不可写，忽略 */
+    }
+    return fromUrl;
+  }
+  try {
+    return localStorage.getItem(ACCESS_TOKEN_KEY)?.trim() || '';
+  } catch {
+    return '';
+  }
 }
 
 interface RequestOptions {
