@@ -123,40 +123,50 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
       {/* 出纸缝：金属槽口，纸张从这条缝里吐出 */}
       <div className="relative z-30 w-[98%] h-2.5 -mt-px no-print printer-slot-lip" />
 
-      {/* 小票展示区域：出纸过程中高度随纸张增长，不留大块空白 */}
-      <div className="w-full relative overflow-hidden">
+      {/* 小票展示区域：出纸过程中高度随纸张增长，不留大块空白。
+          layout 让旧纸回卷后腾出的空间立刻被新纸接上，切换月份时不会塌陷。 */}
+      <motion.div layout className="w-full relative overflow-hidden">
+        {/* 缝口基线：纸被收走后仍有一条暗色底边，机器不会悬空 */}
+        <div className="pointer-events-none absolute inset-x-[1%] top-0 h-1.5 rounded-b-[3px] bg-gradient-to-b from-black/55 to-black/10 no-print z-20" />
         {/* 出纸缝处的热感扫描线：纸张吐出时同步下移 */}
         {isPrinting && (
           <motion.div
             initial={{ top: 0, opacity: 0 }}
             animate={{ top: ['0%', '0%', '100%'], opacity: [0.95, 0.95, 0] }}
-            transition={{ duration: 2.28, times: [0, 0.035, 0.5, 1], ease: ['linear', 'linear', 'linear'] }}
+            transition={{ duration: 2.28, times: [0, 0.03, 0.5, 1], ease: ['linear', 'linear', 'linear'] }}
             className={`absolute inset-x-0 h-1.5 bg-gradient-to-r from-transparent ${laserBeamClass} to-transparent pointer-events-none z-50`}
           />
         )}
 
-        <AnimatePresence mode="wait" initial={true}>
+        <AnimatePresence mode="popLayout" initial={true}>
           {/* 出纸：外层高度从 0 长到内容高度，纸面贴顶不动，像被一点点吐出 */}
           <motion.div
             key={selectedMonth || 'all'}
             initial={{ height: 0 }}
             animate={{ height: 'auto' }}
-            exit={{ height: 0, transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
+            exit={{
+              // 回卷：高度收到 0（纸被吸回缝里）。比出纸快得多，且越收越快
+              height: 0,
+              transition: { duration: 0.26, ease: [0.32, 0, 0.85, 0.45] },
+            }}
             transition={{
-              // 预热 0.08s → 匀速吐出（匀速最能体现「纸在持续送出来」）→ 末尾极轻收住
+              // 预热 → 匀速吐出（匀速最能体现「纸在持续送出来」）→ 末尾极轻收住
+              // delay 与回卷重叠一小段，衔接更连续，几乎没有空档
               duration: 2.2,
-              delay: 0.08,
+              delay: 0.06,
               times: [0, 0.06, 0.94, 1],
               ease: ['easeOut', 'linear', 'linear', 'easeInOut'],
             }}
             onAnimationComplete={() => setIsPrinting(false)}
+            onAnimationStart={() => setIsPrinting(true)}
             className="relative w-full overflow-hidden"
           >
             <motion.div
               initial={{ y: -6 }}
               animate={{ y: 0 }}
-              exit={{ y: -6 }}
-              transition={{ duration: 2.2, delay: 0.08, ease: 'linear' }}
+              // 回卷时纸面反向贴回缝口，和出纸的位移对称
+              exit={{ y: 4, transition: { duration: 0.26, ease: [0.32, 0, 0.85, 0.45] } }}
+              transition={{ duration: 2.2, delay: 0.06, ease: 'linear' }}
               className="receipt-container receipt-paper-box receipt-both-sawtooth font-pixel relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
             >
             {/* 纸从缝口出来的地方压一道阴影，强化「被夹住」的层次 */}
@@ -267,7 +277,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             </motion.div>
           </motion.div>
         </AnimatePresence>
-      </div>
+      </motion.div>
     </div>
   );
 };
