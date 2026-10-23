@@ -68,8 +68,14 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
    */
   const [feedReady, setFeedReady] = useState(false);
   useEffect(() => {
+    // 优先用 rAF（保证首帧先按 0 高度绘制，过渡才有起点）；
+    // 后台标签页里 rAF 会被暂停，所以再用一个定时器兜底，避免纸永远卡在缝里。
     const raf = requestAnimationFrame(() => setFeedReady(true));
-    return () => cancelAnimationFrame(raf);
+    const timer = window.setTimeout(() => setFeedReady(true), 60);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
   }, []);
   /** 系统开启「减少动态效果」时，只保留必要的高度展开，不做扫描线与逐行显影 */
   const reduceMotion = useReducedMotion();
