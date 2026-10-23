@@ -4,7 +4,6 @@ import { tokenStore } from '../lib/api-client';
 import { useTransactionsQuery } from '../lib/queries';
 import { useLedger } from '../features/ledger/use-ledger';
 import { useLedgerFilters } from '../features/ledger/use-ledger-filters';
-import { FilterBar } from '../components/FilterBar';
 import { ReceiptView } from '../components/Receipt/ReceiptView';
 import { ReceiptSkeleton } from '../components/ReceiptSkeleton';
 import { AdminAuthModal } from '../components/Admin/AdminAuthModal';
@@ -67,13 +66,6 @@ export const LedgerPage: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start pt-6 pb-10 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
-      {/* 月份机械滑块 */}
-      <FilterBar
-        selectedMonth={selectedMonth}
-        onSelectMonth={(m) => patch({ month: m })}
-        recentMonths={months}
-      />
-
       {isLoading ? (
         <ReceiptSkeleton />
       ) : isError ? (
@@ -99,6 +91,8 @@ export const LedgerPage: React.FC = () => {
             onSelectCategory={(category) => patch({ category })}
             stats={stats}
             selectedMonth={selectedMonth}
+            months={months}
+            onSelectMonth={(m) => patch({ month: m })}
             hasFullAccess={hasFullAccess}
             isAdmin={isAdmin}
           />

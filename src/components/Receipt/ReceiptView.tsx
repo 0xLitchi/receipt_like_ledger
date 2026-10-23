@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { DateGroup, SummaryStats, Transaction } from '../../types';
-import { ReceiptHeader } from './ReceiptHeader';
+import { MonthSwitcher } from './MonthSwitcher';
 import { CategorySummary } from './CategorySummary';
 import { ReceiptItem } from './ReceiptItem';
 import { ReceiptFooter } from './ReceiptFooter';
@@ -16,6 +16,9 @@ interface ReceiptViewProps {
   transactions: Transaction[];
   stats: SummaryStats;
   selectedMonth: string;
+  /** 可选月份（倒序），用于纸内左右箭头切换 */
+  months: string[];
+  onSelectMonth: (month: string) => void;
   hasFullAccess?: boolean;
   isAdmin?: boolean;
   /** 当前选中的分类，用于汇总面板高亮 */
@@ -28,6 +31,8 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   transactions,
   stats,
   selectedMonth,
+  months,
+  onSelectMonth,
   hasFullAccess = true,
   isAdmin = false,
   activeCategory = 'ALL',
@@ -154,7 +159,18 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
             <div className="absolute inset-x-0 top-0 h-2 bg-gradient-to-b from-black/10 to-transparent pointer-events-none" />
 
             <div className={isPrinting ? 'animate-ink-develop' : ''}>
-              <ReceiptHeader />
+              {/* 纸面顶部的月份切换：左右箭头 + 当前月份 */}
+              <div
+                className={`mb-2 transition-all duration-300 ${
+                  expandedId ? 'opacity-40 blur-[2px]' : 'opacity-100 blur-none'
+                }`}
+              >
+                <MonthSwitcher
+                  selectedMonth={selectedMonth}
+                  months={months}
+                  onChange={onSelectMonth}
+                />
+              </div>
 
               <div
                 className={`transition-all duration-300 ${
