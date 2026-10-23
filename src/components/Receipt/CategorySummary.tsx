@@ -86,11 +86,18 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
           netTotal,
           absVal,
           ratioText,
-          barWidth: absVal > 0 ? Math.max(2, Math.min(100, rawRatio)) : 0,
+          barWidth: 0,
         };
       })
       // 按金额绝对值从大到小：条形图天然按大小阅读，比按名称排序更有信息量
       .sort((a, b) => b.absVal - a.absVal);
+
+    // 条形宽度取「相对最大分类」的比例：若用占总额比，收入远大于单项支出时
+    // 支出条会被压成一两像素，排行失去可读性
+    const maxAbs = list.reduce((max, item) => Math.max(max, item.absVal), 0);
+    list.forEach((item) => {
+      item.barWidth = maxAbs > 0 ? Math.max(item.absVal > 0 ? 2 : 0, (item.absVal / maxAbs) * 100) : 0;
+    });
 
     return { categories: list, totalAbs: totalAbsSum };
   }, [transactions, hasFullAccess]);
