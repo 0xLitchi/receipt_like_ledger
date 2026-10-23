@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { tokenStore } from '../lib/api-client';
 import { useTransactionsQuery } from '../lib/queries';
@@ -64,6 +64,39 @@ export const LedgerPage: React.FC = () => {
 
   const selectedMonth = filters.month || months[0] || '';
 
+  /** 切换月份时一并清掉分类筛选，避免筛选被带到别的月份 */
+  const handleSelectMonth = useCallback(
+    (month: string) => patch({ month, category: 'ALL' }),
+    [patch]
+  );
+
+  /**
+   * 选中分类后，点击页面其它任何位置都还原筛选。
+   *
+   * 在 pointerdown（捕获阶段）就判断落点是否属于分类汇总，并记在 ref 里；
+   * 随后的 click（冒泡阶段）再执行还原。这样分类条目自己的 onClick
+   * 已经处理完选中/切换，不会被这次外部点击清掉。
+   */
+  const categoryHitRef = useRef(false);
+  useEffect(() => {
+    const mark = (e: PointerEvent) => {
+      const el = e.target as HTMLElement | null;
+      categoryHitRef.current = !!el?.closest('[data-category-summary]');
+    };
+    document.addEventListener('pointerdown', mark, true);
+    return () => document.removeEventListener('pointerdown', mark, true);
+  }, []);
+
+  useEffect(() => {
+    if (filters.category === 'ALL') return;
+    const clear = () => {
+      if (categoryHitRef.current) return;
+      patch({ category: 'ALL' });
+    };
+    document.addEventListener('click', clear);
+    return () => document.removeEventListener('click', clear);
+  }, [filters.category, patch]);
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-start pt-6 pb-10 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
       {isLoading ? (
@@ -92,7 +125,7 @@ export const LedgerPage: React.FC = () => {
             stats={stats}
             selectedMonth={selectedMonth}
             months={months}
-            onSelectMonth={(m) => patch({ month: m })}
+            onSelectMonth={handleSelectMonth}
             hasFullAccess={hasFullAccess}
             isAdmin={isAdmin}
           />

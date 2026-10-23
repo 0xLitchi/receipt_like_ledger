@@ -73,7 +73,10 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
   const hasSelection = activeCategory !== 'ALL' && categories.some((c) => c.name === activeCategory);
 
   return (
-    <div className="my-3 p-3 border-2 border-current rounded-xl text-left font-pixel text-[0.815em] bg-current/5 shadow-xs select-none">
+    <div
+      data-category-summary
+      className="my-3 p-3 border-2 border-current rounded-xl text-left font-pixel text-[0.815em] bg-current/5 shadow-xs select-none"
+    >
       <div className="space-y-1.5">
         {categories.map((item, index) => {
           const isActive = activeCategory === item.name;

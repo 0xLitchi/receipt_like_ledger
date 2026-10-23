@@ -7,10 +7,11 @@ import { ReceiptItem } from './ReceiptItem';
 import { ReceiptFooter } from './ReceiptFooter';
 import { TransactionDetailSheet } from './TransactionDetailSheet';
 import { resolveAccessMode } from '../../features/ledger/access-mode';
-import { PackageOpen, Printer } from 'lucide-react';
+import { PrinterHead } from './PrinterHead';
+import { PackageOpen } from 'lucide-react';
 
 /** 回卷时长（秒） */
-const PRINT_RETRACT_S = 0.26;
+const PRINT_RETRACT_S = 0.6;
 /** 出纸时长（秒） */
 const PRINT_FEED_S = 2.2;
 const PRINT_START_MS = PRINT_RETRACT_S * 1000;
@@ -134,26 +135,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   const currentMode = resolveAccessMode(isAdmin, hasFullAccess);
 
-  const printerIconColorClass =
-    currentMode === 'admin'
-      ? 'text-emerald-400'
-      : currentMode === 'decrypted'
-      ? 'text-blue-400'
-      : 'text-rose-500';
-
-  const indicatorLedClass =
-    currentMode === 'admin'
-      ? isPrinting
-        ? 'bg-emerald-400 shadow-[0_0_12px_#34d399] animate-ping'
-        : 'bg-emerald-500 shadow-[0_0_8px_#10b981]'
-      : currentMode === 'decrypted'
-      ? isPrinting
-        ? 'bg-blue-400 shadow-[0_0_12px_#60a5fa] animate-ping'
-        : 'bg-blue-500 shadow-[0_0_8px_#3b82f6]'
-      : isPrinting
-      ? 'bg-rose-500 shadow-[0_0_12px_#f43f5e] animate-ping'
-      : 'bg-rose-500 shadow-[0_0_8px_#f43f5e]';
-
   const laserBeamClass =
     currentMode === 'admin'
       ? 'via-emerald-300 shadow-[0_0_25px_#34d399,0_0_45px_#10b981]'
@@ -163,21 +144,8 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-start my-2 px-1 relative w-full max-w-md mx-auto">
-      {/* 顶部拟真热敏打印机机头 */}
-      <div
-        className={`w-[104%] z-30 printer-slot-head border border-slate-700/80 rounded-t-xl p-2.5 shadow-2xl flex items-center justify-between font-pixel relative no-print mb-[-6px] transition-transform ${
-          isPrinting ? 'animate-machine-vibrate' : ''
-        }`}
-      >
-        <Printer className={`w-4 h-4 mx-auto ${printerIconColorClass} transition-colors duration-300 animate-pulse`} />
-
-        <div className={`absolute right-3 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full transition-all duration-300 ${indicatorLedClass}`} />
-
-        <div className="absolute inset-x-3 bottom-0 h-1 bg-black rounded-full shadow-inner border-t border-slate-900" />
-      </div>
-
-      {/* 出纸缝：金属槽口，纸张从这条缝里吐出 */}
-      <div className="relative z-30 w-[98%] h-2.5 -mt-px no-print printer-slot-lip" />
+      {/* 拟物白色打印机机头（含出纸槽） */}
+      <PrinterHead isPrinting={isPrinting} mode={currentMode} />
 
       {/* 小票展示区域：出纸过程中高度随纸张增长，不留大块空白 */}
       <div className="w-full relative overflow-hidden">
@@ -210,14 +178,19 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                     times: [0, 0.06, 0.94, 1],
                     ease: ['easeOut', 'linear', 'linear', 'easeInOut'],
                   }
-                : { duration: PRINT_RETRACT_S, ease: [0.32, 0, 0.85, 0.45] }
+                : { duration: PRINT_RETRACT_S, ease: [0.55, 0, 0.9, 0.5] }
             }
             className="relative w-full overflow-hidden"
           >
             <motion.div
-              initial={{ y: -6 }}
-              animate={{ y: 0 }}
-              transition={{ duration: PRINT_FEED_S, ease: 'linear' }}
+              // 吸入阶段纸面随高度收缩向上位移，吐出阶段从缝口位置落下
+              initial={phase === 'feeding' ? { y: -6 } : false}
+              animate={{ y: phase === 'retracting' ? -14 : 0 }}
+              transition={
+                phase === 'feeding'
+                  ? { duration: PRINT_FEED_S, ease: 'linear' }
+                  : { duration: PRINT_RETRACT_S, ease: [0.55, 0, 0.9, 0.5] }
+              }
               className="receipt-container receipt-paper-box receipt-both-sawtooth font-pixel relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
             >
             {/* 纸从缝口出来的地方压一道阴影，强化「被夹住」的层次 */}

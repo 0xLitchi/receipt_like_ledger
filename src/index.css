@@ -78,18 +78,18 @@ body {
 /* 小票纸张：米色纸面 + 墨色文字（独立于全局配色，避免被暗色主题吞掉） */
 .receipt-paper-box {
   font-size: calc(1rem * var(--receipt-font-scale));
-  background-color: #faf7f0;
-  background-image: 
-    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.012) 3px, transparent 4px),
-    radial-gradient(rgba(0, 0, 0, 0.14) 0.4px, transparent 0.5px);
+  background-color: #ffffff;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.010) 3px, transparent 4px),
+    radial-gradient(rgba(0, 0, 0, 0.10) 0.4px, transparent 0.5px);
   background-size: 100% 100%, 5px 5px;
   color: #111827;
   box-shadow:
     0 1px 1px rgba(0,0,0,0.15),
-    0 10px 0 -5px #eee,
-    0 10px 1px -4px rgba(0,0,0,0.15),
-    0 20px 0 -10px #e5e5e5,
-    0 20px 1px -9px rgba(0,0,0,0.15),
+    0 10px 0 -5px #f4f4f4,
+    0 10px 1px -4px rgba(0,0,0,0.12),
+    0 20px 0 -10px #ececec,
+    0 20px 1px -9px rgba(0,0,0,0.12),
     0 30px 40px -10px rgba(0, 0, 0, 0.6);
 }
 
