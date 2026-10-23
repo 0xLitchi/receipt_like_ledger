@@ -72,6 +72,7 @@ export const TransactionDetailSheet: React.FC<TransactionDetailSheetProps> = ({
                     value={transaction.amount}
                     hasFullAccess={hasFullAccess}
                     isPrinting={isPrinting}
+                    copyable
                     className={`font-pixel text-[0.951em] ${amountColor(transaction.amount, hasFullAccess)}`}
                   />
                 }

@@ -89,11 +89,18 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
               type="button"
               onClick={() => onSelectCategory?.(isActive ? 'ALL' : item.name)}
               aria-pressed={isActive}
+              data-selected={isActive}
               title={isActive ? '取消分类筛选' : `只看 ${item.name}`}
-              className={`block w-full text-left rounded-md px-1 py-1 transition-all duration-200 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-current/40 ${
-                isActive ? 'bg-current/10' : dimmed ? 'opacity-35 hover:opacity-70' : 'hover:bg-current/5'
+              className={`relative block w-full text-left rounded-md pl-2.5 pr-1 py-1 transition-[opacity,background-color,transform] duration-200 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-current/40 press-fx ${
+                isActive
+                  ? 'bg-current/10'
+                  : dimmed
+                  ? 'opacity-35 can-hover:hover:opacity-70'
+                  : 'can-hover:hover:bg-current/5'
               }`}
             >
+              {/* 选中标记：左侧墨条由下往上「盖」上去，比整行反白更像盖章 */}
+              <span className="cat-mark no-print" aria-hidden />
               {/* 名称 » 占比 » 金额 */}
               <div className="flex items-baseline justify-between gap-2">
                 <span
@@ -113,21 +120,23 @@ export const CategorySummary: React.FC<CategorySummaryProps> = ({
                 </span>
               </div>
 
-              {/* 网点墨条：点阵填充模拟热敏打印的灰度 */}
+              {/* 网点墨条：点阵填充模拟热敏打印的灰度；展开时墨头从左往右扫过 */}
               <div className="mt-1 h-[8px] rounded-[1px] overflow-hidden bg-current/[0.10] border border-current/[0.12]">
                 <motion.div
-                  className="h-full"
+                  className="h-full ink-sweep"
                   key={motionKey}
                   initial={{ width: 0 }}
                   animate={{ width: `${item.barWidth}%` }}
-                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: index * 0.03 }}
+                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: index * 0.04 }}
                   style={{
+                    animationDelay: `${index * 40}ms`,
                     backgroundImage: isIncome
                       ? 'radial-gradient(rgba(4,108,75,1) 1px, transparent 1.1px)'
                       : 'radial-gradient(rgba(180,16,55,1) 1px, transparent 1.1px)',
                     backgroundSize: '3px 3px',
                     backgroundColor: isIncome ? 'rgba(5,150,105,0.20)' : 'rgba(225,29,72,0.20)',
-                    filter: dimmed ? 'grayscale(0.5)' : 'none',
+                    transition: 'filter 200ms linear',
+                    filter: dimmed ? 'grayscale(0.55) opacity(0.7)' : 'none',
                     WebkitPrintColorAdjust: 'exact',
                   }}
                 />
