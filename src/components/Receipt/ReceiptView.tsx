@@ -62,7 +62,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expandedRef = useRef<HTMLDivElement | null>(null);
-  /** 分类筛选：先用快照把纸收回去，再像切月一样吐出筛选后的结果 */
   /**
    * 首屏出纸开关：纸槽初始是 0 高度（收在缝里），挂载后下一帧再置为 true，
    * 由 CSS 过渡把 0fr 推到 1fr，得到真实的首屏吐纸。
@@ -124,15 +123,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
     snapshot && phase === 'retracting'
       ? snapshot
       : { month: selectedMonth, dateGroups, transactions, stats };
-
-  /**
-   * 分类筛选：数据是内存态，点下去立刻生效，不做回卷动画。
-   * 「回卷 → 再打印」留给换月这种真正的「换一张票」，筛选只做轻量的墨条与行标记，
-   * 否则每次点分类都要等纸吐完，反而拖慢阅读。
-   */
-  const selectCategory = (category: string) => {
-    onSelectCategory?.(category);
-  };
 
   /**
    * 点击展开区域以外的地方收起明细。
@@ -243,7 +233,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 hasFullAccess={hasFullAccess}
                 isPrinting={isPrinting}
                 activeCategory={activeCategory}
-                onSelectCategory={selectCategory}
+                onSelectCategory={onSelectCategory}
               />
               </div>
 
