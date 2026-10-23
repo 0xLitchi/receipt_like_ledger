@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import type { DateGroup, SummaryStats, Transaction } from '../../types';
 import { MonthSwitcher } from './MonthSwitcher';
 import { CategorySummary } from './CategorySummary';
@@ -13,7 +13,7 @@ import { PackageOpen } from 'lucide-react';
 /** 回卷时长（秒） */
 const PRINT_RETRACT_S = 0.6;
 /** 出纸时长（秒） */
-const PRINT_FEED_S = 2.2;
+const PRINT_FEED_S = 1.6;
 const PRINT_START_MS = PRINT_RETRACT_S * 1000;
 const PRINT_FEED_MS = PRINT_FEED_S * 1000;
 
@@ -62,6 +62,18 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expandedRef = useRef<HTMLDivElement | null>(null);
+  /** 分类筛选：先用快照把纸收回去，再像切月一样吐出筛选后的结果 */
+  /**
+   * 首屏出纸开关：纸槽初始是 0 高度（收在缝里），挂载后下一帧再置为 true，
+   * 由 CSS 过渡把 0fr 推到 1fr，得到真实的首屏吐纸。
+   */
+  const [feedReady, setFeedReady] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setFeedReady(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  /** 系统开启「减少动态效果」时，只保留必要的高度展开，不做扫描线与逐行显影 */
+  const reduceMotion = useReducedMotion();
 
   /**
    * 打印态（指示灯闪烁 + 扫描线）的生命周期。
@@ -85,12 +97,15 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
   });
 
   const isFirstRender = useRef(true);
+  /** 首屏：只做出纸，不播放落纸轻震，避免一进来就整张纸弹一下 */
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       setPhase('feeding');
       return;
     }
+    setIsFirstLoad(false);
     // 冻结切换前的那一屏，回卷期间继续显示，避免闪到新数据
     setSnapshot(lastPropsRef.current);
     setExpandedId(null);
@@ -109,6 +124,15 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
     snapshot && phase === 'retracting'
       ? snapshot
       : { month: selectedMonth, dateGroups, transactions, stats };
+
+  /**
+   * 分类筛选：数据是内存态，点下去立刻生效，不做回卷动画。
+   * 「回卷 → 再打印」留给换月这种真正的「换一张票」，筛选只做轻量的墨条与行标记，
+   * 否则每次点分类都要等纸吐完，反而拖慢阅读。
+   */
+  const selectCategory = (category: string) => {
+    onSelectCategory?.(category);
+  };
 
   /**
    * 点击展开区域以外的地方收起明细。
@@ -152,7 +176,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
         {/* 缝口基线：纸被收走后仍有一条暗色底边，机器不会悬空 */}
         <div className="pointer-events-none absolute inset-x-[1%] top-0 h-1.5 rounded-b-[3px] bg-gradient-to-b from-black/55 to-black/10 no-print z-20" />
         {/* 出纸缝处的热感扫描线：纸张吐出时同步下移 */}
-        {isPrinting && (
+        {isPrinting && !reduceMotion && (
           <motion.div
             initial={{ top: 0, opacity: 0 }}
             animate={{ top: ['0%', '0%', '100%'], opacity: [0.95, 0.95, 0] }}
@@ -161,30 +185,17 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
           />
         )}
 
-        {/* 出纸：外层高度从 0 长到内容高度，纸面贴顶不动，像被一点点吐出。
-            key 换月即重挂载，直接播放「回卷 + 吐出」完整序列，不再依赖 AnimatePresence
-            的退出状态机（它的 wait 模式曾导致切月后不渲染）。 */}
-        <motion.div
-            // key 只在「吐出」时变化，回卷复用同一元素，避免重挂载闪现满高纸
-            key={phase === 'feeding' ? `feed:${selectedMonth || 'all'}` : 'retract'}
-            // 吐出阶段从 0 展开；回卷阶段沿用当前高度，不重挂载
-            initial={phase === 'feeding' ? { height: 0 } : false}
-            animate={{ height: phase === 'feeding' ? 'auto' : 0 }}
-            transition={
-              phase === 'feeding'
-                ? {
-                    // 预热 → 匀速吐出（匀速最能体现「纸在持续送出来」）→ 末尾极轻收住
-                    duration: PRINT_FEED_S,
-                    times: [0, 0.06, 0.94, 1],
-                    ease: ['easeOut', 'linear', 'linear', 'easeInOut'],
-                  }
-                : { duration: PRINT_RETRACT_S, ease: [0.55, 0, 0.9, 0.5] }
-            }
-            className="relative w-full overflow-hidden"
+        {/* 出纸：外层用 grid 行高 0 ↔ 1fr 做高度过渡，纸面贴顶不动，像被一点点吐出。
+            data-feed：首屏/回卷 = 收（0.3s），出纸 = 按 --paper-feed（1.6s）匀速吐出。
+            用 CSS 过渡而不是 JS 高度动画，换月时不会因为重挂载丢失旧高度。 */}
+        <div
+            className="paper-slot relative w-full"
+            data-feed={!feedReady || phase === 'retracting' ? 'in' : 'out'}
+            style={{ '--paper-feed': `${PRINT_FEED_S}s` } as React.CSSProperties}
           >
             <motion.div
               // 吸入阶段纸面随高度收缩向上位移，吐出阶段从缝口位置落下
-              initial={phase === 'feeding' ? { y: -6 } : false}
+              initial={false}
               animate={{ y: phase === 'retracting' ? -14 : 0 }}
               transition={
                 phase === 'feeding'
@@ -192,11 +203,22 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                   : { duration: PRINT_RETRACT_S, ease: [0.55, 0, 0.9, 0.5] }
               }
               className="receipt-container receipt-paper-box receipt-both-sawtooth font-pixel relative w-full p-4 sm:p-5 rounded-sm shadow-2xl"
+              style={{ '--paper-wipe': `${PRINT_FEED_S}s` } as React.CSSProperties}
             >
             {/* 纸从缝口出来的地方压一道阴影，强化「被夹住」的层次 */}
             <div className="absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-black/25 via-black/10 to-transparent pointer-events-none z-10" />
 
-            <div>
+            {/* 打印纸分页：先把纸染黑，再由上而下「擦」出黑色（mask 只影响绘制，不参与布局）。
+                行末保留 28% 的淡出，像热敏头还没走到的那一截；结束时正好停在行边界上。 */}
+            <div
+              key={`wipe:${shown.month || 'all'}`}
+              className={`relative ${
+                phase === 'feeding' && !reduceMotion
+                  ? `paper-reveal${isFirstLoad ? '' : ' paper-settle'}`
+                  : ''
+              }`}
+              style={{ '--paper-feather': '28%' } as React.CSSProperties}
+            >
               {/* 纸面顶部的月份切换：左右箭头 + 当前月份 */}
               <div
                 className={`mb-2 transition-all duration-300 ${
@@ -207,6 +229,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                   selectedMonth={shown.month}
                   months={months}
                   onChange={onSelectMonth}
+                  isPrinting={phase === 'feeding'}
                 />
               </div>
 
@@ -220,7 +243,7 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 hasFullAccess={hasFullAccess}
                 isPrinting={isPrinting}
                 activeCategory={activeCategory}
-                onSelectCategory={onSelectCategory}
+                onSelectCategory={selectCategory}
               />
               </div>
 
@@ -236,9 +259,12 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                 </div>
 
                 {shown.dateGroups.length === 0 ? (
-                  <div className="py-12 text-center text-[0.815em] opacity-50 font-pixel flex flex-col items-center gap-2">
-                    <PackageOpen className="w-7 h-7 opacity-40" />
-                    <span>本月暂无记账明细</span>
+                  <div className="py-12 text-center text-[0.815em] opacity-50 font-pixel flex flex-col items-center gap-2.5">
+                    <span className="grid place-items-center w-11 h-11 rounded-full border-2 border-dashed border-current/25">
+                      <PackageOpen className="w-5 h-5 opacity-40" />
+                    </span>
+                    <span className="tracking-wide">本月暂无记账明细</span>
+                    <span className="text-[0.75em] opacity-70 tracking-widest">— NO RECORDS —</span>
                   </div>
                 ) : (
                   shown.dateGroups.map((group) => (
@@ -293,13 +319,14 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
                   stats={shown.stats}
                   hasFullAccess={hasFullAccess}
                   isPrinting={isPrinting}
+                  month={shown.month}
                 />
               </div>
             </div>
 
             <div className="absolute inset-x-0 bottom-0 h-2 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
             </motion.div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

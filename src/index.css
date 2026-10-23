@@ -64,6 +64,19 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── 动效 token ─────────────────────────────────────────────
+ * 时长与缓动集中在这里，小票各处共用同一套节奏：
+ * 即时反馈 ~120ms、状态切换 ~200ms、入场 ~380ms（以纸带展开为主）。
+ */
+:root {
+  --ease-out-print: cubic-bezier(0.16, 1, 0.3, 1);   /* 快出慢收：纸被吐出 */
+  --ease-in-print: cubic-bezier(0.55, 0, 0.9, 0.5);  /* 慢起快收：纸被收回 */
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-tap: 120ms;
+  --dur-state: 200ms;
+  --dur-in: 380ms;
+}
+
 /* 页面底色：深色网格，衬托米色小票（不再依赖 body class，避免 SPA 路由切换时丢失） */
 body {
   background-color: #0f172a;
@@ -217,6 +230,245 @@ body {
   border-bottom: 3px double currentColor;
   opacity: 0.5;
   margin: 10px 0;
+}
+
+/* ── 动效层 ─────────────────────────────────────────────────
+ * 只用 transform / opacity / clip-path 等合成友好的属性，
+ * 避免动画过程中触发布局；纸面内部的「打印」质感靠 CSS 完成，
+ * 时间线与出纸时长对齐（见 ReceiptView 的 --paper-wipe）。
+ */
+
+/* 指针悬停只在真正支持悬停的设备上生效，避免触屏「点一下就卡在高亮态」 */
+@custom-variant can-hover (@media (hover: hover) and (pointer: fine));
+
+/* 纸面内容的「逐行打印」：随出纸进度自上而下显影（mask 只影响绘制，不参与布局） */
+@keyframes paperWipe {
+  from {
+    -webkit-mask-position: 0 100%;
+    mask-position: 0 100%;
+  }
+  to {
+    -webkit-mask-position: 0 0%;
+    mask-position: 0 0%;
+  }
+}
+
+.paper-reveal {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--paper-feather, 0%)),
+    rgba(0, 0, 0, 0.16) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--paper-feather, 0%)),
+    rgba(0, 0, 0, 0.16) 100%
+  );
+  -webkit-mask-size: 100% 200%;
+  mask-size: 100% 200%;
+  animation: paperWipe var(--paper-wipe, 1.2s) linear both;
+}
+
+/* 新月份弹出时纸面轻震一下，像刚被送纸滚轮咬住 */
+@keyframes paperSettle {
+  0% { transform: translate3d(0, -3px, 0); }
+  60% { transform: translate3d(0, 1px, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+.paper-settle {
+  animation: paperSettle calc(var(--dur-in) * 1.2) var(--ease-out-print) both;
+  will-change: transform;
+}
+
+/* 两个纸面动效同时挂上时（显影 + 落纸轻震），按顺序叠成一条 animation 列表 */
+.paper-reveal.paper-settle {
+  animation:
+    paperWipe var(--paper-wipe, 1.2s) linear both,
+    paperSettle calc(var(--dur-in) * 1.2) var(--ease-out-print) both;
+}
+
+/* 墨条：网点随长度一起浮现，像墨头一笔扫过 */
+@keyframes inkSweep {
+  from {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0.35;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+.ink-sweep {
+  animation: inkSweep 520ms var(--ease-out-print) both;
+  will-change: clip-path;
+}
+
+/* 分类被选中：左侧墨色标记「盖」上去 */
+.cat-mark {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  transform-origin: top;
+  transform: scaleY(0);
+  transition: transform 220ms var(--ease-out-print), opacity 180ms linear;
+  opacity: 0;
+}
+
+[data-selected='true'] > .cat-mark {
+  transform: scaleY(1);
+  opacity: 0.85;
+}
+
+/* 月份切换：旧月份由右向左卷走，新月份从左侧贴上（方向 = 时间方向） */
+@keyframes monthInNext {
+  from { opacity: 0; transform: translate3d(10px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes monthInPrev {
+  from { opacity: 0; transform: translate3d(-10px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.month-roll-next {
+  animation: monthInNext 240ms var(--ease-out-print) both;
+}
+
+.month-roll-prev {
+  animation: monthInPrev 240ms var(--ease-out-print) both;
+}
+
+/* 按钮按下的「机械按键」反馈：极短、极小的位移，不做弹跳 */
+.press-fx {
+  transition: transform var(--dur-tap) var(--ease-inout), opacity var(--dur-state) linear,
+    background-color var(--dur-state) linear, color var(--dur-state) linear;
+}
+
+.press-fx:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+}
+
+/* 金额被点中时轻轻记一下（复制 / 聚焦），只用 opacity 强调，不改字号以免跳动 */
+@keyframes amountNudge {
+  0% { transform: translateY(0); }
+  35% { transform: translateY(-1.5px); }
+  100% { transform: translateY(0); }
+}
+
+.amount-nudge {
+  animation: amountNudge 260ms var(--ease-out-print);
+}
+
+/* 提示条：从纸缝处滑出 */
+@keyframes tipIn {
+  from { opacity: 0; transform: translate3d(0, -4px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.tip-in {
+  animation: tipIn 200ms var(--ease-out-print) both;
+}
+
+/* 登录失败：输入框横向抖一下（幅度小、单次） */
+@keyframes fieldShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  45% { transform: translateX(3px); }
+  70% { transform: translateX(-2px); }
+}
+
+.field-shake {
+  animation: fieldShake 320ms var(--ease-inout);
+}
+
+/* 后台对话 / 弹窗入场 */
+@keyframes modalIn {
+  from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.985); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+.modal-in {
+  animation: modalIn 220ms var(--ease-out-print) both;
+}
+
+/* 减少动态效果：保留状态变化，去掉位移 / 滚动 / 闪烁 / 遮罩动画 */
+@media (prefers-reduced-motion: reduce) {
+  /* 循环类动画（打印震动、激光扫描、骨架脉冲）一律停住，静态状态本身已能说明结果 */
+  .animate-machine-vibrate,
+  .animate-focus-fade,
+  .animate-polaroid-laser,
+  .animate-ink-develop,
+  .animate-pulse {
+    animation: none !important;
+  }
+
+  .paper-reveal,
+  .paper-settle,
+  .ink-sweep,
+  .month-roll-next,
+  .month-roll-prev,
+  .amount-nudge,
+  .tip-in,
+  .modal-in,
+  .field-shake {
+    animation: none !important;
+  }
+
+  .paper-reveal {
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+  }
+
+  .press-fx:active:not(:disabled) {
+    transform: none;
+  }
+
+  .cat-mark {
+    transition: opacity 150ms linear;
+  }
+
+  :root {
+    --dur-tap: 0ms;
+    --dur-state: 1ms;
+  }
+}
+
+/* ── 纸带展开 / 收回 ────────────────────────────────────────
+ * 用 grid 行高 0 ↔ 1fr 做高度动画：浏览器能对 1fr 做插值，
+ * 重新挂载时也不会丢失旧高度（framer 的 height:'auto' 在重挂载时会瞬间塌成 0）。
+ * data-feed 标记当前处于「回卷」还是「吐纸」，切换时由 class 驱动过渡。
+ */
+.paper-slot {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--paper-feed, 1600ms) linear;
+}
+
+.paper-slot[data-feed='out'] {
+  grid-template-rows: 1fr;
+}
+
+.paper-slot > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 回卷：快出慢收，纸被尽快吸回缝里 */
+.paper-slot[data-feed='in'] {
+  transition: grid-template-rows 0.3s var(--ease-in-print);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-slot,
+  .paper-slot[data-feed='in'] {
+    transition-duration: 1ms;
+  }
 }
 
 @media print {

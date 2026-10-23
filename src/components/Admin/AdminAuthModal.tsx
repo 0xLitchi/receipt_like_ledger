@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { storage } from '../../utils/storage';
 import { Lock, KeyRound, Eye, EyeOff, ShieldCheck, AlertCircle, X } from 'lucide-react';
 
@@ -17,6 +17,18 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  /** 每次失败自增，作为 key 让抖动动画重新播放（同一句错误连按两次也要有反馈） */
+  const [errorCount, setErrorCount] = useState(0);
+
+  // Esc 关闭，与其余浮层保持一致
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -24,6 +36,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
     e.preventDefault();
     if (!password) {
       setError('请输入管理员密码');
+      setErrorCount((n) => n + 1);
       return;
     }
 
@@ -38,19 +51,21 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
       onSuccess();
     } else {
       setError('密码错误或服务端未配置 ADMIN_PASSWORD');
+      setErrorCount((n) => n + 1);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md no-print select-none">
-      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-slate-100 relative overflow-hidden transform transition-all">
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-slate-100 relative overflow-hidden modal-in">
         {/* 顶部绚丽渐变霓虹遮罩 */}
         <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-indigo-500" />
 
         {/* 关闭按钮 */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+          aria-label="关闭"
+          className="absolute top-4 right-4 text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded-lg transition-colors press-fx focus-visible:outline-2 focus-visible:outline-emerald-500/70 focus-visible:outline-offset-2"
         >
           <X className="w-5 h-5" />
         </button>
@@ -75,7 +90,11 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
 
         {/* 错误提示 */}
         {error && (
-          <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-mono flex items-center gap-2 animate-shake">
+          <div
+            key={errorCount}
+            role="alert"
+            className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-mono flex items-center gap-2 field-shake"
+          >
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>
@@ -102,7 +121,8 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 text-slate-400 hover:text-slate-200 p-1 transition-colors"
+                aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                className="absolute right-3 text-slate-400 hover:text-slate-200 p-1 transition-colors rounded press-fx focus-visible:outline-2 focus-visible:outline-emerald-500/70 focus-visible:outline-offset-2"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -113,14 +133,14 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-mono font-bold transition-colors border border-slate-700"
+              className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-mono font-bold transition-colors border border-slate-700 press-fx focus-visible:outline-2 focus-visible:outline-slate-400/60 focus-visible:outline-offset-2"
             >
               取消
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-mono font-bold shadow-lg shadow-emerald-600/20 transition-colors disabled:opacity-50"
+              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-mono font-bold shadow-lg shadow-emerald-600/20 transition-colors disabled:opacity-50 disabled:cursor-progress press-fx focus-visible:outline-2 focus-visible:outline-emerald-400 focus-visible:outline-offset-2"
             >
               {loading ? '正在验证...' : '确认进入'}
             </button>
