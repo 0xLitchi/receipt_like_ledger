@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AdminPanel } from '../components/Admin/AdminPanel';
 import { useTransactionMutations, useTransactionsQuery } from '../lib/queries';
 import { queryClient } from '../lib/query-client';
-import { logoutAdmin, tokenStore } from '../lib/api-client';
+import { checkAdminSession, logoutAdmin, tokenStore } from '../lib/api-client';
 
 export const AdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,6 +17,22 @@ export const AdminPage: React.FC = () => {
     if (!tokenStore.hasSession()) navigate('/', { replace: true });
   }, [navigate]);
 
+  // 本地 token 可能早已失效（会话过期 / 服务端重启 / 换了部署）。
+  // 失效时后台只能读到脱敏数据、日志全 401、写入静默失败，所以先探测再放行。
+  React.useEffect(() => {
+    if (!tokenStore.hasSession()) return;
+    let cancelled = false;
+    void checkAdminSession().then((valid) => {
+      if (cancelled || valid) return;
+      logoutAdmin();
+      queryClient.clear();
+      navigate('/', { replace: true });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
+
   return (
     <AdminPanel
       isOpen
@@ -26,10 +42,8 @@ export const AdminPage: React.FC = () => {
         await refetch();
       }}
       onBatchSave={async (items, deletedIds) => {
-        const result = await batch.mutateAsync({ items, deletedIds });
-        if (result.failed > 0) {
-          throw new Error(`有 ${result.failed} 条记录保存失败，请刷新后重试`);
-        }
+        // 失败明细与 401 中断由 batchSaveTransactions 直接抛出，这里只需等待结果
+        await batch.mutateAsync({ items, deletedIds });
       }}
       onLogout={async () => {
         await logoutAdmin();

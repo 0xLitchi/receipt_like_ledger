@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Transaction } from '../../types';
 import { queryClient } from '../../lib/query-client';
 import { queryKeys } from '../../lib/queries';
-import { fetchActivityLogs, fetchApiLogs, fetchTransactions } from '../../lib/api-client';
+import { ApiError, fetchActivityLogs, fetchApiLogs, fetchTransactions } from '../../lib/api-client';
 import type { ActivityLog, ApiRequestLog, ThemeStyle } from '../../types';
 import {
   Plus,
@@ -100,6 +100,15 @@ const parseRawLedgerText = (text: string): Transaction[] => {
   return results;
 };
 
+// 日志加载失败的可读原因：401 单独提示，避免被当成“暂无记录”
+const describeLogError = (e: unknown): string => {
+  if (e instanceof ApiError) {
+    if (e.status === 401) return '登录状态已失效，请退出后台重新登录后再查看';
+    return e.message;
+  }
+  return e instanceof Error ? e.message : '未知错误';
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   isOpen,
   onClose,
@@ -126,15 +135,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // 保存预览二次确认弹窗
   const [showSavePreviewModal, setShowSavePreviewModal] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // 日志列表状态
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
   const [logSearchQuery, setLogSearchQuery] = useState('');
 
   // API 请求日志列表状态 (Req Log)
   const [apiLogs, setApiLogs] = useState<ApiRequestLog[]>([]);
   const [loadingApiLogs, setLoadingApiLogs] = useState(false);
+  const [apiLogsError, setApiLogsError] = useState<string | null>(null);
   const [apiLogSearchQuery, setApiLogSearchQuery] = useState('');
 
   // 解析文本导入弹窗状态
@@ -183,6 +195,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // 加载数据变更日志
   const loadLogs = useCallback(async () => {
     setLoadingLogs(true);
+    setLogsError(null);
     try {
       const data = await queryClient.fetchQuery({
         queryKey: queryKeys.activityLogs,
@@ -190,7 +203,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
       setLogs(data);
     } catch (e) {
-      console.warn('加载变更日志失败', e);
+      setLogs([]);
+      setLogsError(describeLogError(e));
     } finally {
       setLoadingLogs(false);
     }
@@ -199,6 +213,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // 加载 API 请求日志 (Req Log)
   const loadApiLogs = useCallback(async () => {
     setLoadingApiLogs(true);
+    setApiLogsError(null);
     try {
       const data = await queryClient.fetchQuery({
         queryKey: queryKeys.apiLogs,
@@ -206,7 +221,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
       setApiLogs(data);
     } catch (e) {
-      console.warn('加载请求日志失败', e);
+      setApiLogs([]);
+      setApiLogsError(describeLogError(e));
     } finally {
       setLoadingApiLogs(false);
     }
@@ -474,6 +490,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
 
     setSaving(true);
+    setSaveError(null);
     try {
       // 获取所有变更项（新增行 + 修改行）
       const changedItems: Transaction[] = [
@@ -495,10 +512,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setStatusMsg({ type: 'success', text: `保存成功！共提交 ${pendingChanges.totalCount} 项变动 (${timeStr})` });
       setTimeout(() => setStatusMsg(null), 3500);
     } catch (err: any) {
-      setStatusMsg({ type: 'error', text: '保存失败: ' + (err.message || '网络或凭证错误') });
+      const message = err?.message || '网络或凭证错误';
+      setSaveError(message);
+      setStatusMsg({ type: 'error', text: '保存失败: ' + message });
     } finally {
       setSaving(false);
     }
+  };
+
+  // 保存失败后刷新：把行数据与待删除列表一并还原到服务端真实状态
+  const handleReloadAfterFailure = async () => {
+    setSaveError(null);
+    await handleRefreshData();
   };
 
   // 导出 CSV
@@ -655,7 +680,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="flex items-center gap-2.5">
                 {/* 保存变动主按钮 */}
                 <button
-                  onClick={() => setShowSavePreviewModal(true)}
+                  onClick={() => {
+                    setSaveError(null);
+                    setShowSavePreviewModal(true);
+                  }}
                   disabled={pendingChanges.totalCount === 0 || saving}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all shadow-sm cursor-pointer ${
                     pendingChanges.totalCount > 0
@@ -998,6 +1026,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           正在加载活动日志...
                         </td>
                       </tr>
+                    ) : logsError ? (
+                      <tr>
+                        <td colSpan={4} className="py-10 text-center font-mono">
+                          <div className="inline-flex flex-col items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 text-rose-700 font-bold">
+                              <AlertCircle className="w-4 h-4" />
+                              变更日志加载失败
+                            </span>
+                            <span className="text-slate-500">{logsError}</span>
+                            <button
+                              onClick={loadLogs}
+                              className="mt-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold border border-slate-300 cursor-pointer"
+                            >
+                              重试
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
                     ) : filteredLogs.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="py-12 text-center text-slate-400 font-mono">
@@ -1118,6 +1164,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <tr>
                         <td colSpan={8} className="py-12 text-center text-slate-400 font-mono">
                           正在加载 API 请求日志...
+                        </td>
+                      </tr>
+                    ) : apiLogsError ? (
+                      <tr>
+                        <td colSpan={8} className="py-10 text-center font-mono">
+                          <div className="inline-flex flex-col items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 text-rose-700 font-bold">
+                              <AlertCircle className="w-4 h-4" />
+                              请求日志加载失败
+                            </span>
+                            <span className="text-slate-500">{apiLogsError}</span>
+                            <button
+                              onClick={loadApiLogs}
+                              className="mt-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold border border-slate-300 cursor-pointer"
+                            >
+                              重试
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ) : filteredApiLogs.length === 0 ? (
@@ -1288,6 +1352,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </p>
 
             <div className="flex-1 overflow-auto space-y-4 pr-1 mb-4">
+              {/* 提交失败：错误提示必须留在弹窗内，状态栏在遮罩层下面看不到 */}
+              {saveError && (
+                <div className="border border-rose-300 bg-rose-50 rounded-xl px-3 py-2.5 text-xs text-rose-800 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-bold">本次提交未完成，部分变动可能已经写入</p>
+                      <p className="text-rose-700 break-all">{saveError}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleReloadAfterFailure}
+                    disabled={refreshingData}
+                    className="shrink-0 px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                  >
+                    重新加载数据
+                  </button>
+                </div>
+              )}
+
               {/* 1. 新增项列表 */}
               {pendingChanges.added.length > 0 && (
                 <div className="border border-emerald-200 rounded-xl overflow-hidden bg-emerald-50/20">

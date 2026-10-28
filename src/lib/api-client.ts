@@ -104,6 +104,16 @@ interface RequestOptions {
   query?: Record<string, string | undefined>;
 }
 
+/** 统一请求头：携带当前会话 token */
+function requestHeader(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Cache-Control': 'no-cache, no-store',
+  };
+  const token = tokenStore.get();
+  if (token) headers['X-Admin-Token'] = token;
+  return headers;
+}
+
 /**
  * 统一的 API 请求入口：注入 X-Admin-Token、解包 { success, data }、统一抛错。
  * 所有写接口优先使用会话 token，不再把密码拼进 URL。
@@ -126,13 +136,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<A
     });
   }
 
-  const headers: Record<string, string> = {
-    'Cache-Control': 'no-cache, no-store',
-  };
+  const headers: Record<string, string> = requestHeader();
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-
-  const token = auth ? tokenStore.get() || adminTokenParam : null;
-  if (token) headers['X-Admin-Token'] = token;
 
   let res: Response;
   try {
@@ -176,6 +181,27 @@ export async function verifyAdmin(password: string): Promise<boolean> {
   const token = envelope && typeof envelope.token === 'string' ? envelope.token : undefined;
   if (json.success === true && token) tokenStore.set(token);
   return json.success === true;
+}
+
+/**
+ * 校验本地会话 token 是否仍然有效（服务器重启、会话过期、换了部署都会让旧 token 失效）。
+ * 打的是无副作用的探测接口，不会写任何数据。
+ */
+export async function checkAdminSession(): Promise<boolean> {
+  if (!tokenStore.get()) return false;
+  try {
+    const url = new URL('/api/api-logs', window.location.origin);
+    url.searchParams.set('probe', '1');
+    url.searchParams.set('_t', String(Date.now()));
+    const res = await fetch(url.toString(), {
+      headers: requestHeader(),
+      cache: 'no-store',
+    });
+    return res.status !== 401;
+  } catch {
+    // 网络异常时不判定失效，避免把正常会话踢下线
+    return true;
+  }
 }
 
 export async function logoutAdmin(): Promise<void> {
@@ -225,19 +251,29 @@ export async function deleteTransaction(id: string): Promise<void> {
   await request(`/api/transactions/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-/** 批量落库：先删后写，逐条执行并汇总失败数 */
+/** 批量落库：先删后写，逐条执行并汇总失败数；凭证失效时立即中止并抛出 */
 export async function batchSaveTransactions(
   changedItems: Transaction[],
   deletedIds: string[]
 ): Promise<{ failed: number }> {
   let failed = 0;
+  let firstError: unknown = null;
+
+  /** 401 说明会话失效，继续跑只会把剩余变动也全部丢掉 */
+  const recordFailure = (e: unknown) => {
+    failed += 1;
+    if (!firstError) firstError = e;
+    if (e instanceof ApiError && e.status === 401) {
+      throw new ApiError('登录状态已失效，请重新登录后再保存（本次变动未写入）', 401);
+    }
+  };
 
   for (const delId of deletedIds) {
     if (!delId || delId.startsWith('new_') || delId.startsWith('parse_')) continue;
     try {
       await deleteTransaction(delId);
-    } catch {
-      failed += 1;
+    } catch (e) {
+      recordFailure(e);
     }
   }
 
@@ -246,9 +282,13 @@ export async function batchSaveTransactions(
     try {
       if (isNew) await createTransaction(item);
       else await updateTransaction(item);
-    } catch {
-      failed += 1;
+    } catch (e) {
+      recordFailure(e);
     }
+  }
+
+  if (failed > 0 && firstError instanceof ApiError) {
+    throw new ApiError(`${failed} 条操作失败：${firstError.message}`, firstError.status);
   }
 
   return { failed };

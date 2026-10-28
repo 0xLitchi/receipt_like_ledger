@@ -234,11 +234,26 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
 // 管理员更新单条账目: PUT /api/transactions/:id
 export const onRequestPut: PagesFunction<Env> = async (context) => {
+  const startTime = Date.now();
   const { request, env, params } = context;
   const id = params.id as string;
   const url = new URL(request.url);
+  const ipAddress = getClientIp(request);
+  const userAgent = request.headers.get('User-Agent') || '';
+  const endpoint = url.pathname + url.search;
 
   if (!(await isAdminAuthorized(env.DB, env, request, url))) {
+    await recordApiRequestLog(env.DB, {
+      method: 'PUT',
+      endpoint,
+      statusCode: 401,
+      success: false,
+      ipAddress,
+      userAgent,
+      tokenUsed: request.headers.get('X-Admin-Token') || '',
+      payloadSummary: '未授权：更新账目被拒绝',
+      executionMs: Date.now() - startTime,
+    });
     return new Response(JSON.stringify({ success: false, message: '未授权：管理员凭证错误或未配置' }), {
       status: 401,
       headers: jsonHeaders(request, env),
@@ -273,11 +288,34 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
     const logDetails = `更新账目 [${id}]: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}) 日期:${date}`;
     await recordActivityLog(env.DB, 'web', 'update', logDetails);
 
+    await recordApiRequestLog(env.DB, {
+      method: 'PUT',
+      endpoint,
+      statusCode: 200,
+      success: true,
+      ipAddress,
+      userAgent,
+      tokenUsed: request.headers.get('X-Admin-Token') || '',
+      payloadSummary: `amt:${amount}, desc:"${title}", tag:"${member}", type:"${catLabel}", date:${date}`,
+      executionMs: Date.now() - startTime,
+    });
+
     return new Response(JSON.stringify({ success: true, message: 'Transaction updated' }), {
       headers: jsonHeaders(request, env),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+    await recordApiRequestLog(env.DB, {
+      method: 'PUT',
+      endpoint,
+      statusCode: 500,
+      success: false,
+      ipAddress,
+      userAgent,
+      tokenUsed: request.headers.get('X-Admin-Token') || '',
+      payloadSummary: `更新失败: ${message}`,
+      executionMs: Date.now() - startTime,
+    });
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
       headers: jsonHeaders(request, env),
@@ -287,11 +325,26 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
 
 // 管理员删除单条账目: DELETE /api/transactions/:id
 export const onRequestDelete: PagesFunction<Env> = async (context) => {
+  const startTime = Date.now();
   const { request, env, params } = context;
   const id = params.id as string;
   const url = new URL(request.url);
+  const ipAddress = getClientIp(request);
+  const userAgent = request.headers.get('User-Agent') || '';
+  const endpoint = url.pathname + url.search;
 
   if (!(await isAdminAuthorized(env.DB, env, request, url))) {
+    await recordApiRequestLog(env.DB, {
+      method: 'DELETE',
+      endpoint,
+      statusCode: 401,
+      success: false,
+      ipAddress,
+      userAgent,
+      tokenUsed: request.headers.get('X-Admin-Token') || '',
+      payloadSummary: `未授权：删除账目 ${id} 被拒绝`,
+      executionMs: Date.now() - startTime,
+    });
     return new Response(JSON.stringify({ success: false, message: '未授权：管理员凭证错误或未配置' }), {
       status: 401,
       headers: jsonHeaders(request, env),
@@ -318,17 +371,51 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
       // ignore
     }
 
-    await env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run();
+    const result = await env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run();
+    const changed = result.meta?.changes ?? 0;
 
     // 记录删除日志
     const logDetails = `删除账目 ID ${id}: ${targetTitle}`;
-    await recordActivityLog(env.DB, 'web', 'delete', logDetails);
+    if (changed > 0) {
+      await recordActivityLog(env.DB, 'web', 'delete', logDetails);
+    }
+
+    await recordApiRequestLog(env.DB, {
+      method: 'DELETE',
+      endpoint,
+      statusCode: changed > 0 ? 200 : 404,
+      success: changed > 0,
+      ipAddress,
+      userAgent,
+      tokenUsed: request.headers.get('X-Admin-Token') || '',
+      payloadSummary: changed > 0 ? logDetails : `删除失败：账目 ${id} 不存在`,
+      executionMs: Date.now() - startTime,
+    });
+
+    // 记录不存在时明确返回 404，避免前端把“没删掉”当成成功
+    if (changed === 0) {
+      return new Response(JSON.stringify({ success: false, message: `账目 ${id} 不存在，可能已被删除` }), {
+        status: 404,
+        headers: jsonHeaders(request, env),
+      });
+    }
 
     return new Response(JSON.stringify({ success: true, message: 'Transaction deleted' }), {
       headers: jsonHeaders(request, env),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+    await recordApiRequestLog(env.DB, {
+      method: 'DELETE',
+      endpoint,
+      statusCode: 500,
+      success: false,
+      ipAddress,
+      userAgent,
+      tokenUsed: request.headers.get('X-Admin-Token') || '',
+      payloadSummary: `删除失败: ${message}`,
+      executionMs: Date.now() - startTime,
+    });
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
       headers: jsonHeaders(request, env),

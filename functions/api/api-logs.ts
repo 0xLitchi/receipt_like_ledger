@@ -42,6 +42,14 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   try {
     await ensureApiRequestLogsTable(env.DB);
+
+    // 会话探测：只要判定鉴权是否有效，不必读回日志内容
+    if (url.searchParams.get('probe') === '1') {
+      return new Response(JSON.stringify({ success: true }), {
+        headers: jsonHeaders(request, env),
+      });
+    }
+
     const { results } = await env.DB.prepare(
       'SELECT * FROM api_request_logs ORDER BY created_at DESC, timestamp DESC LIMIT 200'
     ).all<ApiRequestLogRow>();
