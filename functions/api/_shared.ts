@@ -34,6 +34,25 @@ export interface ApiRequestLogRow {
   created_at?: string;
 }
 
+export type McpCallStatus = 'ok' | 'error' | 'unauthorized' | 'disabled';
+
+export interface McpCallLogRow {
+  id: string;
+  timestamp: string;
+  method: string;
+  tool_name: string;
+  status: McpCallStatus;
+  error_message: string;
+  params_summary: string;
+  duration_ms: number;
+  client_name: string;
+  client_version: string;
+  ip_address: string;
+  user_agent: string;
+  auth_mode: string;
+  created_at?: string;
+}
+
 // 剥离换行符 (\r, \n)、制表符、多余空格及引号
 export const cleanSecretString = (str?: string | null): string => {
   if (!str) return '';
@@ -335,4 +354,119 @@ export const insertTransactionsBatch = async (
     data: Array.isArray(body) ? insertedList : insertedList[0],
     summaryText: summaryParts.join('; '),
   };
+};
+
+/* ------------------------------------------------------------------ */
+/* 全局设置（key-value）                                               */
+/* ------------------------------------------------------------------ */
+
+export const ensureSettingsTable = async (db: D1Database): Promise<void> => {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`
+  ).run();
+};
+
+export const getSetting = async (db: D1Database, key: string): Promise<string | null> => {
+  try {
+    await ensureSettingsTable(db);
+    const row = await db.prepare('SELECT value FROM app_settings WHERE key = ?')
+      .bind(key)
+      .first<{ value?: string }>();
+    return row?.value ?? null;
+  } catch (e) {
+    console.warn('Failed to read setting', key, e);
+    return null;
+  }
+};
+
+export const setSetting = async (db: D1Database, key: string, value: string): Promise<void> => {
+  await ensureSettingsTable(db);
+  await db.prepare(
+    `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
+  ).bind(key, value).run();
+};
+
+/** MCP 服务是否已在后台开启（默认关闭） */
+export const isMcpEnabled = async (db: D1Database): Promise<boolean> => {
+  return (await getSetting(db, 'mcp_enabled')) === 'true';
+};
+
+/* ------------------------------------------------------------------ */
+/* MCP 调用日志                                                        */
+/* ------------------------------------------------------------------ */
+
+export const ensureMcpCallLogsTable = async (db: D1Database): Promise<void> => {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS mcp_call_logs (
+      id TEXT PRIMARY KEY,
+      timestamp TEXT NOT NULL,
+      method TEXT NOT NULL,
+      tool_name TEXT DEFAULT '',
+      status TEXT NOT NULL,
+      error_message TEXT DEFAULT '',
+      params_summary TEXT DEFAULT '',
+      duration_ms INTEGER DEFAULT 0,
+      client_name TEXT DEFAULT '',
+      client_version TEXT DEFAULT '',
+      ip_address TEXT DEFAULT '',
+      user_agent TEXT DEFAULT '',
+      auth_mode TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`
+  ).run();
+  await db.prepare(
+    'CREATE INDEX IF NOT EXISTS idx_mcp_call_logs_created ON mcp_call_logs(created_at)'
+  ).run();
+};
+
+export const recordMcpCallLog = async (
+  db: D1Database | undefined,
+  logData: {
+    method: string;
+    toolName?: string;
+    status: McpCallStatus;
+    errorMessage?: string;
+    paramsSummary?: string;
+    durationMs?: number;
+    clientName?: string;
+    clientVersion?: string;
+    ipAddress?: string;
+    userAgent?: string;
+    authMode?: string;
+  }
+): Promise<void> => {
+  if (!db) return;
+  try {
+    await ensureMcpCallLogsTable(db);
+    const id = `mcplog_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const timestamp = new Date().toISOString();
+
+    await db.prepare(
+      `INSERT INTO mcp_call_logs
+       (id, timestamp, method, tool_name, status, error_message, params_summary, duration_ms,
+        client_name, client_version, ip_address, user_agent, auth_mode)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id,
+      timestamp,
+      logData.method,
+      logData.toolName || '',
+      logData.status,
+      logData.errorMessage || '',
+      logData.paramsSummary || '',
+      logData.durationMs || 0,
+      logData.clientName || '',
+      logData.clientVersion || '',
+      logData.ipAddress || 'unknown',
+      logData.userAgent || 'unknown',
+      logData.authMode || ''
+    ).run();
+  } catch (e) {
+    console.warn('Failed to record MCP call log', e);
+  }
 };

@@ -44,7 +44,7 @@ wrangler dev --local
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
 | `ADMIN_PASSWORD` | 是 | 管理员密码。登录成功后服务端签发 7 天有效的会话 token，密码本身不落前端存储 |
-| `ACCESS_TOKEN` | 否 | 外部 API 的 `Authorization: Bearer <token>` 密钥。配置后，未登录 GET 返回脱敏数据（金额 0、标题 `***`） |
+| `ACCESS_TOKEN` | 否 | 外部 API 的 `Authorization: Bearer <token>` 密钥，同时用于 MCP 只读服务鉴权。配置后，未登录 GET 返回脱敏数据（金额 0、标题 `***`） |
 | `ALLOWED_ORIGINS` | 否 | 逗号分隔的跨域白名单（如 `https://my-site.pages.dev`）。不配置则拒绝一切跨域请求，同源访问不受影响 |
 | `DEFAULT_LEDGER_TITLE` | 否 | 账本显示名（见 `wrangler.toml`） |
 
@@ -61,7 +61,7 @@ npx wrangler d1 execute receipt_ledger_db --remote --file=db/schema.sql
 npx wrangler d1 execute receipt_ledger_db --remote --file=db/seed.sql
 ```
 
-`db/schema.sql` 包含 `transactions`、`activity_logs`（审计日志）、`admin_sessions`（会话表）三张表。API 运行时也会幂等建表，作为未执行迁移时的兜底。
+`db/schema.sql` 包含 `transactions`、`activity_logs`（审计日志）、`admin_sessions`（会话表）、`app_settings`（全局设置）与 `mcp_call_logs`（MCP 调用日志）。API 运行时也会幂等建表，作为未执行迁移时的兜底。
 
 ## 功能概览
 
@@ -73,6 +73,95 @@ npx wrangler d1 execute receipt_ledger_db --remote --file=db/seed.sql
 - 按 `.` 键呼出后台；后台支持增删改查、原始文本批量导入、CSV 导出、审计日志
 - 未登录访问时金额/标题脱敏；管理员登录后显示明文
 - 外部调用方可通过 `Authorization: Bearer ACCESS_TOKEN` 追加账目（来源记为 `api`）
+- 可选开启 MCP 只读查询服务（见下文），所有外部调用可在后台「MCP 调用日志」中审计
+
+## MCP 服务（只读查询）
+
+项目内置一个基于 Streamable HTTP 的 MCP 端点：`POST /api/mcp`。它只提供查询工具，不包含任何写入能力。
+
+### 开启与鉴权
+
+1. 登录后台（`.`) → **General (通用设置)** → **MCP 只读查询服务**，打开开关（默认关闭，立即生效）。
+2. 外部调用方使用 `Authorization: Bearer <ACCESS_TOKEN>`。若未配置 `ACCESS_TOKEN`，则只能使用管理员会话 token 调用。
+3. 所有调用（含鉴权失败与被关闭时的请求）都会写入 `mcp_call_logs`，在后台 **MCP (调用日志)** 页查看。
+
+> 安全提示：开启后，持有 `ACCESS_TOKEN` 的调用方可读取全部账目明文。请务必在 Cloudflare 控制台配置强随机令牌，不使用时保持开关关闭。
+
+### 工具
+
+| 工具 | 说明 |
+| --- | --- |
+| `list_transactions` | 按月份、日期区间、成员、分类、收支类型、关键词筛选明细，支持分页 |
+| `summarize_transactions` | 收支汇总，可按分类 / 成员 / 月份 / 日期分组 |
+| `list_filter_options` | 列出实际出现过的月份、成员、分类、分类标签与账本名 |
+| `get_transaction` | 按 ID 查询单条明细 |
+
+金额单位为元，正数为收入、负数为支出；日期为 `YYYY-MM-DD`。所有工具都标记为 `readOnlyHint: true`。
+
+### 客户端配置示例
+
+支持 Streamable HTTP 的客户端（如 Claude Code）：
+
+```bash
+claude mcp add --transport http receipt-ledger https://<your-site>.pages.dev/api/mcp \
+  --header "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+通用 `mcpServers` 配置：
+
+```json
+{
+  "mcpServers": {
+    "receipt-ledger": {
+      "type": "http",
+      "url": "https://<your-site>.pages.dev/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <ACCESS_TOKEN>"
+      }
+    }
+  }
+}
+```
+
+只支持 stdio 的客户端可用 `mcp-remote` 桥接：
+
+```json
+{
+  "mcpServers": {
+    "receipt-ledger": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote", "https://<your-site>.pages.dev/api/mcp",
+        "--header", "Authorization: Bearer <ACCESS_TOKEN>"
+      ]
+    }
+  }
+}
+```
+
+### curl 调试
+
+```bash
+# 初始化
+curl -s https://<your-site>.pages.dev/api/mcp \
+  -H 'Authorization: Bearer <ACCESS_TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+
+# 查看工具
+curl -s https://<your-site>.pages.dev/api/mcp \
+  -H 'Authorization: Bearer <ACCESS_TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+# 查询 2026-08 的支出明细
+curl -s https://<your-site>.pages.dev/api/mcp \
+  -H 'Authorization: Bearer <ACCESS_TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_transactions","arguments":{"month":"2026-08","type":"expense","limit":20}}}'
+```
+
+服务为无状态实现：不签发会话 ID，也不提供 SSE 推送；`GET /api/mcp` 返回 405，客户端只需使用 POST。
 
 ## API 摘要
 
@@ -87,6 +176,10 @@ npx wrangler d1 execute receipt_ledger_db --remote --file=db/seed.sql
 | GET | `/api/logs` | 读取最近 200 条审计日志（需管理员） |
 | POST | `/api/auth/verify` | 密码换会话 token：`{ "password": "..." }` → `{ "success": true, "token": "sess_..." }` |
 | POST | `/api/auth/logout` | 注销会话（需 `X-Admin-Token`） |
+| GET | `/api/settings` | 读取全局设置（主题、MCP 开关状态） |
+| PUT | `/api/settings` | 更新设置（需管理员；`theme_style` / `mcp_enabled`） |
+| POST | `/api/mcp` | MCP 只读查询端点（需 `ACCESS_TOKEN` 或管理员会话，且后台已开启） |
+| GET | `/api/mcp-logs` | 读取最近 200 条 MCP 调用日志（需管理员） |
 
 ## 测试与验证
 
