@@ -1,37 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Transaction } from '../../types';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import type { ActivityLog, ApiRequestLog, Transaction } from '../../types';
 import { queryClient } from '../../lib/query-client';
 import { queryKeys } from '../../lib/queries';
 import { ApiError, fetchActivityLogs, fetchApiLogs, fetchTransactions } from '../../lib/api-client';
-import type { ActivityLog, ApiRequestLog, ThemeStyle } from '../../types';
-import {
-  Plus,
-  Trash2,
-  Search,
-  FileCode,
-  Download,
-  Check,
-  AlertCircle,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Sparkles,
-  ArrowLeft,
-  X,
-  Save,
-  RefreshCw,
-  CheckCircle2,
-  XCircle,
-  Database,
-  History,
-  Settings,
-  Receipt,
-  Zap,
-  Globe,
-  Terminal,
-  ShieldAlert,
-  Edit3,
-} from 'lucide-react';
+import { PixelDot, PlatinumWindow } from '../Platinum/PlatinumChrome';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -40,11 +12,8 @@ interface AdminPanelProps {
   onRefresh?: () => Promise<void>;
   onBatchSave: (items: Transaction[], deletedIds: string[]) => Promise<void>;
   onLogout: () => void;
-  themeStyle: ThemeStyle;
-  onThemeStyleChange: (style: ThemeStyle) => void;
 }
 
-// 文本数据解析器
 const parseRawLedgerText = (text: string): Transaction[] => {
   const lines = text.split('\n');
   const results: Transaction[] = [];
@@ -100,7 +69,6 @@ const parseRawLedgerText = (text: string): Transaction[] => {
   return results;
 };
 
-// 日志加载失败的可读原因：401 单独提示，避免被当成“暂无记录”
 const describeLogError = (e: unknown): string => {
   if (e instanceof ApiError) {
     if (e.status === 401) return '登录状态已失效，请退出后台重新登录后再查看';
@@ -115,10 +83,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   transactions,
   onRefresh,
   onBatchSave,
-  themeStyle,
-  onThemeStyleChange,
+  onLogout,
 }) => {
-  // 菜单 Tab 控制：'data' | 'log' | 'reqlog' | 'general'
   const [activeTab, setActiveTab] = useState<'data' | 'log' | 'reqlog' | 'general'>('data');
 
   const [refreshingData, setRefreshingData] = useState(false);
@@ -132,39 +98,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [saving, setSaving] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [sqlToast, setSqlToast] = useState<{ title: string; detail: string } | null>(null);
+  const sqlToastTimerRef = useRef<number | null>(null);
 
-  // 保存预览二次确认弹窗
+  useEffect(() => {
+    return () => {
+      if (sqlToastTimerRef.current !== null) {
+        window.clearTimeout(sqlToastTimerRef.current);
+      }
+    };
+  }, []);
+
   const [showSavePreviewModal, setShowSavePreviewModal] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // 日志列表状态
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [logSearchQuery, setLogSearchQuery] = useState('');
 
-  // API 请求日志列表状态 (Req Log)
   const [apiLogs, setApiLogs] = useState<ApiRequestLog[]>([]);
   const [loadingApiLogs, setLoadingApiLogs] = useState(false);
   const [apiLogsError, setApiLogsError] = useState<string | null>(null);
   const [apiLogSearchQuery, setApiLogSearchQuery] = useState('');
 
-  // 解析文本导入弹窗状态
   const [showParseModal, setShowParseModal] = useState(false);
   const [rawText, setRawText] = useState('');
   const [parseStep, setParseStep] = useState<'input' | 'preview'>('input');
   const [parsedPreviewList, setParsedPreviewList] = useState<Transaction[]>([]);
 
-  // 原始数据 Map 用于快速比对变动
   const originalMap = useMemo(() => {
     const map = new Map<string, Transaction>();
-    transactions.forEach((t) => {
-      map.set(t.id, t);
-    });
+    transactions.forEach((t) => map.set(t.id, t));
     return map;
   }, [transactions]);
 
-  // 初始化加载数据
   useEffect(() => {
     if (isOpen) {
       setRows(JSON.parse(JSON.stringify(transactions)));
@@ -174,7 +142,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, [isOpen, transactions]);
 
-  // 手动刷新 Data 数据
   const handleRefreshData = async () => {
     if (refreshingData) return;
     setRefreshingData(true);
@@ -192,7 +159,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // 加载数据变更日志
   const loadLogs = useCallback(async () => {
     setLoadingLogs(true);
     setLogsError(null);
@@ -210,7 +176,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, []);
 
-  // 加载 API 请求日志 (Req Log)
   const loadApiLogs = useCallback(async () => {
     setLoadingApiLogs(true);
     setApiLogsError(null);
@@ -230,16 +195,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   useEffect(() => {
     if (isOpen && activeTab === 'log') {
-      loadLogs();
+      void loadLogs();
     } else if (isOpen && activeTab === 'reqlog') {
-      loadApiLogs();
+      void loadApiLogs();
     }
   }, [isOpen, activeTab, loadLogs, loadApiLogs]);
 
-  // 行变动类型判定: 'added' | 'modified' | 'unchanged'
   const getRowChangeStatus = useCallback(
     (row: Transaction): 'added' | 'modified' | 'unchanged' => {
-      const isNew = !row.id || row.id.startsWith('new_') || row.id.startsWith('parse_') || !originalMap.has(row.id);
+      const isNew =
+        !row.id || row.id.startsWith('new_') || row.id.startsWith('parse_') || !originalMap.has(row.id);
       if (isNew) return 'added';
 
       const orig = originalMap.get(row.id);
@@ -251,6 +216,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         (row.category || '') !== (orig.category || '') ||
         (row.subcategory || '') !== (orig.subcategory || '') ||
         (row.title || '') !== (orig.title || '') ||
+        (row.ledger || '') !== (orig.ledger || '') ||
         Number(row.amount) !== Number(orig.amount);
 
       return isModified ? 'modified' : 'unchanged';
@@ -258,18 +224,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     [originalMap]
   );
 
-  // 计算当前待保存的变动分类列表
   const pendingChanges = useMemo(() => {
     const addedList: Transaction[] = [];
     const modifiedList: { current: Transaction; original: Transaction }[] = [];
 
     rows.forEach((r) => {
       const status = getRowChangeStatus(r);
-      if (status === 'added') {
-        addedList.push(r);
-      } else if (status === 'modified') {
-        const orig = originalMap.get(r.id)!;
-        modifiedList.push({ current: r, original: orig });
+      if (status === 'added') addedList.push(r);
+      else if (status === 'modified') {
+        modifiedList.push({ current: r, original: originalMap.get(r.id)! });
       }
     });
 
@@ -277,35 +240,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       .map((id) => originalMap.get(id))
       .filter(Boolean) as Transaction[];
 
-    const totalCount = addedList.length + modifiedList.length + deletedList.length;
-
     return {
       added: addedList,
       modified: modifiedList,
       deleted: deletedList,
-      totalCount,
+      totalCount: addedList.length + modifiedList.length + deletedList.length,
     };
   }, [rows, deletedIds, originalMap, getRowChangeStatus]);
 
-  // 单元格修改
-  const handleCellChange = useCallback(
-    (id: string, field: keyof Transaction, value: any) => {
-      setRows((prev) => {
-        return prev.map((r) => {
-          if (r.id === id) {
-            return {
-              ...r,
-              [field]: field === 'amount' ? (value === '' ? 0 : parseFloat(value) || 0) : value,
-            };
-          }
-          return r;
-        });
-      });
-    },
-    []
-  );
+  const handleCellChange = useCallback((id: string, field: keyof Transaction, value: string) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        return {
+          ...r,
+          [field]: field === 'amount' ? (value === '' ? 0 : parseFloat(value) || 0) : value,
+        };
+      })
+    );
+  }, []);
 
-  // 添加行
   const handleAddRow = () => {
     const newId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const newRow: Transaction = {
@@ -318,30 +272,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       amount: 0,
       ledger: 'Default',
     };
-
-    setRows((prev) => {
-      return [newRow, ...prev];
-    });
+    setRows((prev) => [newRow, ...prev]);
   };
 
-  // 全选/反选
   const handleToggleSelectAll = (filteredRows: Transaction[]) => {
     const allFilteredIds = filteredRows.map((r) => r.id);
     const isAllSelected = allFilteredIds.every((id) => selectedIds.has(id));
-
-    if (isAllSelected) {
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        allFilteredIds.forEach((id) => next.delete(id));
-        return next;
-      });
-    } else {
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        allFilteredIds.forEach((id) => next.add(id));
-        return next;
-      });
-    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (isAllSelected) allFilteredIds.forEach((id) => next.delete(id));
+      else allFilteredIds.forEach((id) => next.add(id));
+      return next;
+    });
   };
 
   const handleToggleSelectRow = (id: string) => {
@@ -353,23 +295,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
-  // 批量删除选中行
   const handleBulkDeleteSelected = () => {
     if (selectedIds.size === 0) return;
-
     const toDeleteDbIds = Array.from(selectedIds).filter(
       (id) => id && !id.startsWith('new_') && !id.startsWith('parse_') && originalMap.has(id)
     );
-
-    const nextDeleted = Array.from(new Set([...deletedIds, ...toDeleteDbIds]));
-    const nextRows = rows.filter((r) => !selectedIds.has(r.id));
-
-    setDeletedIds(nextDeleted);
-    setRows(nextRows);
+    setDeletedIds(Array.from(new Set([...deletedIds, ...toDeleteDbIds])));
+    setRows((prev) => prev.filter((r) => !selectedIds.has(r.id)));
     setSelectedIds(new Set());
   };
 
-  // 排序
   const handleSort = (field: keyof Transaction) => {
     if (sortField === field) {
       if (sortAsc) setSortAsc(false);
@@ -383,10 +318,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // 过滤与排序
   const processedRows = useMemo(() => {
     let result = [...rows];
-
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(
@@ -396,29 +329,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           (r.category || '').toLowerCase().includes(q) ||
           (r.subcategory || '').toLowerCase().includes(q) ||
           (r.date || '').toLowerCase().includes(q) ||
+          (r.ledger || '').toLowerCase().includes(q) ||
           String(r.amount).includes(q)
       );
     }
 
     if (sortField) {
-      result.sort((a: any, b: any) => {
+      result.sort((a, b) => {
         const valA = a[sortField] ?? '';
         const valB = b[sortField] ?? '';
-
         if (typeof valA === 'number' && typeof valB === 'number') {
           return sortAsc ? valA - valB : valB - valA;
         }
-
         return sortAsc
           ? String(valA).localeCompare(String(valB), 'zh-CN')
           : String(valB).localeCompare(String(valA), 'zh-CN');
       });
     }
-
     return result;
   }, [rows, searchQuery, sortField, sortAsc]);
 
-  // 过滤日志列表
   const filteredLogs = useMemo(() => {
     if (!logSearchQuery.trim()) return logs;
     const q = logSearchQuery.toLowerCase().trim();
@@ -431,7 +361,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   }, [logs, logSearchQuery]);
 
-  // 过滤 API 请求日志列表 (Req Log)
   const filteredApiLogs = useMemo(() => {
     if (!apiLogSearchQuery.trim()) return apiLogs;
     const q = apiLogSearchQuery.toLowerCase().trim();
@@ -446,60 +375,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   }, [apiLogs, apiLogSearchQuery]);
 
-  // 文本解析：点击“保存”按钮进入预览状态
   const handleStartParsePreview = () => {
     if (!rawText.trim()) {
       alert('请先粘贴需要解析的账单文本数据');
       return;
     }
-
     const parsed = parseRawLedgerText(rawText);
     if (parsed.length === 0) {
       alert('未能成功解析数据，请检查文本格式');
       return;
     }
-
     setParsedPreviewList(parsed);
     setParseStep('preview');
   };
 
-  // 二次确认导入：追加到当前编辑表格行中，标记为新增
   const handleConfirmImportParsedData = () => {
     if (parsedPreviewList.length === 0) return;
-
-    const nextRows = [...parsedPreviewList, ...rows];
-    setRows(nextRows);
-
+    setRows((prev) => [...parsedPreviewList, ...prev]);
     setRawText('');
     setParsedPreviewList([]);
     setParseStep('input');
     setShowParseModal(false);
-
     setStatusMsg({
       type: 'success',
-      text: `已导入 ${parsedPreviewList.length} 条记录至编辑区，请点击“保存变动”提交保存！`,
+      text: `已导入 ${parsedPreviewList.length} 条记录至编辑区，请点击“保存变动”提交。`,
     });
     setTimeout(() => setStatusMsg(null), 3500);
   };
 
-  // 二次确认并正式保存提交所有变动
   const handleConfirmSaveAllChanges = async () => {
     if (pendingChanges.totalCount === 0) {
       setShowSavePreviewModal(false);
       return;
     }
 
+    const addedCount = pendingChanges.added.length;
+    const modifiedCount = pendingChanges.modified.length;
+    const deletedCount = pendingChanges.deleted.length;
+    const totalCount = pendingChanges.totalCount;
+
     setSaving(true);
     setSaveError(null);
     try {
-      // 获取所有变更项（新增行 + 修改行）
       const changedItems: Transaction[] = [
         ...pendingChanges.added,
         ...pendingChanges.modified.map((m) => m.current),
       ];
-
       await onBatchSave(changedItems, deletedIds);
-
       setDeletedIds([]);
       setShowSavePreviewModal(false);
 
@@ -509,10 +431,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
       setLastSavedTime(timeStr);
 
-      setStatusMsg({ type: 'success', text: `保存成功！共提交 ${pendingChanges.totalCount} 项变动 (${timeStr})` });
-      setTimeout(() => setStatusMsg(null), 3500);
-    } catch (err: any) {
-      const message = err?.message || '网络或凭证错误';
+      const summaryParts: string[] = [];
+      if (addedCount > 0) summaryParts.push(`新增 ${addedCount} 条`);
+      if (modifiedCount > 0) summaryParts.push(`更新 ${modifiedCount} 条`);
+      if (deletedCount > 0) summaryParts.push(`删除 ${deletedCount} 条`);
+      const detailText = `已写入数据库：${summaryParts.join('、')}（共 ${totalCount} 项变动 · ${timeStr}）`;
+
+      setStatusMsg({
+        type: 'success',
+        text: `SQL 执行成功 · ${detailText}`,
+      });
+      setSqlToast({
+        title: 'SQL 执行成功',
+        detail: detailText,
+      });
+      if (sqlToastTimerRef.current !== null) {
+        window.clearTimeout(sqlToastTimerRef.current);
+      }
+      sqlToastTimerRef.current = window.setTimeout(() => {
+        setSqlToast(null);
+        setStatusMsg(null);
+        sqlToastTimerRef.current = null;
+      }, 6000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '网络或凭证错误';
       setSaveError(message);
       setStatusMsg({ type: 'error', text: '保存失败: ' + message });
     } finally {
@@ -520,15 +462,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // 保存失败后刷新：把行数据与待删除列表一并还原到服务端真实状态
   const handleReloadAfterFailure = async () => {
     setSaveError(null);
     await handleRefreshData();
   };
 
-  // 导出 CSV
   const handleExportCSV = () => {
-    const headers = ['id', 'date', 'title', 'amount', 'member', 'category', 'subcategory'];
+    const headers = ['id', 'date', 'title', 'amount', 'member', 'category', 'subcategory', 'ledger'];
     const csvLines = [headers.join(',')];
 
     processedRows.forEach((r) => {
@@ -540,11 +480,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         `"${(r.member || '').replace(/"/g, '""')}"`,
         `"${(r.category || '').replace(/"/g, '""')}"`,
         `"${(r.subcategory || '').replace(/"/g, '""')}"`,
+        `"${(r.ledger || 'Default').replace(/"/g, '""')}"`,
       ].join(',');
       csvLines.push(line);
     });
 
-    const blob = new Blob(['\uFEFF' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['﻿' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -557,1120 +498,791 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const isAllFilteredSelected =
     processedRows.length > 0 && processedRows.every((r) => selectedIds.has(r.id));
 
+  const sortIndicator = (field: keyof Transaction) => {
+    if (sortField !== field) return '';
+    return sortAsc ? ' ▲' : ' ▼';
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-50 text-slate-800 flex font-mono day-admin-workbench select-none overflow-hidden">
-      {/* 侧边栏 (Sidebar Menu): Data, Log, Req Log, General 四个子菜单 */}
-      <aside className="w-52 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col justify-between shrink-0">
-        <div>
-          <div className="p-4 border-b border-slate-800 flex items-center gap-2">
-            <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <span className="font-bold text-sm text-white font-mono tracking-tight">Admin Console</span>
-          </div>
-
-          <nav className="p-2 space-y-1">
-            <button
-              onClick={() => setActiveTab('data')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
-                activeTab === 'data'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Database className="w-4 h-4" />
-              <span>Data (数据维护)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('log')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
-                activeTab === 'log'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <History className="w-4 h-4" />
-              <span>Log (变更日志)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('reqlog')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
-                activeTab === 'reqlog'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Terminal className="w-4 h-4 text-purple-400" />
-              <span>Req Log (请求日志)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('general')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
-                activeTab === 'general'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Settings className="w-4 h-4" />
-              <span>General (通用设置)</span>
-            </button>
-          </nav>
-        </div>
-
-        <div className="p-3 border-t border-slate-800">
+    <div className="pt-desk" style={{ maxWidth: 1120 }}>
+      <PlatinumWindow
+        title="Admin Console · 账本管理后台"
+        onClose={onClose}
+        closeTitle="返回账本"
+      >
+        {/* Top Navigation Tab Strip */}
+        <div className="pt-strip">
           <button
-            onClick={onClose}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-mono font-bold transition-colors cursor-pointer border border-slate-700"
+            type="button"
+            className={`pt-btn tab${activeTab === 'data' ? ' on' : ''}`}
+            onClick={() => setActiveTab('data')}
           >
-            <ArrowLeft className="w-4 h-4 text-slate-400" />
-            <span>返回小票</span>
+            Data (数据维护)
           </button>
+          <button
+            type="button"
+            className={`pt-btn tab${activeTab === 'log' ? ' on' : ''}`}
+            onClick={() => setActiveTab('log')}
+          >
+            Log (变更日志)
+          </button>
+          <button
+            type="button"
+            className={`pt-btn tab${activeTab === 'reqlog' ? ' on' : ''}`}
+            onClick={() => setActiveTab('reqlog')}
+          >
+            Req Log (请求日志)
+          </button>
+          <button
+            type="button"
+            className={`pt-btn tab${activeTab === 'general' ? ' on' : ''}`}
+            onClick={() => setActiveTab('general')}
+          >
+            General (通用设置)
+          </button>
+
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6 }}>
+            <button type="button" className="pt-btn tab" onClick={onClose}>
+              ← 返回账本
+            </button>
+            <button type="button" className="pt-btn tab danger" onClick={onLogout}>
+              退出登录
+            </button>
+          </span>
         </div>
-      </aside>
 
-      {/* 右侧主工作区 */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-        {activeTab === 'data' ? (
-          // ==================== TAB 1: DATA 数据维护工作台 ====================
+        {/* Status Banner */}
+        {statusMsg && (
+          <div
+            style={{
+              padding: '6px 12px',
+              borderBottom: '1px solid #262626',
+              background: statusMsg.type === 'success' ? '#dcfce7' : '#fee2e2',
+              color: statusMsg.type === 'success' ? '#166534' : '#991b1b',
+              fontSize: 11,
+              fontWeight: 'bold',
+            }}
+          >
+            {statusMsg.text}
+          </div>
+        )}
+
+        {/* ==================== TAB 1: DATA ==================== */}
+        {activeTab === 'data' && (
           <>
-            <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
-                  Data 维护工作台
-                </h1>
-                <div className="flex items-center gap-2 text-xs font-mono text-slate-500">
-                  <span>共 <strong className="text-slate-800">{rows.length}</strong> 行</span>
-                  <span>•</span>
-                  {selectedIds.size > 0 && (
-                    <span className="text-emerald-700 font-bold">已选 {selectedIds.size} 行</span>
-                  )}
-                  <span className="ml-1 text-[11px] flex items-center gap-1.5 font-mono">
-                    {pendingChanges.totalCount > 0 ? (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-300 flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                        未保存变动: {pendingChanges.totalCount} 项
-                        {pendingChanges.added.length > 0 && ` (+${pendingChanges.added.length})`}
-                        {pendingChanges.modified.length > 0 && ` (~${pendingChanges.modified.length})`}
-                        {pendingChanges.deleted.length > 0 && ` (-${pendingChanges.deleted.length})`}
-                      </span>
-                    ) : (
-                      <span className="text-emerald-700 font-medium flex items-center gap-1">
-                        <Check className="w-3 h-3 text-emerald-600" />
-                        {lastSavedTime ? `所有变动已保存 (${lastSavedTime})` : '数据已就绪，无未保存变动'}
-                      </span>
-                    )}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex-1 max-w-sm relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="搜索备注、成员、分类、日期..."
-                  className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white transition-all"
-                />
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                {/* 保存变动主按钮 */}
-                <button
-                  onClick={() => {
-                    setSaveError(null);
-                    setShowSavePreviewModal(true);
-                  }}
-                  disabled={pendingChanges.totalCount === 0 || saving}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all shadow-sm cursor-pointer ${
-                    pendingChanges.totalCount > 0
-                      ? 'bg-amber-600 hover:bg-amber-500 text-white ring-2 ring-amber-400/50 shadow-amber-600/20 animate-pulse'
-                      : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                  }`}
-                  title={pendingChanges.totalCount > 0 ? '预览并保存变动' : '暂无数据变动'}
-                >
-                  <Save className="w-4 h-4" />
-                  <span>
-                    保存变动 {pendingChanges.totalCount > 0 ? `(${pendingChanges.totalCount})` : ''}
-                  </span>
-                </button>
-
-                <button
-                  onClick={handleRefreshData}
-                  disabled={refreshingData || saving}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono font-bold transition-colors border border-slate-300 shadow-xs cursor-pointer disabled:opacity-50"
-                  title="刷新数据"
-                >
-                  <RefreshCw className={`w-4 h-4 ${refreshingData ? 'animate-spin' : ''}`} />
-                  <span>刷新数据</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setParseStep('input');
-                    setShowParseModal(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-mono font-bold transition-colors shadow-xs cursor-pointer"
-                >
-                  <FileCode className="w-4 h-4 text-indigo-600" />
-                  解析文本导入
-                </button>
-
-                <button
-                  onClick={handleExportCSV}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono transition-colors shadow-xs cursor-pointer"
-                  title="导出为 CSV"
-                >
-                  <Download className="w-4 h-4 text-slate-500" />
-                  导出 CSV
-                </button>
-
-                <button
-                  onClick={handleAddRow}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold shadow-sm transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  添加行
-                </button>
-
-                {selectedIds.size > 0 && (
-                  <button
-                    onClick={handleBulkDeleteSelected}
-                    className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-mono font-bold transition-colors shadow-xs cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4 text-rose-600" />
-                    删除选中 ({selectedIds.size})
-                  </button>
-                )}
-              </div>
-            </header>
-
-            {statusMsg && (
-              <div
-                className={`p-2.5 text-xs flex items-center justify-center gap-2 border-b font-mono ${
-                  statusMsg.type === 'success'
-                    ? 'bg-emerald-100 border-emerald-200 text-emerald-800'
-                    : 'bg-rose-100 border-rose-200 text-rose-800'
-                }`}
+            <div className="pt-strip" style={{ background: '#eee' }}>
+              <input
+                type="search"
+                className="pt-input"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="筛选日期 / 备注 / 成员 / 分类 / 金额 / 账本…"
+                style={{ width: 240, maxWidth: '100%' }}
+              />
+              <button type="button" className="pt-btn tab" onClick={handleAddRow}>
+                + 新增行
+              </button>
+              <button
+                type="button"
+                className="pt-btn tab"
+                onClick={() => {
+                  setParseStep('input');
+                  setShowParseModal(true);
+                }}
               >
-                {statusMsg.type === 'success' ? (
-                  <Check className="w-4 h-4 text-emerald-600" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-rose-600" />
-                )}
-                <span>{statusMsg.text}</span>
-              </div>
-            )}
+                CSV导入
+              </button>
+              <button type="button" className="pt-btn tab" onClick={handleExportCSV}>
+                CSV导出
+              </button>
+              <button
+                type="button"
+                className="pt-btn tab"
+                disabled={refreshingData}
+                onClick={() => void handleRefreshData()}
+              >
+                {refreshingData ? '刷新中…' : '刷新'}
+              </button>
 
-            <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
-              <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10 font-bold tracking-wider">
-                      <th className="py-3 px-3 border-r border-slate-200 w-12 text-center bg-slate-100">
-                        <input
-                          type="checkbox"
-                          checked={isAllFilteredSelected}
-                          onChange={() => handleToggleSelectAll(processedRows)}
-                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 bg-white cursor-pointer"
-                        />
-                      </th>
+              {selectedIds.size > 0 && (
+                <button
+                  type="button"
+                  className="pt-btn tab danger"
+                  onClick={handleBulkDeleteSelected}
+                >
+                  删除选中 ({selectedIds.size})
+                </button>
+              )}
 
-                      <th className="py-3 px-2 border-r border-slate-200 w-12 text-center opacity-60 bg-slate-100">
-                        #
-                      </th>
+              <button
+                type="button"
+                className={`pt-btn tab${pendingChanges.totalCount > 0 ? ' primary' : ''}`}
+                style={{ marginLeft: 'auto' }}
+                disabled={pendingChanges.totalCount === 0}
+                onClick={() => {
+                  setSaveError(null);
+                  setShowSavePreviewModal(true);
+                }}
+              >
+                保存变动 ({pendingChanges.totalCount})
+              </button>
+            </div>
 
-                      <th className="py-3 px-3 border-r border-slate-200 w-36 bg-slate-100">
-                        <button
-                          onClick={() => handleSort('date')}
-                          className="flex items-center gap-1 hover:text-slate-900 transition-colors"
-                        >
-                          日期
-                          {sortField === 'date' ? (
-                            sortAsc ? (
-                              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
-                            ) : (
-                              <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
-                          )}
-                        </button>
-                      </th>
-
-                      <th className="py-3 px-3 border-r border-slate-200 w-28 bg-slate-100">
-                        <button
-                          onClick={() => handleSort('member')}
-                          className="flex items-center gap-1 hover:text-slate-900 transition-colors"
-                        >
-                          成员
-                          {sortField === 'member' ? (
-                            sortAsc ? (
-                              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
-                            ) : (
-                              <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
-                          )}
-                        </button>
-                      </th>
-
-                      <th className="py-3 px-3 border-r border-slate-200 w-32 bg-slate-100">
-                        <button
-                          onClick={() => handleSort('category')}
-                          className="flex items-center gap-1 hover:text-slate-900 transition-colors"
-                        >
-                          主分类
-                          {sortField === 'category' ? (
-                            sortAsc ? (
-                              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
-                            ) : (
-                              <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
-                          )}
-                        </button>
-                      </th>
-
-                      <th className="py-3 px-3 border-r border-slate-200 w-32 bg-slate-100">子分类</th>
-
-                      <th className="py-3 px-3 border-r border-slate-200 min-w-[160px] bg-slate-100">
-                        备注
-                      </th>
-
-                      <th className="py-3 px-3 text-right bg-slate-100 w-36">
-                        <button
-                          onClick={() => handleSort('amount')}
-                          className="flex items-center gap-1 hover:text-slate-900 transition-colors ml-auto"
-                        >
-                          金额
-                          {sortField === 'amount' ? (
-                            sortAsc ? (
-                              <ArrowUp className="w-3.5 h-3.5 text-emerald-600" />
-                            ) : (
-                              <ArrowDown className="w-3.5 h-3.5 text-emerald-600" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
-                          )}
-                        </button>
-                      </th>
+            <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
+              <table className="pt-table">
+                <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+                  <tr>
+                    <th style={{ width: 28, textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={isAllFilteredSelected}
+                        onChange={() => handleToggleSelectAll(processedRows)}
+                        aria-label="全选"
+                      />
+                    </th>
+                    <th style={{ width: 42, textAlign: 'center' }}>状态</th>
+                    <th style={{ width: 108, cursor: 'pointer' }} onClick={() => handleSort('date')}>
+                      日期{sortIndicator('date')}
+                    </th>
+                    <th style={{ width: 84, cursor: 'pointer' }} onClick={() => handleSort('member')}>
+                      成员{sortIndicator('member')}
+                    </th>
+                    <th style={{ width: 92, cursor: 'pointer' }} onClick={() => handleSort('category')}>
+                      主分类{sortIndicator('category')}
+                    </th>
+                    <th style={{ width: 92, cursor: 'pointer' }} onClick={() => handleSort('subcategory')}>
+                      子分类{sortIndicator('subcategory')}
+                    </th>
+                    <th style={{ minWidth: 160, cursor: 'pointer' }} onClick={() => handleSort('title')}>
+                      备注{sortIndicator('title')}
+                    </th>
+                    <th style={{ width: 104, cursor: 'pointer' }} onClick={() => handleSort('amount')}>
+                      金额{sortIndicator('amount')}
+                    </th>
+                    <th style={{ width: 92, cursor: 'pointer' }} onClick={() => handleSort('ledger')}>
+                      账本{sortIndicator('ledger')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {processedRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
+                        暂无匹配的交易记录
+                      </td>
                     </tr>
-                  </thead>
-
-                  <tbody className="divide-y divide-slate-200">
-                    {processedRows.map((row, idx) => {
-                      const isSelected = selectedIds.has(row.id);
-                      const changeStatus = getRowChangeStatus(row);
-
-                      let rowBgClass = 'hover:bg-slate-50';
-                      let statusTag = null;
-
-                      if (changeStatus === 'added') {
-                        rowBgClass = 'bg-emerald-50/70 hover:bg-emerald-100/70 border-l-4 border-l-emerald-500';
-                        statusTag = (
-                          <span className="px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[9px] font-bold border border-emerald-300">
-                            新增
-                          </span>
-                        );
-                      } else if (changeStatus === 'modified') {
-                        rowBgClass = 'bg-amber-50/70 hover:bg-amber-100/70 border-l-4 border-l-amber-500';
-                        statusTag = (
-                          <span className="px-1 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300">
-                            修改
-                          </span>
-                        );
-                      }
+                  ) : (
+                    processedRows.map((row) => {
+                      const status = getRowChangeStatus(row);
+                      const bg =
+                        status === 'added'
+                          ? '#dcfce7'
+                          : status === 'modified'
+                          ? '#fef9c3'
+                          : selectedIds.has(row.id)
+                          ? '#e0e7ff'
+                          : undefined;
 
                       return (
-                        <tr
-                          key={row.id}
-                          className={`transition-colors ${isSelected ? 'bg-indigo-50 hover:bg-indigo-100/60' : rowBgClass}`}
-                        >
-                          <td className="py-1 px-3 border-r border-slate-200 text-center">
+                        <tr key={row.id} style={{ background: bg }}>
+                          <td style={{ textAlign: 'center' }}>
                             <input
                               type="checkbox"
-                              checked={isSelected}
+                              checked={selectedIds.has(row.id)}
                               onChange={() => handleToggleSelectRow(row.id)}
-                              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                             />
                           </td>
-
-                          <td className="py-1 px-2 border-r border-slate-200 text-center text-slate-500 bg-slate-50/50">
-                            {statusTag && <div className="mb-0.5">{statusTag}</div>}
-                            {idx + 1}
+                          <td
+                            style={{
+                              textAlign: 'center',
+                              fontSize: 10,
+                              fontFamily: 'var(--font-mono)',
+                              color:
+                                status === 'added'
+                                  ? '#166534'
+                                  : status === 'modified'
+                                  ? '#854d0e'
+                                  : '#777',
+                            }}
+                          >
+                            {status === 'added' ? 'NEW' : status === 'modified' ? 'MOD' : '—'}
                           </td>
-
-                          <td className="p-0 border-r border-slate-200">
+                          <td>
                             <input
                               type="text"
-                              placeholder="YYYY-MM-DD"
-                              value={row.date || ''}
+                              className="pt-input"
+                              style={{ width: '100%', fontFamily: 'var(--font-mono)' }}
+                              value={row.date}
                               onChange={(e) => handleCellChange(row.id, 'date', e.target.value)}
-                              className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none font-mono"
                             />
                           </td>
-
-                          <td className="p-0 border-r border-slate-200">
+                          <td>
                             <input
                               type="text"
-                              value={row.member || ''}
+                              className="pt-input"
+                              style={{ width: '100%' }}
+                              value={row.member}
                               onChange={(e) => handleCellChange(row.id, 'member', e.target.value)}
-                              className="w-full h-full px-3 py-2 bg-transparent text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none font-bold"
                             />
                           </td>
-
-                          <td className="p-0 border-r border-slate-200">
+                          <td>
                             <input
                               type="text"
-                              value={row.category || ''}
+                              className="pt-input"
+                              style={{ width: '100%' }}
+                              value={row.category}
                               onChange={(e) => handleCellChange(row.id, 'category', e.target.value)}
-                              className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none"
                             />
                           </td>
-
-                          <td className="p-0 border-r border-slate-200">
+                          <td>
                             <input
                               type="text"
-                              value={row.subcategory || ''}
+                              className="pt-input"
+                              style={{ width: '100%' }}
+                              value={row.subcategory}
                               onChange={(e) => handleCellChange(row.id, 'subcategory', e.target.value)}
-                              className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none"
                             />
                           </td>
-
-                          <td className="p-0 border-r border-slate-200">
+                          <td>
                             <input
                               type="text"
-                              placeholder="选填"
-                              value={row.title || ''}
+                              className="pt-input"
+                              style={{ width: '100%' }}
+                              value={row.title}
                               onChange={(e) => handleCellChange(row.id, 'title', e.target.value)}
-                              className="w-full h-full px-3 py-2 bg-transparent text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none"
                             />
                           </td>
-
-                          <td className="p-0">
+                          <td>
                             <input
                               type="number"
                               step="0.01"
+                              className="pt-input"
+                              style={{
+                                width: '100%',
+                                textAlign: 'right',
+                                fontFamily: 'var(--font-mono)',
+                                color: row.amount >= 0 ? 'var(--income)' : 'var(--expense)',
+                              }}
                               value={row.amount}
                               onChange={(e) => handleCellChange(row.id, 'amount', e.target.value)}
-                              className={`w-full h-full px-3 py-2 bg-transparent text-right font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500/30 rounded-none focus:outline-none ${
-                                row.amount > 0 ? 'text-emerald-700' : 'text-rose-700'
-                              }`}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="pt-input"
+                              style={{ width: '100%' }}
+                              value={row.ledger || ''}
+                              onChange={(e) => handleCellChange(row.id, 'ledger', e.target.value)}
                             />
                           </td>
                         </tr>
                       );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pt-statusbar">
+              <span>
+                共 {processedRows.length} / {rows.length} 行 · 待新增 {pendingChanges.added.length} ·
+                待修改 {pendingChanges.modified.length} · 待删除 {pendingChanges.deleted.length}
+              </span>
+              <span>{lastSavedTime ? `上次保存 ${lastSavedTime}` : '就绪'}</span>
             </div>
           </>
-        ) : activeTab === 'log' ? (
-          // ==================== TAB 2: LOG 变更日志视图 ====================
+        )}
+
+        {/* ==================== TAB 2: ACTIVITY LOGS ==================== */}
+        {activeTab === 'log' && (
           <>
-            <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between gap-4">
-              <div>
-                <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
-                  Log 变更日志审计
-                </h1>
-                <p className="text-xs font-mono text-slate-500 mt-0.5">
-                  记录数据的修改时间与修改来源（区分网页修改 vs API 修改）
+            <div className="pt-strip" style={{ background: '#eee' }}>
+              <input
+                type="search"
+                className="pt-input"
+                value={logSearchQuery}
+                onChange={(e) => setLogSearchQuery(e.target.value)}
+                placeholder="筛选动作 / 来源 / 详情…"
+                style={{ width: 240, maxWidth: '100%' }}
+              />
+              <button
+                type="button"
+                className="pt-btn tab"
+                disabled={loadingLogs}
+                onClick={() => void loadLogs()}
+              >
+                {loadingLogs ? '加载中…' : '刷新日志'}
+              </button>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555' }}>
+                共 {filteredLogs.length} 条
+              </span>
+            </div>
+
+            {logsError ? (
+              <div style={{ padding: 24, textAlign: 'center' }}>
+                <p style={{ color: '#991b1b', fontWeight: 'bold', margin: '0 0 8px' }}>
+                  日志加载失败: {logsError}
                 </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="relative w-64">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={logSearchQuery}
-                    onChange={(e) => setLogSearchQuery(e.target.value)}
-                    placeholder="搜索日志详情..."
-                    className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-emerald-600 focus:bg-white"
-                  />
-                </div>
-
-                <button
-                  onClick={loadLogs}
-                  disabled={loadingLogs}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono font-bold transition-colors border border-slate-300 shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingLogs ? 'animate-spin' : ''}`} />
-                  刷新日志
+                <button type="button" className="pt-btn" onClick={() => void loadLogs()}>
+                  重试
                 </button>
               </div>
-            </header>
-
-            <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
-              <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10 font-bold tracking-wider">
-                      <th className="py-3 px-4 border-r border-slate-200 w-44">变更时间</th>
-                      <th className="py-3 px-4 border-r border-slate-200 w-32">修改来源</th>
-                      <th className="py-3 px-4 border-r border-slate-200 w-28">操作类型</th>
-                      <th className="py-3 px-4">详细变更记录</th>
+            ) : (
+              <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
+                <table className="pt-table">
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+                    <tr>
+                      <th style={{ width: 150 }}>时间</th>
+                      <th style={{ width: 70 }}>来源</th>
+                      <th style={{ width: 90 }}>动作</th>
+                      <th>详情</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody>
                     {loadingLogs ? (
                       <tr>
-                        <td colSpan={4} className="py-12 text-center text-slate-400 font-mono">
-                          正在加载活动日志...
-                        </td>
-                      </tr>
-                    ) : logsError ? (
-                      <tr>
-                        <td colSpan={4} className="py-10 text-center font-mono">
-                          <div className="inline-flex flex-col items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 text-rose-700 font-bold">
-                              <AlertCircle className="w-4 h-4" />
-                              变更日志加载失败
-                            </span>
-                            <span className="text-slate-500">{logsError}</span>
-                            <button
-                              onClick={loadLogs}
-                              className="mt-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold border border-slate-300 cursor-pointer"
-                            >
-                              重试
-                            </button>
-                          </div>
+                        <td colSpan={4} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
+                          正在加载变更日志…
                         </td>
                       </tr>
                     ) : filteredLogs.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-12 text-center text-slate-400 font-mono">
-                          暂无变更日志记录
+                        <td colSpan={4} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
+                          暂无记录
                         </td>
                       </tr>
                     ) : (
-                      filteredLogs.map((log) => {
-                        const dateStr = log.created_at || log.timestamp || '';
-                        const formattedTime = dateStr.length >= 19 ? dateStr.substring(0, 19).replace('T', ' ') : dateStr;
-
-                        const isWeb = log.source === 'web';
-                        const isApi = log.source === 'api';
-
-                        return (
-                          <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-600">
-                              {formattedTime}
-                            </td>
-
-                            <td className="py-2.5 px-4 border-r border-slate-200">
-                              {isApi ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                                  <Zap className="w-3 h-3 text-purple-600" />
-                                  API 修改
-                                </span>
-                              ) : isWeb ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                  <Globe className="w-3 h-3 text-blue-600" />
-                                  网页修改
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  <FileCode className="w-3 h-3 text-emerald-600" />
-                                  文本解析
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-2.5 px-4 border-r border-slate-200 font-bold">
-                              {log.action === 'create' ? (
-                                <span className="text-emerald-700 font-bold">新增</span>
-                              ) : log.action === 'update' ? (
-                                <span className="text-amber-700 font-bold">更新</span>
-                              ) : log.action === 'delete' ? (
-                                <span className="text-rose-700 font-bold">删除</span>
-                              ) : (
-                                <span className="text-slate-700 font-bold">批量同步</span>
-                              )}
-                            </td>
-
-                            <td className="py-2.5 px-4 text-slate-800 font-mono">
-                              {log.details}
-                            </td>
-                          </tr>
-                        );
-                      })
+                      filteredLogs.map((l) => (
+                        <tr key={l.id}>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'nowrap' }}>
+                            {l.timestamp}
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{l.source}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 'bold' }}>
+                            {l.action}
+                          </td>
+                          <td style={{ fontSize: 11, wordBreak: 'break-all' }}>{l.details}</td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
               </div>
+            )}
+
+            <div className="pt-statusbar">
+              <span>审计日志（最近 200 条）</span>
+              <span>{filteredLogs.length} 条</span>
             </div>
           </>
-        ) : activeTab === 'reqlog' ? (
-          // ==================== TAB 3: REQ LOG API 请求日志审计 ====================
+        )}
+
+        {/* ==================== TAB 3: API REQ LOGS ==================== */}
+        {activeTab === 'reqlog' && (
           <>
-            <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between gap-4">
-              <div>
-                <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
-                  <Terminal className="w-5 h-5 text-purple-600" />
-                  Req Log API 请求日志
-                </h1>
-                <p className="text-xs font-mono text-slate-500 mt-0.5">
-                  记录外部通过 API 调用系统的详细日志（包含客户端 IP、请求参数、状态码、耗时等）
+            <div className="pt-strip" style={{ background: '#eee' }}>
+              <input
+                type="search"
+                className="pt-input"
+                value={apiLogSearchQuery}
+                onChange={(e) => setApiLogSearchQuery(e.target.value)}
+                placeholder="筛选方法 / 路径 / 状态码 / IP…"
+                style={{ width: 240, maxWidth: '100%' }}
+              />
+              <button
+                type="button"
+                className="pt-btn tab"
+                disabled={loadingApiLogs}
+                onClick={() => void loadApiLogs()}
+              >
+                {loadingApiLogs ? '加载中…' : '刷新请求日志'}
+              </button>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555' }}>
+                共 {filteredApiLogs.length} 条
+              </span>
+            </div>
+
+            {apiLogsError ? (
+              <div style={{ padding: 24, textAlign: 'center' }}>
+                <p style={{ color: '#991b1b', fontWeight: 'bold', margin: '0 0 8px' }}>
+                  请求日志加载失败: {apiLogsError}
                 </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="relative w-64">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={apiLogSearchQuery}
-                    onChange={(e) => setApiLogSearchQuery(e.target.value)}
-                    placeholder="搜索 IP、路径、参数..."
-                    className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-600 focus:bg-white"
-                  />
-                </div>
-
-                <button
-                  onClick={loadApiLogs}
-                  disabled={loadingApiLogs}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono font-bold transition-colors border border-slate-300 shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingApiLogs ? 'animate-spin' : ''}`} />
-                  刷新请求日志
+                <button type="button" className="pt-btn" onClick={() => void loadApiLogs()}>
+                  重试
                 </button>
               </div>
-            </header>
-
-            <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
-              <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10 font-bold tracking-wider">
-                      <th className="py-3 px-4 border-r border-slate-200 w-44">调用时间</th>
-                      <th className="py-3 px-3 border-r border-slate-200 w-24 text-center">方式</th>
-                      <th className="py-3 px-3 border-r border-slate-200 w-32 text-center">状态码</th>
-                      <th className="py-3 px-4 border-r border-slate-200 w-36">客户端 IP</th>
-                      <th className="py-3 px-4 border-r border-slate-200 w-64">请求路径</th>
-                      <th className="py-3 px-4 border-r border-slate-200 min-w-[200px]">数据载荷 / 参数摘要</th>
-                      <th className="py-3 px-3 border-r border-slate-200 w-24 text-right">耗时</th>
-                      <th className="py-3 px-4 w-48">User Agent</th>
+            ) : (
+              <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
+                <table className="pt-table">
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+                    <tr>
+                      <th style={{ width: 145 }}>时间</th>
+                      <th style={{ width: 64 }}>方法</th>
+                      <th style={{ width: 60 }}>状态</th>
+                      <th style={{ width: 140 }}>路径</th>
+                      <th style={{ width: 110 }}>IP</th>
+                      <th style={{ width: 64 }}>耗时</th>
+                      <th>摘要</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody>
                     {loadingApiLogs ? (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-400 font-mono">
-                          正在加载 API 请求日志...
-                        </td>
-                      </tr>
-                    ) : apiLogsError ? (
-                      <tr>
-                        <td colSpan={8} className="py-10 text-center font-mono">
-                          <div className="inline-flex flex-col items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 text-rose-700 font-bold">
-                              <AlertCircle className="w-4 h-4" />
-                              请求日志加载失败
-                            </span>
-                            <span className="text-slate-500">{apiLogsError}</span>
-                            <button
-                              onClick={loadApiLogs}
-                              className="mt-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold border border-slate-300 cursor-pointer"
-                            >
-                              重试
-                            </button>
-                          </div>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
+                          正在加载请求日志…
                         </td>
                       </tr>
                     ) : filteredApiLogs.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-400 font-mono">
-                          暂无 API 请求调用日志
+                        <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
+                          暂无记录
                         </td>
                       </tr>
                     ) : (
-                      filteredApiLogs.map((log) => {
-                        const dateStr = log.created_at || log.timestamp || '';
-                        const formattedTime = dateStr.length >= 19 ? dateStr.substring(0, 19).replace('T', ' ') : dateStr;
-
-                        const isSuccess = log.success === 1 || log.success === true || (log.status_code >= 200 && log.status_code < 300);
-
-                        return (
-                          <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-600">
-                              {formattedTime}
-                            </td>
-
-                            <td className="py-2.5 px-3 border-r border-slate-200 text-center font-bold">
-                              <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-mono ${
-                                log.method === 'POST'
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                  : log.method === 'GET'
-                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                  : 'bg-slate-100 text-slate-800 border border-slate-200'
-                              }`}>
-                                {log.method}
-                              </span>
-                            </td>
-
-                            <td className="py-2.5 px-3 border-r border-slate-200 text-center font-bold">
-                              {isSuccess ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                  {log.status_code || 200} OK
-                                </span>
-                              ) : log.status_code === 401 ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-rose-50 text-rose-700 border border-rose-200">
-                                  <ShieldAlert className="w-3 h-3 text-rose-600" />
-                                  401 Unauthorized
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-amber-50 text-amber-700 border border-amber-200">
-                                  <XCircle className="w-3 h-3 text-amber-600" />
-                                  {log.status_code} Error
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-800 font-bold">
-                              {log.ip_address}
-                            </td>
-
-                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-700 truncate max-w-[240px]" title={log.endpoint}>
-                              {log.endpoint}
-                            </td>
-
-                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-900 font-medium truncate max-w-[320px]" title={log.payload_summary}>
-                              {log.payload_summary || '-'}
-                            </td>
-
-                            <td className="py-2.5 px-3 border-r border-slate-200 text-right font-mono text-slate-500">
-                              {log.execution_ms ? `${log.execution_ms}ms` : '<1ms'}
-                            </td>
-
-                            <td className="py-2.5 px-4 font-mono text-slate-400 text-[11px] truncate max-w-[200px]" title={log.user_agent}>
-                              {log.user_agent || 'Unknown UA'}
-                            </td>
-                          </tr>
-                        );
-                      })
+                      filteredApiLogs.map((l) => (
+                        <tr key={l.id}>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'nowrap' }}>
+                            {l.timestamp}
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 'bold' }}>
+                            {l.method}
+                          </td>
+                          <td
+                            style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: 11,
+                              fontWeight: 'bold',
+                              color: l.status_code >= 400 ? '#991b1b' : '#166534',
+                            }}
+                          >
+                            {l.status_code}
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{l.endpoint}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{l.ip_address}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{l.execution_ms}ms</td>
+                          <td style={{ fontSize: 11, wordBreak: 'break-all' }}>{l.payload_summary}</td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>
               </div>
-            </div>
-          </>
-        ) : (
-          // ==================== TAB 4: GENERAL 通用设置 ====================
-          <>
-            <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm">
-              <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
-                General 通用设置
-              </h1>
-              <p className="text-xs font-mono text-slate-500 mt-0.5">
-                管理前台主页面的 UI 界面呈现风格与全局显示偏好
-              </p>
-            </header>
+            )}
 
-            <div className="flex-1 overflow-auto p-6 font-mono max-w-4xl space-y-6">
-              {/* 主题设置：目前固定为拟真热敏小票 */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
-                  <Settings className="w-5 h-5 text-emerald-600" />
-                  <h3 className="text-sm font-bold text-slate-900">UI 界面呈现风格设置 (Theme Style)</h3>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                  {/* 拟真小票（唯一主题） */}
-                  <div
-                    onClick={() => {
-                      onThemeStyleChange('receipt');
-                    }}
-                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                      themeStyle === 'receipt'
-                        ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
-                        : 'border-slate-200 hover:border-slate-300 bg-slate-50/50'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
-                            <Receipt className="w-5 h-5" />
-                          </div>
-                          <span className="font-bold text-sm text-slate-900">拟真热敏小票</span>
-                        </div>
-                        {themeStyle === 'receipt' && (
-                          <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center">
-                            <Check className="w-3.5 h-3.5" />
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-500 leading-relaxed">
-                        经典黑灰热敏出纸缝、马达震动、发光扫描线与热感显影全套拟物视觉。
-                      </p>
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-slate-200/60 text-[11px] text-slate-400">
-                      状态: {themeStyle === 'receipt' ? '已应用' : '未选择'}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="pt-statusbar">
+              <span>API 请求审计（最近 200 条）</span>
+              <span>{filteredApiLogs.length} 条</span>
             </div>
           </>
         )}
-      </div>
 
-      {/* 保存变动预览与二次确认弹窗 (Save Changes Diff Preview Modal) */}
+        {/* ==================== TAB 4: GENERAL ==================== */}
+        {activeTab === 'general' && (
+          <div style={{ padding: 16 }}>
+            <table className="pt-table" style={{ maxWidth: 640 }}>
+              <tbody>
+                <tr>
+                  <th style={{ width: 160 }}>界面风格</th>
+                  <td>Platinum Desktop (v2ex / exe.v2core.com 风格重构版)</td>
+                </tr>
+                <tr>
+                  <th>当前数据量</th>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{transactions.length} 条交易记录</td>
+                </tr>
+                <tr>
+                  <th>快捷键</th>
+                  <td>
+                    在首页按 <code>.</code> 键快速打开管理后台
+                  </td>
+                </tr>
+                <tr>
+                  <th>会话管理</th>
+                  <td>
+                    <button type="button" className="pt-btn danger" onClick={onLogout}>
+                      注销当前管理员会话
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </PlatinumWindow>
+
+      {/* ── Modal 1: Save Preview Confirmation ── */}
       {showSavePreviewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-4xl p-6 shadow-2xl text-slate-800 relative max-h-[88vh] flex flex-col font-mono">
-            <button
-              onClick={() => setShowSavePreviewModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            background: 'rgba(0,0,0,0.35)',
+          }}
+        >
+          <div style={{ width: '100%', maxWidth: 520 }}>
+            <PlatinumWindow
+              title="确认保存变动 · Confirm Changes"
+              onClose={() => !saving && setShowSavePreviewModal(false)}
             >
-              <X className="w-5 h-5" />
-            </button>
+              <div style={{ padding: '12px 14px', maxHeight: '60vh', overflowY: 'auto' }}>
+                <p style={{ margin: '0 0 10px' }}>
+                  即将提交 <b>{pendingChanges.totalCount}</b> 项变动：新增{' '}
+                  <b>{pendingChanges.added.length}</b>、修改 <b>{pendingChanges.modified.length}</b>、
+                  删除 <b>{pendingChanges.deleted.length}</b>。
+                </p>
 
-            <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold flex items-center gap-2 text-slate-900">
-                <Save className="w-5 h-5 text-amber-600" />
-                保存变动预览与二次确认
-              </h3>
-              <span className="text-xs text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-300 font-bold">
-                共 {pendingChanges.totalCount} 项变动
-                {pendingChanges.added.length > 0 && ` (+${pendingChanges.added.length} 新增)`}
-                {pendingChanges.modified.length > 0 && ` (~${pendingChanges.modified.length} 修改)`}
-                {pendingChanges.deleted.length > 0 && ` (-${pendingChanges.deleted.length} 删除)`}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-500 mb-3">
-              请在提交前核对所有新增、修改和删除项。确认无误后点击“确认提交保存”，数据将同步至云端数据库：
-            </p>
-
-            <div className="flex-1 overflow-auto space-y-4 pr-1 mb-4">
-              {/* 提交失败：错误提示必须留在弹窗内，状态栏在遮罩层下面看不到 */}
-              {saveError && (
-                <div className="border border-rose-300 bg-rose-50 rounded-xl px-3 py-2.5 text-xs text-rose-800 flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <p className="font-bold">本次提交未完成，部分变动可能已经写入</p>
-                      <p className="text-rose-700 break-all">{saveError}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleReloadAfterFailure}
-                    disabled={refreshingData}
-                    className="shrink-0 px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                {saveError && (
+                  <div
+                    style={{
+                      marginBottom: 10,
+                      padding: '8px 10px',
+                      background: '#fee2e2',
+                      border: '1px solid #991b1b',
+                      color: '#991b1b',
+                      fontSize: 11,
+                    }}
                   >
-                    重新加载数据
-                  </button>
-                </div>
-              )}
-
-              {/* 1. 新增项列表 */}
-              {pendingChanges.added.length > 0 && (
-                <div className="border border-emerald-200 rounded-xl overflow-hidden bg-emerald-50/20">
-                  <div className="px-3 py-2 bg-emerald-100/80 border-b border-emerald-200 font-bold text-xs text-emerald-900 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Plus className="w-4 h-4 text-emerald-700" />
-                      新增记录 ({pendingChanges.added.length} 条)
-                    </span>
+                    <div style={{ fontWeight: 'bold', marginBottom: 4 }}>保存失败: {saveError}</div>
+                    <button
+                      type="button"
+                      className="pt-btn tab"
+                      onClick={() => void handleReloadAfterFailure()}
+                    >
+                      从服务端重新加载
+                    </button>
                   </div>
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-emerald-50/50 text-emerald-800 text-[11px] border-b border-emerald-200 font-bold">
-                        <th className="py-2 px-3 border-r border-emerald-200">日期</th>
-                        <th className="py-2 px-3 border-r border-emerald-200">成员</th>
-                        <th className="py-2 px-3 border-r border-emerald-200">分类</th>
-                        <th className="py-2 px-3 border-r border-emerald-200">备注</th>
-                        <th className="py-2 px-3 text-right">金额</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-emerald-100 bg-white">
-                      {pendingChanges.added.map((item) => (
-                        <tr key={item.id} className="hover:bg-emerald-50/40">
-                          <td className="py-2 px-3 border-r border-emerald-100 text-slate-800">{item.date}</td>
-                          <td className="py-2 px-3 border-r border-emerald-100 font-bold text-slate-900">{item.member}</td>
-                          <td className="py-2 px-3 border-r border-emerald-100 text-slate-700">
-                            {item.category}{item.subcategory ? `/${item.subcategory}` : ''}
-                          </td>
-                          <td className="py-2 px-3 border-r border-emerald-100 text-slate-700">{item.title || '-'}</td>
-                          <td className={`py-2 px-3 text-right font-bold ${item.amount > 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                            ￥{item.amount.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* 2. 修改项列表 */}
-              {pendingChanges.modified.length > 0 && (
-                <div className="border border-amber-200 rounded-xl overflow-hidden bg-amber-50/20">
-                  <div className="px-3 py-2 bg-amber-100/80 border-b border-amber-200 font-bold text-xs text-amber-900 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Edit3 className="w-4 h-4 text-amber-700" />
-                      修改记录 ({pendingChanges.modified.length} 条)
-                    </span>
-                  </div>
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-amber-50/50 text-amber-800 text-[11px] border-b border-amber-200 font-bold">
-                        <th className="py-2 px-3 border-r border-amber-200 w-24">日期</th>
-                        <th className="py-2 px-3 border-r border-amber-200 w-20">成员</th>
-                        <th className="py-2 px-3 border-r border-amber-200 w-32">分类</th>
-                        <th className="py-2 px-3 border-r border-amber-200">备注</th>
-                        <th className="py-2 px-3 text-right w-28">金额 (变更前 → 变更后)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-amber-100 bg-white">
-                      {pendingChanges.modified.map(({ current, original }) => (
-                        <tr key={current.id} className="hover:bg-amber-50/40">
-                          <td className="py-2 px-3 border-r border-amber-100 text-slate-800">
-                            {current.date !== original.date ? (
-                              <span className="text-amber-800 font-bold">{current.date}</span>
-                            ) : (
-                              current.date
-                            )}
-                          </td>
-                          <td className="py-2 px-3 border-r border-amber-100 text-slate-900">
-                            {current.member !== original.member ? (
-                              <span className="text-amber-800 font-bold">{current.member}</span>
-                            ) : (
-                              current.member
-                            )}
-                          </td>
-                          <td className="py-2 px-3 border-r border-amber-100 text-slate-700">
-                            {current.category}{current.subcategory ? `/${current.subcategory}` : ''}
-                          </td>
-                          <td className="py-2 px-3 border-r border-amber-100 text-slate-700">
-                            {current.title !== original.title ? (
-                              <span className="text-amber-800 font-bold">{current.title || '-'}</span>
-                            ) : (
-                              current.title || '-'
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-right font-bold text-slate-800">
-                            {current.amount !== original.amount ? (
-                              <span>
-                                <span className="line-through text-slate-400 text-[10px] mr-1">￥{original.amount.toFixed(2)}</span>
-                                <span className={current.amount > 0 ? 'text-emerald-700' : 'text-rose-700'}>
-                                  ￥{current.amount.toFixed(2)}
-                                </span>
-                              </span>
-                            ) : (
-                              <span className={current.amount > 0 ? 'text-emerald-700' : 'text-rose-700'}>
-                                ￥{current.amount.toFixed(2)}
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* 3. 删除项列表 */}
-              {pendingChanges.deleted.length > 0 && (
-                <div className="border border-rose-200 rounded-xl overflow-hidden bg-rose-50/20">
-                  <div className="px-3 py-2 bg-rose-100/80 border-b border-rose-200 font-bold text-xs text-rose-900 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Trash2 className="w-4 h-4 text-rose-700" />
-                      待删除记录 ({pendingChanges.deleted.length} 条)
-                    </span>
-                  </div>
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-rose-50/50 text-rose-800 text-[11px] border-b border-rose-200 font-bold">
-                        <th className="py-2 px-3 border-r border-rose-200">日期</th>
-                        <th className="py-2 px-3 border-r border-rose-200">成员</th>
-                        <th className="py-2 px-3 border-r border-rose-200">分类</th>
-                        <th className="py-2 px-3 border-r border-rose-200">备注</th>
-                        <th className="py-2 px-3 text-right">金额</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-rose-100 bg-white">
-                      {pendingChanges.deleted.map((item) => (
-                        <tr key={item.id} className="hover:bg-rose-50/40 opacity-75">
-                          <td className="py-2 px-3 border-r border-rose-100 text-slate-800 line-through">{item.date}</td>
-                          <td className="py-2 px-3 border-r border-rose-100 font-bold text-slate-900 line-through">{item.member}</td>
-                          <td className="py-2 px-3 border-r border-rose-100 text-slate-700 line-through">
-                            {item.category}{item.subcategory ? `/${item.subcategory}` : ''}
-                          </td>
-                          <td className="py-2 px-3 border-r border-rose-100 text-slate-700 line-through">{item.title || '-'}</td>
-                          <td className="py-2 px-3 text-right font-bold text-rose-800 line-through">
-                            ￥{item.amount.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-200 font-mono">
-              <button
-                type="button"
-                onClick={() => setShowSavePreviewModal(false)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono font-bold transition-colors cursor-pointer"
-              >
-                返回继续编辑
-              </button>
-
-              <button
-                type="button"
-                disabled={saving}
-                onClick={handleConfirmSaveAllChanges}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-mono font-bold shadow-md cursor-pointer flex items-center gap-1.5 transition-colors disabled:opacity-50"
-              >
-                {saving ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>正在保存中...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>确认提交保存 ({pendingChanges.totalCount})</span>
-                  </>
                 )}
-              </button>
-            </div>
+
+                {pendingChanges.added.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: 11, color: '#166534' }}>
+                      + 新增 ({pendingChanges.added.length})
+                    </div>
+                    <ul style={{ margin: '4px 0', paddingLeft: 18, fontSize: 11 }}>
+                      {pendingChanges.added.slice(0, 10).map((it) => (
+                        <li key={it.id}>
+                          {it.date} · {it.member} · {it.category} · {it.title || '无备注'} ({it.amount})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {pendingChanges.modified.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: 11, color: '#854d0e' }}>
+                      ~ 修改 ({pendingChanges.modified.length})
+                    </div>
+                    <ul style={{ margin: '4px 0', paddingLeft: 18, fontSize: 11 }}>
+                      {pendingChanges.modified.slice(0, 10).map(({ current }) => (
+                        <li key={current.id}>
+                          {current.date} · {current.member} · {current.category} ·{' '}
+                          {current.title || '无备注'} ({current.amount})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {pendingChanges.deleted.length > 0 && (
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: 11, color: '#991b1b' }}>
+                      − 删除 ({pendingChanges.deleted.length})
+                    </div>
+                    <ul style={{ margin: '4px 0', paddingLeft: 18, fontSize: 11 }}>
+                      {pendingChanges.deleted.slice(0, 10).map((it) => (
+                        <li key={it.id}>
+                          {it.date} · {it.member} · {it.category} · {it.title || '无备注'} ({it.amount})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-statusbar" style={{ padding: '8px 12px', justifyContent: 'flex-end', gap: 8 }}>
+                <button
+                  type="button"
+                  className="pt-btn"
+                  disabled={saving}
+                  onClick={() => setShowSavePreviewModal(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="pt-btn primary"
+                  disabled={saving}
+                  onClick={() => void handleConfirmSaveAllChanges()}
+                >
+                  {saving ? '提交中…' : '确认提交'}
+                </button>
+              </div>
+            </PlatinumWindow>
           </div>
         </div>
       )}
 
-      {/* 解析文本导入弹窗 */}
+      {/* ── Modal 2: Raw Text Import ── */}
       {showParseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-3xl p-6 shadow-2xl text-slate-800 relative max-h-[85vh] flex flex-col">
-            <button
-              onClick={() => setShowParseModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1"
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+            background: 'rgba(0,0,0,0.35)',
+          }}
+        >
+          <div style={{ width: '100%', maxWidth: 640 }}>
+            <PlatinumWindow
+              title="CSV 批量导入 · CSV Import"
+              onClose={() => setShowParseModal(false)}
             >
-              <X className="w-5 h-5" />
-            </button>
+              <div style={{ padding: '12px 14px' }}>
+                {parseStep === 'input' ? (
+                  <>
+                    <p style={{ margin: '0 0 8px', fontSize: 11, color: '#444' }}>
+                      每行一条，支持 Tab 或双空格分隔：
+                      <code>备注  日期(YYYY-MM-DD)  金额  成员  主分类/子分类  账本</code>
+                    </p>
+                    <textarea
+                      className="pt-input"
+                      rows={10}
+                      style={{ width: '100%' }}
+                      value={rawText}
+                      onChange={(e) => setRawText(e.target.value)}
+                      placeholder="示例：午餐	2026-11-19	-38.5	荔枝	餐饮/午饭	Default"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <p style={{ margin: '0 0 8px', fontSize: 11 }}>
+                      解析成功 <b>{parsedPreviewList.length}</b> 条，确认后将追加到编辑区顶部：
+                    </p>
+                    <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                      <table className="pt-table">
+                        <thead>
+                          <tr>
+                            <th>日期</th>
+                            <th>成员</th>
+                            <th>分类</th>
+                            <th>备注</th>
+                            <th>金额</th>
+                            <th>账本</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsedPreviewList.map((it) => (
+                            <tr key={it.id}>
+                              <td style={{ fontFamily: 'var(--font-mono)' }}>{it.date}</td>
+                              <td>{it.member}</td>
+                              <td>
+                                {it.subcategory ? `${it.category}/${it.subcategory}` : it.category}
+                              </td>
+                              <td>{it.title || '—'}</td>
+                              <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                                {it.amount}
+                              </td>
+                              <td>{it.ledger || 'Default'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
 
-            {parseStep === 'input' ? (
-              <>
-                <h3 className="text-base font-bold flex items-center gap-2 mb-2 font-mono text-slate-900">
-                  <FileCode className="w-5 h-5 text-indigo-600" />
-                  解析文本数据导入
-                </h3>
-                <p className="text-xs text-slate-500 mb-3 font-mono">
-                  在此粘贴账单文本，点击“保存”查看解析预览：<br />
-                  <code className="text-emerald-700 bg-slate-100 px-1.5 py-0.5 rounded block my-1">
-                    工会费	2026-08-13	￥-117.82	扶正	杂项/其它	Default
-                  </code>
-                </p>
-
-                <textarea
-                  rows={9}
-                  value={rawText}
-                  onChange={(e) => setRawText(e.target.value)}
-                  placeholder="在此粘贴包含多行账单的原始文本..."
-                  className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl font-mono text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-600 focus:bg-white mb-4"
-                />
-
-                <div className="flex items-center justify-between pt-3 border-t border-slate-200 font-mono">
-                  <span className="text-xs text-slate-500 font-mono">
-                    预计解析: {rawText.trim() ? `${parseRawLedgerText(rawText).length} 条记录` : '0 条'}
-                  </span>
-
+              <div className="pt-statusbar" style={{ padding: '8px 12px', justifyContent: 'flex-end', gap: 8 }}>
+                {parseStep === 'preview' && (
                   <button
                     type="button"
-                    onClick={handleStartParsePreview}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-mono font-bold shadow-xs cursor-pointer flex items-center gap-1.5 transition-colors"
-                  >
-                    <span>保存</span>
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-3">
-                  <h3 className="text-base font-bold flex items-center gap-2 font-mono text-slate-900">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    解析结果预览二次确认
-                  </h3>
-                  <span className="text-xs font-mono text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 font-bold">
-                    成功解析出 {parsedPreviewList.length} 条记录
-                  </span>
-                </div>
-
-                <p className="text-xs text-slate-500 mb-3 font-mono">
-                  请检查以下解析出的账目数据，确认无误后点击“确认保存导入”：
-                </p>
-
-                <div className="flex-1 overflow-auto border border-slate-200 rounded-xl mb-4 max-h-[340px]">
-                  <table className="w-full text-left border-collapse font-mono text-xs">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 font-bold sticky top-0">
-                        <th className="py-2.5 px-3 border-r border-slate-200">日期</th>
-                        <th className="py-2.5 px-3 border-r border-slate-200">成员</th>
-                        <th className="py-2.5 px-3 border-r border-slate-200">分类</th>
-                        <th className="py-2.5 px-3 border-r border-slate-200">备注</th>
-                        <th className="py-2.5 px-3 text-right">金额</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {parsedPreviewList.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50">
-                          <td className="py-2 px-3 border-r border-slate-200 font-mono text-slate-800">
-                            {item.date}
-                          </td>
-                          <td className="py-2 px-3 border-r border-slate-200 font-bold text-slate-900">
-                            {item.member}
-                          </td>
-                          <td className="py-2 px-3 border-r border-slate-200 text-slate-700">
-                            {item.category}{item.subcategory ? `/${item.subcategory}` : ''}
-                          </td>
-                          <td className="py-2 px-3 border-r border-slate-200 text-slate-700 truncate max-w-[150px]">
-                            {item.title}
-                          </td>
-                          <td
-                            className={`py-2 px-3 text-right font-bold ${
-                              item.amount > 0 ? 'text-emerald-700' : 'text-rose-700'
-                            }`}
-                          >
-                            ￥{item.amount.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex items-center justify-between pt-3 border-t border-slate-200 font-mono">
-                  <button
-                    type="button"
+                    className="pt-btn"
                     onClick={() => setParseStep('input')}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-mono font-bold transition-colors cursor-pointer"
                   >
                     返回修改
                   </button>
-
+                )}
+                <button
+                  type="button"
+                  className="pt-btn"
+                  onClick={() => setShowParseModal(false)}
+                >
+                  取消
+                </button>
+                {parseStep === 'input' ? (
                   <button
                     type="button"
-                    onClick={handleConfirmImportParsedData}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-mono font-bold shadow-md cursor-pointer flex items-center gap-1.5 transition-colors"
+                    className="pt-btn primary"
+                    onClick={handleStartParsePreview}
                   >
-                    <Check className="w-4 h-4" />
-                    <span>确认追加到编辑表格</span>
+                    解析预览
                   </button>
-                </div>
-              </>
-            )}
+                ) : (
+                  <button
+                    type="button"
+                    className="pt-btn primary"
+                    onClick={handleConfirmImportParsedData}
+                  >
+                    确认导入 ({parsedPreviewList.length})
+                  </button>
+                )}
+              </div>
+            </PlatinumWindow>
           </div>
+        </div>
+      )}
+
+      {/* ── Floating SQL Execution Success Toast ── */}
+      {sqlToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            top: 18,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 80,
+            width: 'min(480px, calc(100vw - 24px))',
+          }}
+        >
+          <PlatinumWindow
+            title={sqlToast.title}
+            onClose={() => setSqlToast(null)}
+            closeTitle="关闭提示"
+          >
+            <div
+              style={{
+                padding: '10px 12px',
+                background: '#dcfce7',
+                color: '#166534',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 12,
+              }}
+            >
+              <PixelDot color="#15803d" />
+              <span style={{ flex: 1, fontWeight: 'bold' }}>{sqlToast.detail}</span>
+              <button
+                type="button"
+                className="pt-btn tab"
+                onClick={() => setSqlToast(null)}
+              >
+                确定
+              </button>
+            </div>
+          </PlatinumWindow>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { storage } from '../../utils/storage';
-import { Lock, KeyRound, Eye, EyeOff, ShieldCheck, AlertCircle, X } from 'lucide-react';
+import { PlatinumWindow } from '../Platinum/PlatinumChrome';
 
 interface AdminAuthModalProps {
   isOpen: boolean;
@@ -17,10 +17,8 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  /** 每次失败自增，作为 key 让抖动动画重新播放（同一句错误连按两次也要有反馈） */
   const [errorCount, setErrorCount] = useState(0);
 
-  // Esc 关闭，与其余浮层保持一致
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -56,96 +54,92 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md no-print select-none">
-      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl text-slate-100 relative overflow-hidden modal-in">
-        {/* 顶部绚丽渐变霓虹遮罩 */}
-        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-indigo-500" />
-
-        {/* 关闭按钮 */}
-        <button
-          onClick={onClose}
-          aria-label="关闭"
-          className="absolute top-4 right-4 text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded-lg transition-colors press-fx focus-visible:outline-2 focus-visible:outline-emerald-500/70 focus-visible:outline-offset-2"
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        background: 'rgba(0, 0, 0, 0.35)',
+      }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 380 }}>
+        <PlatinumWindow
+          title="管理员身份验证 · Admin Sign In"
+          onClose={onClose}
+          closeTitle="关闭"
         >
-          <X className="w-5 h-5" />
-        </button>
+          <form onSubmit={handleSubmit}>
+            <div style={{ padding: '14px 16px' }}>
+              <p style={{ margin: '0 0 12px', fontSize: 12, color: '#333' }}>
+                请输入 <code>ADMIN_PASSWORD</code> 以解锁全量明文数据并进入后台管理。
+              </p>
 
-        {/* 头部图标区 */}
-        <div className="flex flex-col items-center text-center mt-2 mb-6">
-          <div className="relative mb-3">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
-              <ShieldCheck className="w-7 h-7" />
-            </div>
-            <div className="absolute -bottom-1 -right-1 p-1 bg-slate-900 rounded-full border border-slate-700 text-amber-400">
-              <KeyRound className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <h3 className="text-lg font-bold font-mono tracking-tight text-white">
-            管理员安全身份验证
-          </h3>
-          <p className="text-xs text-slate-400 font-mono mt-1">
-            验证成功后自动解锁全量数据并进入 Excel 批量管理
-          </p>
-        </div>
+              {error && (
+                <div
+                  key={errorCount}
+                  role="alert"
+                  className="field-shake"
+                  style={{
+                    marginBottom: 10,
+                    padding: '6px 8px',
+                    background: '#fee2e2',
+                    border: '1px solid #991b1b',
+                    color: '#991b1b',
+                    fontSize: 11,
+                  }}
+                >
+                  {error}
+                </div>
+              )}
 
-        {/* 错误提示 */}
-        {error && (
-          <div
-            key={errorCount}
-            role="alert"
-            className="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-mono flex items-center gap-2 field-shake"
-          >
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* 表单输入区 */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-mono text-slate-300 font-bold block">
-              管理员密码 (ADMIN_PASSWORD)
-            </label>
-            <div className="relative flex items-center">
-              <div className="absolute left-3.5 text-slate-400 pointer-events-none">
-                <Lock className="w-4 h-4" />
-              </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                autoFocus
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="请输入密码..."
-                className="w-full pl-10 pr-10 py-2.5 bg-slate-950/80 border border-slate-700/80 rounded-xl font-mono text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? '隐藏密码' : '显示密码'}
-                className="absolute right-3 text-slate-400 hover:text-slate-200 p-1 transition-colors rounded press-fx focus-visible:outline-2 focus-visible:outline-emerald-500/70 focus-visible:outline-offset-2"
+              <label
+                htmlFor="admin-password-input"
+                style={{ display: 'block', fontWeight: 'bold', marginBottom: 4, fontSize: 11 }}
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                密码:
+              </label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  id="admin-password-input"
+                  type={showPassword ? 'text' : 'password'}
+                  autoFocus
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="请输入管理员密码…"
+                  className="pt-input"
+                  style={{ flex: 1, height: 24, fontFamily: 'var(--font-mono)' }}
+                />
+                <button
+                  type="button"
+                  className="pt-btn tab"
+                  style={{ height: 24 }}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? '隐藏' : '显示'}
+                </button>
+              </div>
+            </div>
+
+            <div
+              className="pt-statusbar"
+              style={{ padding: '8px 12px', justifyContent: 'flex-end', gap: 8 }}
+            >
+              <button type="button" className="pt-btn" onClick={onClose}>
+                取消
+              </button>
+              <button type="submit" disabled={loading} className="pt-btn primary">
+                {loading ? '验证中…' : '确认进入'}
               </button>
             </div>
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-mono font-bold transition-colors border border-slate-700 press-fx focus-visible:outline-2 focus-visible:outline-slate-400/60 focus-visible:outline-offset-2"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-mono font-bold shadow-lg shadow-emerald-600/20 transition-colors disabled:opacity-50 disabled:cursor-progress press-fx focus-visible:outline-2 focus-visible:outline-emerald-400 focus-visible:outline-offset-2"
-            >
-              {loading ? '正在验证...' : '确认进入'}
-            </button>
-          </div>
-        </form>
+          </form>
+        </PlatinumWindow>
       </div>
     </div>
   );

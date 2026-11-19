@@ -51,10 +51,6 @@ export const AdminPage: React.FC = () => {
         queryClient.clear();
         navigate('/', { replace: true });
       }}
-      themeStyle="receipt"
-      onThemeStyleChange={() => {
-        /* 目前仅保留小票主题，切换入口已移除 */
-      }}
     />
   );
 };

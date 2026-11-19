@@ -20,8 +20,19 @@ export function App() {
             element={
               <Suspense
                 fallback={
-                  <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400 font-mono text-xs">
-                    正在载入后台…
+                  <div
+                    style={{
+                      minHeight: '100vh',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--g400)',
+                      color: 'var(--black)',
+                      fontSize: 12,
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    正在载入管理后台…
                   </div>
                 }
               >

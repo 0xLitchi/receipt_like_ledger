@@ -40,6 +40,37 @@ export function buildMonthList(transactions: Transaction[], limit = 3): string[]
   return Array.from(monthSet).sort().reverse().slice(0, limit);
 }
 
+/** 提取数据中实际出现过的所有年月（不限制数量、不补空月），按倒序分组 */
+export function buildAvailableYearMonths(transactions: Transaction[]): {
+  years: string[];
+  monthsByYear: Record<string, string[]>;
+  allMonths: string[];
+} {
+  const monthSet = new Set<string>();
+  transactions.forEach((t) => {
+    const ym = t.date?.substring(0, 7);
+    if (ym && /^\d{4}-\d{2}$/.test(ym)) {
+      monthSet.add(ym);
+    }
+  });
+
+  const allMonths = Array.from(monthSet).sort().reverse();
+  const monthsByYear: Record<string, string[]> = {};
+  const years: string[] = [];
+
+  for (const ym of allMonths) {
+    const year = ym.slice(0, 4);
+    const month = ym.slice(5, 7);
+    if (!monthsByYear[year]) {
+      monthsByYear[year] = [];
+      years.push(year);
+    }
+    monthsByYear[year].push(month);
+  }
+
+  return { years, monthsByYear, allMonths };
+}
+
 /** 去重后的成员 / 分类候选值，用于筛选下拉 */
 export function buildFilterOptions(transactions: Transaction[]) {
   const members = new Set<string>();
