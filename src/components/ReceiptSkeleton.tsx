@@ -43,40 +43,20 @@ export const ReceiptSkeleton: React.FC = () => {
         </div>
       </PlatinumWindow>
 
-      <div className="pt-grid">
-        <div className="pt-lane">
-          <PlatinumWindow title="分类统计 · Categories">
-            <div className="pt-rows">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="pt-row">
-                  <span className="lab">
-                    <span className="bar" style={{ width: `${80 - i * 14}%`, opacity: 0.5 }} />
-                  </span>
-                  <span className="n" style={{ color: '#bbb' }}>
-                    ---
-                  </span>
-                </div>
-              ))}
+      <PlatinumWindow title="分类统计 · Categories">
+        <div className="pt-rows">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="pt-row">
+              <span className="lab">
+                <span className="bar" style={{ width: `${80 - i * 14}%`, opacity: 0.5 }} />
+              </span>
+              <span className="n" style={{ color: '#bbb' }}>
+                ---
+              </span>
             </div>
-          </PlatinumWindow>
+          ))}
         </div>
-        <div className="pt-lane">
-          <PlatinumWindow title="成员统计 · Members">
-            <div className="pt-rows">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="pt-row">
-                  <span className="lab">
-                    <span className="bar" style={{ width: `${70 - i * 20}%`, opacity: 0.5 }} />
-                  </span>
-                  <span className="n" style={{ color: '#bbb' }}>
-                    ---
-                  </span>
-                </div>
-              ))}
-            </div>
-          </PlatinumWindow>
-        </div>
-      </div>
+      </PlatinumWindow>
     </div>
   );
 };

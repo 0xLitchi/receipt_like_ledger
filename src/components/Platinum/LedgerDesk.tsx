@@ -1,9 +1,9 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import type { DateGroup, LedgerFilters, LedgerType, SummaryStats, Transaction } from '../../types';
 import { categoryLabel, computeStats, summaryKey } from '../../features/ledger/use-ledger';
-import { formatCurrency, getTransactionName } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 import { PixelDot, PlatinumWindow } from './PlatinumChrome';
-import { memberDotColor } from './colors';
+import { buildMemberColorMap, memberDotColor } from './colors';
 import { CashflowChart } from './CashflowChart';
 
 interface LedgerDeskProps {
@@ -33,8 +33,8 @@ interface BreakdownRow {
 function formatMonthTab(m: string): string {
   if (m === 'ALL') return '全部';
   const [y, mm] = m.split('-');
-  const nowY = String(new Date().getFullYear());
-  return y === nowY ? `${Number(mm)}月` : `${y.slice(2)}/${mm}`;
+  if (!y || !mm) return m;
+  return `${y}年${mm.padStart(2, '0')}月`;
 }
 
 function formatDeltaPct(current: number, previous: number): string {
@@ -125,44 +125,11 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     return list;
   }, [monthTransactions, filters.member, filters.type, hasFullAccess]);
 
-  // Member breakdown (based on current month scope, not filtered by member itself)
-  const memberRows = useMemo<BreakdownRow[]>(() => {
-    const scope = monthTransactions.filter((t) => {
-      if (filters.category !== 'ALL' && summaryKey(t) !== filters.category) return false;
-      if (filters.type === 'EXPENSE' && t.amount >= 0) return false;
-      if (filters.type === 'INCOME' && t.amount <= 0) return false;
-      return true;
-    });
-
-    const map = new Map<string, { net: number; count: number }>();
-    scope.forEach((t) => {
-      const key = t.member || '默认';
-      const cur = map.get(key) || { net: 0, count: 0 };
-      cur.net += hasFullAccess ? t.amount : 0;
-      cur.count += 1;
-      map.set(key, cur);
-    });
-
-    const list: BreakdownRow[] = Array.from(map.entries()).map(([name, v]) => ({
-      name,
-      netTotal: v.net,
-      absVal: Math.abs(v.net),
-      count: v.count,
-      barPct: 0,
-    }));
-
-    list.sort((a, b) => (hasFullAccess ? b.absVal - a.absVal : b.count - a.count));
-    const maxMetric = list.reduce(
-      (m, r) => Math.max(m, hasFullAccess ? r.absVal : r.count),
-      0
-    );
-    list.forEach((r) => {
-      const val = hasFullAccess ? r.absVal : r.count;
-      r.barPct = maxMetric > 0 ? Math.max(val > 0 ? 3 : 0, (val / maxMetric) * 100) : 0;
-    });
-
-    return list;
-  }, [monthTransactions, filters.category, filters.type, hasFullAccess]);
+  // Stable distinct color mapping for each member
+  const memberColorMap = useMemo(
+    () => buildMemberColorMap(allTransactions.map((t) => t.member || '默认')),
+    [allTransactions]
+  );
 
   const activeDays = dateGroups.length;
   const dailyAvgExpense = activeDays > 0 ? stats.totalExpense / activeDays : 0;
@@ -218,7 +185,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     <div className="pt-desk">
       {/* ── Window 1: Main Overview (Matches exe.v2core.com/stats top window) ── */}
       <PlatinumWindow
-        title={`Ledger · 小票记账本${selectedMonth && selectedMonth !== 'ALL' ? ` · ${selectedMonth}` : ' · All'}`}
+        title={`Ledger · 小票记账本${selectedMonth && selectedMonth !== 'ALL' ? ` · ${formatMonthTab(selectedMonth)}` : ' · 全部'}`}
         onClose={onRefresh}
         closeTitle="刷新数据"
       >
@@ -422,109 +389,54 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
         </div>
       </PlatinumWindow>
 
-      {/* ── Two-Column Breakdown Grid (Categories + Members) ── */}
-      <div className="pt-grid">
-        <div className="pt-lane">
-          <PlatinumWindow title="分类统计 · Categories">
-            <div className="pt-rows" data-category-summary>
-              {categoryRows.length === 0 ? (
-                <div className="none">本月暂无分类数据</div>
-              ) : (
-                categoryRows.map((item) => {
-                  const isSelected = filters.category === item.name;
-                  return (
-                    <button
-                      key={item.name}
-                      type="button"
-                      className={`pt-row clickable${isSelected ? ' selected' : ''}`}
-                      aria-pressed={isSelected}
-                      title={isSelected ? '点击取消分类筛选' : `按 ${item.name} 筛选`}
-                      onClick={() =>
-                        onPatchFilters({ category: isSelected ? 'ALL' : item.name })
-                      }
-                    >
-                      <span className="lab">
-                        <span className="bar" style={{ width: `${item.barPct.toFixed(1)}%` }} />
-                        <span className="lab-inner">
-                          <span className="lab-text">{item.name}</span>
-                          <span className="tag">{item.count}笔</span>
-                        </span>
-                      </span>
-                      <span
-                        className="n"
-                        style={{
-                          color: !hasFullAccess
-                            ? '#666'
-                            : item.netTotal >= 0
-                            ? 'var(--income)'
-                            : '#333',
-                        }}
-                      >
-                        {hasFullAccess ? formatCurrency(item.netTotal, false, false) : '***.**'}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            <div className="pt-statusbar">
-              <span>点击条目可筛选对应分类明细</span>
-              <span>{categoryRows.length} 项</span>
-            </div>
-          </PlatinumWindow>
+      {/* ── Window 2: Category Breakdown ── */}
+      <PlatinumWindow title="分类统计 · Categories">
+        <div className="pt-rows" data-category-summary>
+          {categoryRows.length === 0 ? (
+            <div className="none">本月暂无分类数据</div>
+          ) : (
+            categoryRows.map((item) => {
+              const isSelected = filters.category === item.name;
+              return (
+                <button
+                  key={item.name}
+                  type="button"
+                  className={`pt-row clickable${isSelected ? ' selected' : ''}`}
+                  aria-pressed={isSelected}
+                  title={isSelected ? '点击取消分类筛选' : `按 ${item.name} 筛选`}
+                  onClick={() =>
+                    onPatchFilters({ category: isSelected ? 'ALL' : item.name })
+                  }
+                >
+                  <span className="lab">
+                    <span className="bar" style={{ width: `${item.barPct.toFixed(1)}%` }} />
+                    <span className="lab-inner">
+                      <span className="lab-text">{item.name}</span>
+                      <span className="tag">{item.count}笔</span>
+                    </span>
+                  </span>
+                  <span
+                    className="n"
+                    style={{
+                      color: !hasFullAccess
+                        ? '#666'
+                        : item.netTotal >= 0
+                        ? 'var(--income)'
+                        : '#333',
+                    }}
+                  >
+                    {hasFullAccess ? formatCurrency(item.netTotal, false, false) : '***.**'}
+                  </span>
+                </button>
+              );
+            })
+          )}
         </div>
-
-        <div className="pt-lane">
-          <PlatinumWindow title="成员统计 · Members">
-            <div className="pt-rows">
-              {memberRows.length === 0 ? (
-                <div className="none">本月暂无成员数据</div>
-              ) : (
-                memberRows.map((item) => {
-                  const isSelected = filters.member === item.name;
-                  return (
-                    <button
-                      key={item.name}
-                      type="button"
-                      className={`pt-row clickable${isSelected ? ' selected' : ''}`}
-                      aria-pressed={isSelected}
-                      title={isSelected ? '点击取消成员筛选' : `按 ${item.name} 筛选`}
-                      onClick={() =>
-                        onPatchFilters({ member: isSelected ? 'ALL' : item.name })
-                      }
-                    >
-                      <span className="lab">
-                        <span className="bar" style={{ width: `${item.barPct.toFixed(1)}%` }} />
-                        <span className="lab-inner">
-                          <PixelDot color={memberDotColor(item.name)} />
-                          <span className="lab-text">{item.name}</span>
-                          <span className="tag">{item.count}笔</span>
-                        </span>
-                      </span>
-                      <span
-                        className="n"
-                        style={{
-                          color: !hasFullAccess
-                            ? '#666'
-                            : item.netTotal >= 0
-                            ? 'var(--income)'
-                            : '#333',
-                        }}
-                      >
-                        {hasFullAccess ? formatCurrency(item.netTotal, false, false) : '***.**'}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            <div className="pt-statusbar">
-              <span>点击成员可按人员过滤</span>
-              <span>{memberRows.length} 人</span>
-            </div>
-          </PlatinumWindow>
+        <div className="pt-statusbar">
+          <span>点击条目可筛选对应分类明细</span>
+          <span>{categoryRows.length} 项</span>
         </div>
-      </div>
+      </PlatinumWindow>
 
       {/* ── Window 3: Transactions Feed (Matches exe.v2core.com/stats Live window) ── */}
       <PlatinumWindow title="账单明细 · Transactions">
@@ -544,16 +456,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
             );
           })}
 
-          <input
-            type="search"
-            className="pt-input"
-            value={filters.search}
-            onChange={(e) => onPatchFilters({ search: e.target.value })}
-            placeholder="搜索备注 / 成员 / 分类…"
-            style={{ width: 200, maxWidth: '100%' }}
-            aria-label="搜索账单明细"
-          />
-
           <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555' }}>
             共 {stats.count} 笔
           </span>
@@ -571,21 +473,20 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                 <React.Fragment key={group.date}>
                   <div className="pt-live-group-header">
                     <span>{group.date}</span>
-                    <span>
-                      {group.items.length} 笔
-                      {hasFullAccess ? ` · ${formatCurrency(dayNet, true, true)}` : ''}
-                    </span>
+                    {hasFullAccess && <span>{formatCurrency(dayNet, true, true)}</span>}
                   </div>
 
                   {group.items.map((tx) => {
                     const isActive = expandedId === tx.id;
                     const cat = categoryLabel(tx);
-                    const nameText = hasFullAccess ? getTransactionName(tx) : '***';
-                    const dotColor = !hasFullAccess
-                      ? '#999999'
-                      : tx.amount >= 0
-                      ? '#333399'
-                      : '#ff6600';
+                    const memberName = tx.member || '默认';
+                    const noteText = hasFullAccess
+                      ? (tx.title || '').trim()
+                      : tx.title
+                      ? '***'
+                      : '';
+                    const dotColor =
+                      memberColorMap.get(memberName) ?? memberDotColor(memberName);
 
                     return (
                       <React.Fragment key={tx.id}>
@@ -602,17 +503,17 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                             }
                           }}
                         >
-                          <span className="who" title={tx.member || '默认'}>
+                          <span className="who" title={memberName}>
                             <PixelDot color={dotColor} />
-                            <span>{tx.member || '默认'}</span>
+                            <span>{memberName}</span>
                           </span>
 
                           <span className="cc" title={cat}>
                             {cat || '—'}
                           </span>
 
-                          <span className="pg" title={nameText}>
-                            {nameText}
+                          <span className="pg" title={noteText || undefined}>
+                            {noteText}
                           </span>
 
                           <span
@@ -647,7 +548,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                 borderBottom: '1px solid #ddd',
                               }}
                             >
-                              <b style={{ fontSize: 12 }}>{nameText}</b>
+                              <b style={{ fontSize: 12 }}>{noteText || cat || '交易详情'}</b>
                               <button
                                 type="button"
                                 className="pt-btn tab"
