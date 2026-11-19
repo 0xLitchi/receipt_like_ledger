@@ -207,7 +207,6 @@ export const ReceiptView: React.FC<ReceiptViewProps> = ({
               stats={stats}
               hasFullAccess={hasFullAccess}
               isPrinting={isSettling}
-              month={selectedMonth}
             />
           </div>
 
