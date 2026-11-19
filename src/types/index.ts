@@ -65,27 +65,6 @@ export interface ApiRequestLog {
   created_at?: string;
 }
 
-/** MCP 只读查询服务的调用记录 */
-export type McpCallStatus = 'ok' | 'error' | 'unauthorized' | 'disabled';
-
-export interface McpCallLog {
-  id: string;
-  timestamp: string;
-  method: string;          // initialize / tools/list / tools/call / http
-  tool_name: string;
-  status: McpCallStatus;
-  error_message: string;
-  params_summary: string;
-  duration_ms: number;
-  client_name: string;
-  client_version: string;
-  ip_address: string;
-  user_agent: string;
-  auth_mode: string;       // access_token / admin_session / admin / none
-  created_at?: string;
-}
-
 export interface AppSettings {
   theme_style: ThemeStyle;
-  mcp_enabled: boolean;
 }

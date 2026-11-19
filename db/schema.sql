@@ -32,29 +32,9 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 全局应用设置（key-value，如全局主题风格、MCP 开关）
+-- 全局应用设置（key-value，如全局主题风格）
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- MCP 只读查询服务的调用日志（API 运行时也会幂等建表）
-CREATE TABLE IF NOT EXISTS mcp_call_logs (
-    id TEXT PRIMARY KEY,
-    timestamp TEXT NOT NULL,
-    method TEXT NOT NULL,           -- initialize / tools/list / tools/call / http
-    tool_name TEXT DEFAULT '',
-    status TEXT NOT NULL,           -- ok / error / unauthorized / disabled
-    error_message TEXT DEFAULT '',
-    params_summary TEXT DEFAULT '',
-    duration_ms INTEGER DEFAULT 0,
-    client_name TEXT DEFAULT '',
-    client_version TEXT DEFAULT '',
-    ip_address TEXT DEFAULT '',
-    user_agent TEXT DEFAULT '',
-    auth_mode TEXT DEFAULT '',      -- access_token / admin_session / admin / none
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_mcp_call_logs_created ON mcp_call_logs(created_at);

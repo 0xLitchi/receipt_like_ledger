@@ -17,13 +17,6 @@ const sample = [
 let mockAuthed = true;
 // 模拟服务端 ACCESS_TOKEN 校验：?token= 命中才返回明文
 const mockAccessToken = 'mock_access_token';
-// 模拟后台 MCP 开关（MOCK_API=1 时可在 General 页切换）
-let mockMcpEnabled = false;
-
-const mockSettings = () => ({
-  theme_style: 'receipt',
-  mcp_enabled: mockMcpEnabled ? 'true' : 'false',
-});
 
 export function mockApi(): Plugin {
   return {
@@ -38,34 +31,7 @@ export function mockApi(): Plugin {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         const json = (body: unknown) => res.end(JSON.stringify(body));
 
-        if (url.startsWith('/api/settings')) {
-          if (req.method === 'PUT') {
-            let raw = '';
-            req.on('data', (chunk: Buffer) => {
-              raw += chunk.toString();
-            });
-            req.on('end', () => {
-              try {
-                const body = JSON.parse(raw || '{}') as { mcp_enabled?: unknown };
-                if (typeof body.mcp_enabled === 'boolean') mockMcpEnabled = body.mcp_enabled;
-              } catch {
-                /* 模拟环境忽略非法请求体 */
-              }
-              json({ success: true, data: mockSettings() });
-            });
-            return;
-          }
-          return json({ success: true, data: mockSettings() });
-        }
-        if (url.startsWith('/api/mcp-logs'))
-          return json({
-            success: true,
-            data: [
-              { id: 'm1', timestamp: '2026-10-31 18:22:10', method: 'initialize', tool_name: '', status: 'ok', error_message: '', params_summary: '{"protocolVersion":"2025-06-18"}', duration_ms: 3, client_name: 'claude-code', client_version: '2.0.14', ip_address: '203.0.113.8', user_agent: 'claude-code/2.0.14', auth_mode: 'access_token' },
-              { id: 'm2', timestamp: '2026-10-31 18:22:11', method: 'tools/call', tool_name: 'list_transactions', status: 'ok', error_message: '', params_summary: '{"month":"2026-10","type":"expense"}', duration_ms: 12, client_name: 'claude-code', client_version: '2.0.14', ip_address: '203.0.113.8', user_agent: 'claude-code/2.0.14', auth_mode: 'access_token' },
-              { id: 'm3', timestamp: '2026-10-31 18:23:04', method: 'tools/call', tool_name: 'get_transaction', status: 'error', error_message: '未找到 id 为 nope 的账目', params_summary: '{"id":"nope"}', duration_ms: 5, client_name: 'curl', client_version: '8.7', ip_address: '198.51.100.2', user_agent: 'curl/8.7', auth_mode: 'access_token' },
-            ],
-          });
+        if (url.startsWith('/api/settings')) return json({ success: true, data: { theme_style: 'receipt' } });
         if (url.startsWith('/api/auth/verify')) {
           mockAuthed = true;
           return json({ success: true, token: 'sess_mock' });

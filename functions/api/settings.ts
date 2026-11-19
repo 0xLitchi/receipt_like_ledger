@@ -1,5 +1,4 @@
 import {
-  ensureSettingsTable,
   getCorsHeaders,
   isAdminAuthorized,
   type SharedEnv,
@@ -9,10 +8,9 @@ interface Env extends SharedEnv {}
 
 // 目前仅保留「拟真热敏小票」一种主题；历史数据若为已下线主题，读取时回退为 receipt
 const ALLOWED_THEME_STYLES = ['receipt'] as const;
-const ALLOWED_KEYS = ['theme_style', 'mcp_enabled'] as const;
+const ALLOWED_KEYS = ['theme_style'] as const;
 const DEFAULT_SETTINGS: Record<string, string> = {
   theme_style: 'receipt',
-  mcp_enabled: 'false',
 };
 
 const jsonHeaders = (request: Request, env: Env, extra: Record<string, string> = {}): Record<string, string> => ({
@@ -22,41 +20,28 @@ const jsonHeaders = (request: Request, env: Env, extra: Record<string, string> =
   ...extra,
 });
 
+// 全局设置表（幂等建表）
+const ensureSettingsTable = async (db: D1Database): Promise<void> => {
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`
+  ).run();
+};
+
 const isValidValue = (key: string, value: string): boolean => {
   if (key === 'theme_style') {
     return (ALLOWED_THEME_STYLES as readonly string[]).includes(value);
   }
-  if (key === 'mcp_enabled') {
-    return value === 'true' || value === 'false';
-  }
   return false;
 };
 
-const invalidValueMessage = (key: string): string => {
-  if (key === 'theme_style') {
-    return `theme_style 必须是 ${ALLOWED_THEME_STYLES.join(', ')} 之一`;
-  }
-  return `${key} 必须是 true 或 false`;
-};
-
-const readSettings = async (db: D1Database): Promise<Record<string, string>> => {
-  const data: Record<string, string> = { ...DEFAULT_SETTINGS };
-  const { results } = await db.prepare(
-    'SELECT key, value FROM app_settings'
-  ).all<{ key: string; value: string }>();
-
-  (results || []).forEach((row) => {
-    if (!(row.key in DEFAULT_SETTINGS)) return;
-    if (isValidValue(row.key, row.value)) data[row.key] = row.value;
-  });
-
-  return data;
-};
-
-// 公开读取全局设置（主题与 MCP 开关状态无需敏感鉴权）
+// 公开读取全局设置（主题设置无需敏感鉴权）
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
-  let data: Record<string, string> = { ...DEFAULT_SETTINGS };
+  const data: Record<string, string> = { ...DEFAULT_SETTINGS };
 
   if (!env.DB) {
     return new Response(JSON.stringify({ success: true, data }), {
@@ -66,7 +51,17 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   try {
     await ensureSettingsTable(env.DB);
-    data = await readSettings(env.DB);
+    const { results } = await env.DB.prepare(
+      'SELECT key, value FROM app_settings'
+    ).all<{ key: string; value: string }>();
+
+    (results || []).forEach((row) => {
+      if (!(row.key in DEFAULT_SETTINGS)) return;
+      const allowed = row.key === 'theme_style'
+        ? (ALLOWED_THEME_STYLES as readonly string[]).includes(row.value)
+        : true;
+      if (allowed) data[row.key] = row.value;
+    });
 
     return new Response(JSON.stringify({ success: true, data }), {
       headers: jsonHeaders(request, env),
@@ -80,7 +75,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 };
 
-// 管理员写入全局设置（theme_style / mcp_enabled）
+// 管理员写入全局设置（支持 theme_style 设置）
 export const onRequestPut: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -117,12 +112,11 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
 
     await ensureSettingsTable(env.DB);
     for (const [key, rawValue] of entries) {
-      // mcp_enabled 统一存小写字符串，便于 SQL 侧直接比较
-      const value = key === 'mcp_enabled' ? String(rawValue).toLowerCase() : String(rawValue);
+      const value = String(rawValue);
       if (!isValidValue(key, value)) {
         return new Response(JSON.stringify({
           success: false,
-          message: invalidValueMessage(key),
+          message: `theme_style 必须是 ${ALLOWED_THEME_STYLES.join(', ')} 之一`,
         }), {
           status: 400,
           headers: jsonHeaders(request, env),
@@ -134,7 +128,17 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       ).bind(key, value).run();
     }
 
-    const data = await readSettings(env.DB);
+    const { results } = await env.DB.prepare(
+      'SELECT key, value FROM app_settings'
+    ).all<{ key: string; value: string }>();
+    const data: Record<string, string> = { ...DEFAULT_SETTINGS };
+    (results || []).forEach((row) => {
+      if (!(row.key in DEFAULT_SETTINGS)) return;
+      const allowed = row.key === 'theme_style'
+        ? (ALLOWED_THEME_STYLES as readonly string[]).includes(row.value)
+        : true;
+      if (allowed) data[row.key] = row.value;
+    });
 
     return new Response(JSON.stringify({ success: true, data }), {
       headers: jsonHeaders(request, env),

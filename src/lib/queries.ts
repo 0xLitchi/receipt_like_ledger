@@ -17,7 +17,6 @@ export const queryKeys = {
   settings: ['settings'] as const,
   activityLogs: ['logs', 'activity'] as const,
   apiLogs: ['logs', 'api'] as const,
-  mcpLogs: ['logs', 'mcp'] as const,
 };
 
 /** 交易列表（含访问权限层级） */

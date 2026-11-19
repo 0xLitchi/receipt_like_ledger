@@ -2,16 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Transaction } from '../../types';
 import { queryClient } from '../../lib/query-client';
 import { queryKeys } from '../../lib/queries';
-import {
-  ApiError,
-  fetchActivityLogs,
-  fetchApiLogs,
-  fetchMcpLogs,
-  fetchSettings,
-  fetchTransactions,
-  updateMcpEnabled,
-} from '../../lib/api-client';
-import type { ActivityLog, ApiRequestLog, McpCallLog, ThemeStyle } from '../../types';
+import { ApiError, fetchActivityLogs, fetchApiLogs, fetchTransactions } from '../../lib/api-client';
+import type { ActivityLog, ApiRequestLog, ThemeStyle } from '../../types';
 import {
   Plus,
   Trash2,
@@ -39,10 +31,6 @@ import {
   Terminal,
   ShieldAlert,
   Edit3,
-  Server,
-  Copy,
-  Wifi,
-  WifiOff,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -130,8 +118,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   themeStyle,
   onThemeStyleChange,
 }) => {
-  // 菜单 Tab 控制：'data' | 'log' | 'reqlog' | 'mcplog' | 'general'
-  const [activeTab, setActiveTab] = useState<'data' | 'log' | 'reqlog' | 'mcplog' | 'general'>('data');
+  // 菜单 Tab 控制：'data' | 'log' | 'reqlog' | 'general'
+  const [activeTab, setActiveTab] = useState<'data' | 'log' | 'reqlog' | 'general'>('data');
 
   const [refreshingData, setRefreshingData] = useState(false);
   const [rows, setRows] = useState<Transaction[]>([]);
@@ -160,17 +148,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [loadingApiLogs, setLoadingApiLogs] = useState(false);
   const [apiLogsError, setApiLogsError] = useState<string | null>(null);
   const [apiLogSearchQuery, setApiLogSearchQuery] = useState('');
-
-  // MCP 调用日志与开关状态
-  const [mcpLogs, setMcpLogs] = useState<McpCallLog[]>([]);
-  const [loadingMcpLogs, setLoadingMcpLogs] = useState(false);
-  const [mcpLogsError, setMcpLogsError] = useState<string | null>(null);
-  const [mcpLogSearchQuery, setMcpLogSearchQuery] = useState('');
-  const [mcpEnabled, setMcpEnabled] = useState(false);
-  const [mcpSettingsLoading, setMcpSettingsLoading] = useState(false);
-  const [mcpSaving, setMcpSaving] = useState(false);
-  const [mcpSaveMsg, setMcpSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [copiedMcpUrl, setCopiedMcpUrl] = useState(false);
 
   // 解析文本导入弹窗状态
   const [showParseModal, setShowParseModal] = useState(false);
@@ -251,85 +228,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   }, []);
 
-  // 加载 MCP 调用日志
-  const loadMcpLogs = useCallback(async () => {
-    setLoadingMcpLogs(true);
-    setMcpLogsError(null);
-    try {
-      const data = await queryClient.fetchQuery({
-        queryKey: queryKeys.mcpLogs,
-        queryFn: fetchMcpLogs,
-      });
-      setMcpLogs(data);
-    } catch (e) {
-      setMcpLogs([]);
-      setMcpLogsError(describeLogError(e));
-    } finally {
-      setLoadingMcpLogs(false);
-    }
-  }, []);
-
-  // 打开后台时同步 MCP 开关状态
-  useEffect(() => {
-    if (!isOpen) return;
-    let cancelled = false;
-    setMcpSettingsLoading(true);
-    fetchSettings()
-      .then((settings) => {
-        if (!cancelled) setMcpEnabled(settings.mcp_enabled);
-      })
-      .finally(() => {
-        if (!cancelled) setMcpSettingsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen]);
-
   useEffect(() => {
     if (isOpen && activeTab === 'log') {
       loadLogs();
     } else if (isOpen && activeTab === 'reqlog') {
       loadApiLogs();
-    } else if (isOpen && activeTab === 'mcplog') {
-      loadMcpLogs();
     }
-  }, [isOpen, activeTab, loadLogs, loadApiLogs, loadMcpLogs]);
-
-  // MCP 端点地址（供外部客户端配置）
-  const mcpEndpoint = useMemo(
-    () => (typeof window === 'undefined' ? '/api/mcp' : `${window.location.origin}/api/mcp`),
-    []
-  );
-
-  const handleToggleMcp = useCallback(async () => {
-    if (mcpSaving) return;
-    const next = !mcpEnabled;
-    setMcpSaving(true);
-    setMcpSaveMsg(null);
-    try {
-      await updateMcpEnabled(next);
-      setMcpEnabled(next);
-      setMcpSaveMsg({
-        type: 'success',
-        text: next ? 'MCP 服务已开启，外部客户端现在可以查询数据' : 'MCP 服务已关闭，外部请求将被拒绝',
-      });
-    } catch (e) {
-      setMcpSaveMsg({ type: 'error', text: describeLogError(e) });
-    } finally {
-      setMcpSaving(false);
-    }
-  }, [mcpEnabled, mcpSaving]);
-
-  const handleCopyMcpEndpoint = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(mcpEndpoint);
-      setCopiedMcpUrl(true);
-      window.setTimeout(() => setCopiedMcpUrl(false), 1800);
-    } catch {
-      /* 剪贴板不可用时保留地址展示，用户可手动复制 */
-    }
-  }, [mcpEndpoint]);
+  }, [isOpen, activeTab, loadLogs, loadApiLogs]);
 
   // 行变动类型判定: 'added' | 'modified' | 'unchanged'
   const getRowChangeStatus = useCallback(
@@ -541,22 +446,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   }, [apiLogs, apiLogSearchQuery]);
 
-  // 过滤 MCP 调用日志
-  const filteredMcpLogs = useMemo(() => {
-    if (!mcpLogSearchQuery.trim()) return mcpLogs;
-    const q = mcpLogSearchQuery.toLowerCase().trim();
-    return mcpLogs.filter(
-      (l) =>
-        l.method.toLowerCase().includes(q) ||
-        l.tool_name.toLowerCase().includes(q) ||
-        l.status.toLowerCase().includes(q) ||
-        l.client_name.toLowerCase().includes(q) ||
-        l.ip_address.toLowerCase().includes(q) ||
-        l.params_summary.toLowerCase().includes(q) ||
-        l.error_message.toLowerCase().includes(q)
-    );
-  }, [mcpLogs, mcpLogSearchQuery]);
-
   // 文本解析：点击“保存”按钮进入预览状态
   const handleStartParsePreview = () => {
     if (!rawText.trim()) {
@@ -715,18 +604,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             >
               <Terminal className="w-4 h-4 text-purple-400" />
               <span>Req Log (请求日志)</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('mcplog')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
-                activeTab === 'mcplog'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              }`}
-            >
-              <Server className="w-4 h-4 text-cyan-400" />
-              <span>MCP (调用日志)</span>
             </button>
 
             <button
@@ -1385,214 +1262,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
           </>
-        ) : activeTab === 'mcplog' ? (
-          // ==================== TAB 4: MCP 调用日志 ====================
-          <>
-            <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between gap-4">
-              <div>
-                <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
-                  <Server className="w-5 h-5 text-cyan-600" />
-                  MCP 调用日志
-                </h1>
-                <p className="text-xs font-mono text-slate-500 mt-0.5">
-                  记录外部 MCP 客户端对只读查询工具的调用（客户端、参数、状态与耗时）
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-                    mcpEnabled
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-slate-100 text-slate-500 border-slate-300'
-                  }`}
-                  title="可在 General 设置中切换"
-                >
-                  {mcpEnabled ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-                  {mcpEnabled ? 'MCP 已开启' : 'MCP 已关闭'}
-                </span>
-
-                <div className="relative w-64">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={mcpLogSearchQuery}
-                    onChange={(e) => setMcpLogSearchQuery(e.target.value)}
-                    placeholder="搜索工具、客户端、IP..."
-                    className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-cyan-600 focus:bg-white"
-                  />
-                </div>
-
-                <button
-                  onClick={loadMcpLogs}
-                  disabled={loadingMcpLogs}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono font-bold transition-colors border border-slate-300 shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingMcpLogs ? 'animate-spin' : ''}`} />
-                  刷新日志
-                </button>
-              </div>
-            </header>
-
-            <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50">
-              <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-600 uppercase text-[11px] border-b border-slate-200 sticky top-0 z-10 font-bold tracking-wider">
-                      <th className="py-3 px-4 border-r border-slate-200 w-44">调用时间</th>
-                      <th className="py-3 px-3 border-r border-slate-200 w-40">方法 / 工具</th>
-                      <th className="py-3 px-3 border-r border-slate-200 w-32 text-center">状态</th>
-                      <th className="py-3 px-4 border-r border-slate-200 w-40">客户端</th>
-                      <th className="py-3 px-4 border-r border-slate-200 min-w-[220px]">参数摘要 / 错误</th>
-                      <th className="py-3 px-3 border-r border-slate-200 w-24 text-right">耗时</th>
-                      <th className="py-3 px-4 w-36">IP</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {loadingMcpLogs ? (
-                      <tr>
-                        <td colSpan={7} className="py-12 text-center text-slate-400 font-mono">
-                          正在加载 MCP 调用日志...
-                        </td>
-                      </tr>
-                    ) : mcpLogsError ? (
-                      <tr>
-                        <td colSpan={7} className="py-10 text-center font-mono">
-                          <div className="inline-flex flex-col items-center gap-2">
-                            <span className="inline-flex items-center gap-1.5 text-rose-700 font-bold">
-                              <AlertCircle className="w-4 h-4" />
-                              MCP 调用日志加载失败
-                            </span>
-                            <span className="text-slate-500">{mcpLogsError}</span>
-                            <button
-                              onClick={loadMcpLogs}
-                              className="mt-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold border border-slate-300 cursor-pointer"
-                            >
-                              重试
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : filteredMcpLogs.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-12 text-center text-slate-400 font-mono">
-                          {mcpEnabled ? '暂无 MCP 调用记录' : 'MCP 服务当前未开启，暂无调用记录'}
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredMcpLogs.map((log) => {
-                        const dateStr = log.created_at || log.timestamp || '';
-                        const formattedTime =
-                          dateStr.length >= 19 ? dateStr.substring(0, 19).replace('T', ' ') : dateStr;
-                        const clientLabel = log.client_name
-                          ? `${log.client_name}${log.client_version ? ` v${log.client_version}` : ''}`
-                          : log.user_agent && log.user_agent !== 'unknown'
-                          ? log.user_agent
-                          : '-';
-
-                        return (
-                          <tr key={log.id} className="hover:bg-slate-50 transition-colors align-top">
-                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-600">
-                              {formattedTime}
-                            </td>
-
-                            <td className="py-2.5 px-3 border-r border-slate-200">
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
-                                  log.method === 'tools/call'
-                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                    : log.method === 'tools/list'
-                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                    : log.method === 'initialize'
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                    : 'bg-slate-100 text-slate-700 border border-slate-200'
-                                }`}
-                              >
-                                {log.method}
-                              </span>
-                              {log.tool_name && (
-                                <div className="mt-1 text-[11px] text-slate-500 font-mono truncate" title={log.tool_name}>
-                                  {log.tool_name}
-                                </div>
-                              )}
-                            </td>
-
-                            <td className="py-2.5 px-3 border-r border-slate-200 text-center">
-                              {log.status === 'ok' ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  成功
-                                </span>
-                              ) : log.status === 'unauthorized' ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                  <ShieldAlert className="w-3 h-3" />
-                                  未授权
-                                </span>
-                              ) : log.status === 'disabled' ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-300">
-                                  <WifiOff className="w-3 h-3" />
-                                  已关闭
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                                  <XCircle className="w-3 h-3" />
-                                  失败
-                                </span>
-                              )}
-                            </td>
-
-                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono text-slate-700">
-                              <div className="truncate max-w-[150px]" title={clientLabel}>
-                                {clientLabel}
-                              </div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">
-                                {log.auth_mode === 'access_token'
-                                  ? 'ACCESS_TOKEN'
-                                  : log.auth_mode === 'admin_session' || log.auth_mode === 'admin'
-                                  ? '管理员会话'
-                                  : log.auth_mode || '-'}
-                              </div>
-                            </td>
-
-                            <td className="py-2.5 px-4 border-r border-slate-200 font-mono">
-                              <div
-                                className="text-slate-800 truncate max-w-[360px]"
-                                title={log.params_summary || log.error_message}
-                              >
-                                {log.params_summary || '-'}
-                              </div>
-                              {log.error_message && (
-                                <div className="mt-0.5 text-[11px] text-rose-700 truncate max-w-[360px]" title={log.error_message}>
-                                  {log.error_message}
-                                </div>
-                              )}
-                            </td>
-
-                            <td className="py-2.5 px-3 border-r border-slate-200 text-right font-mono text-slate-500">
-                              {log.duration_ms ? `${log.duration_ms}ms` : '<1ms'}
-                            </td>
-
-                            <td className="py-2.5 px-4 font-mono text-slate-600 truncate max-w-[140px]" title={log.ip_address}>
-                              {log.ip_address || '-'}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
         ) : (
-          // ==================== TAB 5: GENERAL 通用设置 ====================
+          // ==================== TAB 4: GENERAL 通用设置 ====================
           <>
             <header className="px-6 py-3.5 bg-white border-b border-slate-200 shadow-sm">
               <h1 className="text-lg font-bold font-mono tracking-tight text-slate-900 flex items-center gap-2">
                 General 通用设置
               </h1>
               <p className="text-xs font-mono text-slate-500 mt-0.5">
-                管理前台界面风格、MCP 服务开关与全局显示偏好
+                管理前台主页面的 UI 界面呈现风格与全局显示偏好
               </p>
             </header>
 
@@ -1639,125 +1317,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* MCP 只读查询服务 */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Server className="w-5 h-5 text-cyan-600" />
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">MCP 只读查询服务</h3>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        供外部 MCP 客户端查询账目；仅提供读取工具，不允许新增、修改或删除
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={mcpEnabled}
-                    onClick={handleToggleMcp}
-                    disabled={mcpSettingsLoading || mcpSaving}
-                    className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 ${
-                      mcpEnabled ? 'bg-emerald-600' : 'bg-slate-300'
-                    }`}
-                    title={mcpEnabled ? '点击关闭 MCP 服务' : '点击开启 MCP 服务'}
-                  >
-                    <span
-                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
-                        mcpEnabled ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 text-xs">
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-bold border ${
-                      mcpEnabled
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-slate-100 text-slate-500 border-slate-300'
-                    }`}
-                  >
-                    {mcpSettingsLoading ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        读取中…
-                      </>
-                    ) : mcpEnabled ? (
-                      <>
-                        <Wifi className="w-3.5 h-3.5" />
-                        已开启
-                      </>
-                    ) : (
-                      <>
-                        <WifiOff className="w-3.5 h-3.5" />
-                        已关闭
-                      </>
-                    )}
-                  </span>
-                  <span className="text-slate-500">
-                    {mcpSaving ? '正在保存…' : '开关立即生效，无需重启部署'}
-                  </span>
-                </div>
-
-                {mcpSaveMsg && (
-                  <div
-                    className={`rounded-xl px-3 py-2 text-xs flex items-start gap-2 border ${
-                      mcpSaveMsg.type === 'success'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        : 'bg-rose-50 text-rose-800 border-rose-200'
-                    }`}
-                  >
-                    {mcpSaveMsg.type === 'success' ? (
-                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    )}
-                    <span>{mcpSaveMsg.text}</span>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">端点地址</div>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-slate-900 text-cyan-300 text-[11px] font-mono truncate">
-                      {mcpEndpoint}
-                    </code>
-                    <button
-                      type="button"
-                      onClick={handleCopyMcpEndpoint}
-                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-bold cursor-pointer"
-                    >
-                      {copiedMcpUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      {copiedMcpUrl ? '已复制' : '复制'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px] text-slate-600">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-1.5">
-                    <div className="font-bold text-slate-800">鉴权方式</div>
-                    <p className="leading-relaxed">
-                      外部客户端携带{' '}
-                      <code className="px-1 py-0.5 rounded bg-slate-200 text-slate-800">Authorization: Bearer &lt;ACCESS_TOKEN&gt;</code>
-                      。未配置 ACCESS_TOKEN 时，仅管理员会话可调用。
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-1.5">
-                    <div className="font-bold text-slate-800">可调用工具</div>
-                    <p className="leading-relaxed">
-                      list_transactions · summarize_transactions · list_filter_options · get_transaction
-                    </p>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  安全提示：开启后，持有 ACCESS_TOKEN 的外部调用方可读取全部账目（含明文金额），请妥善保管令牌；
-                  所有调用都会记录在「MCP 调用日志」中。
-                </p>
               </div>
             </div>
           </>

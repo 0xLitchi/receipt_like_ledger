@@ -2,7 +2,6 @@ import type {
   ActivityLog,
   ApiRequestLog,
   AppSettings,
-  McpCallLog,
   ThemeStyle,
   Transaction,
 } from '../types';
@@ -299,22 +298,13 @@ export async function batchSaveTransactions(
 /* 设置                                                                */
 /* ------------------------------------------------------------------ */
 
-interface SettingsResponse {
-  theme_style?: string;
-  mcp_enabled?: string | boolean;
-}
-
 export async function fetchSettings(): Promise<AppSettings> {
   try {
-    const json = await request<SettingsResponse>('/api/settings', { auth: false });
+    const json = await request<AppSettings>('/api/settings', { auth: false });
     const style = json.data?.theme_style;
-    const rawMcp = json.data?.mcp_enabled;
-    return {
-      theme_style: style === 'receipt' ? style : 'receipt',
-      mcp_enabled: rawMcp === true || rawMcp === 'true',
-    };
+    return { theme_style: style === 'receipt' ? style : 'receipt' };
   } catch {
-    return { theme_style: 'receipt', mcp_enabled: false };
+    return { theme_style: 'receipt' };
   }
 }
 
@@ -322,14 +312,6 @@ export async function updateThemeStyle(value: ThemeStyle): Promise<void> {
   await request('/api/settings', {
     method: 'PUT',
     body: { theme_style: value },
-  });
-}
-
-/** 开启 / 关闭 MCP 只读查询服务（立即生效） */
-export async function updateMcpEnabled(value: boolean): Promise<void> {
-  await request('/api/settings', {
-    method: 'PUT',
-    body: { mcp_enabled: value },
   });
 }
 
@@ -344,10 +326,5 @@ export async function fetchActivityLogs(): Promise<ActivityLog[]> {
 
 export async function fetchApiLogs(): Promise<ApiRequestLog[]> {
   const json = await request<ApiRequestLog[]>('/api/api-logs');
-  return Array.isArray(json.data) ? json.data : [];
-}
-
-export async function fetchMcpLogs(): Promise<McpCallLog[]> {
-  const json = await request<McpCallLog[]>('/api/mcp-logs');
   return Array.isArray(json.data) ? json.data : [];
 }
