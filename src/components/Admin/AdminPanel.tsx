@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { ActivityLog, ApiRequestLog, ThemeStyle, Transaction } from '../../types';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import type { ActivityLog, ApiRequestLog, Transaction } from '../../types';
 import { queryClient } from '../../lib/query-client';
 import { queryKeys } from '../../lib/queries';
 import { ApiError, fetchActivityLogs, fetchApiLogs, fetchTransactions } from '../../lib/api-client';
-import { PlatinumWindow } from '../Platinum/PlatinumChrome';
+import { PixelDot, PlatinumWindow } from '../Platinum/PlatinumChrome';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -12,8 +12,6 @@ interface AdminPanelProps {
   onRefresh?: () => Promise<void>;
   onBatchSave: (items: Transaction[], deletedIds: string[]) => Promise<void>;
   onLogout: () => void;
-  themeStyle: ThemeStyle;
-  onThemeStyleChange: (style: ThemeStyle) => void;
 }
 
 const parseRawLedgerText = (text: string): Transaction[] => {
@@ -100,6 +98,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [saving, setSaving] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [sqlToast, setSqlToast] = useState<{ title: string; detail: string } | null>(null);
+  const sqlToastTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (sqlToastTimerRef.current !== null) {
+        window.clearTimeout(sqlToastTimerRef.current);
+      }
+    };
+  }, []);
 
   const [showSavePreviewModal, setShowSavePreviewModal] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -208,6 +216,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         (row.category || '') !== (orig.category || '') ||
         (row.subcategory || '') !== (orig.subcategory || '') ||
         (row.title || '') !== (orig.title || '') ||
+        (row.ledger || '') !== (orig.ledger || '') ||
         Number(row.amount) !== Number(orig.amount);
 
       return isModified ? 'modified' : 'unchanged';
@@ -320,6 +329,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           (r.category || '').toLowerCase().includes(q) ||
           (r.subcategory || '').toLowerCase().includes(q) ||
           (r.date || '').toLowerCase().includes(q) ||
+          (r.ledger || '').toLowerCase().includes(q) ||
           String(r.amount).includes(q)
       );
     }
@@ -399,6 +409,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
+    const addedCount = pendingChanges.added.length;
+    const modifiedCount = pendingChanges.modified.length;
+    const deletedCount = pendingChanges.deleted.length;
+    const totalCount = pendingChanges.totalCount;
+
     setSaving(true);
     setSaveError(null);
     try {
@@ -415,11 +430,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         now.getMinutes()
       ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
       setLastSavedTime(timeStr);
+
+      const summaryParts: string[] = [];
+      if (addedCount > 0) summaryParts.push(`新增 ${addedCount} 条`);
+      if (modifiedCount > 0) summaryParts.push(`更新 ${modifiedCount} 条`);
+      if (deletedCount > 0) summaryParts.push(`删除 ${deletedCount} 条`);
+      const detailText = `已写入数据库：${summaryParts.join('、')}（共 ${totalCount} 项变动 · ${timeStr}）`;
+
       setStatusMsg({
         type: 'success',
-        text: `保存成功，共提交 ${pendingChanges.totalCount} 项变动 (${timeStr})`,
+        text: `SQL 执行成功 · ${detailText}`,
       });
-      setTimeout(() => setStatusMsg(null), 3500);
+      setSqlToast({
+        title: 'SQL 执行成功',
+        detail: detailText,
+      });
+      if (sqlToastTimerRef.current !== null) {
+        window.clearTimeout(sqlToastTimerRef.current);
+      }
+      sqlToastTimerRef.current = window.setTimeout(() => {
+        setSqlToast(null);
+        setStatusMsg(null);
+        sqlToastTimerRef.current = null;
+      }, 6000);
     } catch (err) {
       const message = err instanceof Error ? err.message : '网络或凭证错误';
       setSaveError(message);
@@ -435,7 +468,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = ['id', 'date', 'title', 'amount', 'member', 'category', 'subcategory'];
+    const headers = ['id', 'date', 'title', 'amount', 'member', 'category', 'subcategory', 'ledger'];
     const csvLines = [headers.join(',')];
 
     processedRows.forEach((r) => {
@@ -447,6 +480,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         `"${(r.member || '').replace(/"/g, '""')}"`,
         `"${(r.category || '').replace(/"/g, '""')}"`,
         `"${(r.subcategory || '').replace(/"/g, '""')}"`,
+        `"${(r.ledger || 'Default').replace(/"/g, '""')}"`,
       ].join(',');
       csvLines.push(line);
     });
@@ -542,7 +576,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="pt-input"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="筛选日期 / 备注 / 成员 / 分类 / 金额…"
+                placeholder="筛选日期 / 备注 / 成员 / 分类 / 金额 / 账本…"
                 style={{ width: 240, maxWidth: '100%' }}
               />
               <button type="button" className="pt-btn tab" onClick={handleAddRow}>
@@ -556,10 +590,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   setShowParseModal(true);
                 }}
               >
-                文本导入
+                CSV导入
               </button>
               <button type="button" className="pt-btn tab" onClick={handleExportCSV}>
-                导出 CSV
+                CSV导出
               </button>
               <button
                 type="button"
@@ -625,12 +659,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <th style={{ width: 104, cursor: 'pointer' }} onClick={() => handleSort('amount')}>
                       金额{sortIndicator('amount')}
                     </th>
+                    <th style={{ width: 92, cursor: 'pointer' }} onClick={() => handleSort('ledger')}>
+                      账本{sortIndicator('ledger')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {processedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
+                      <td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
                         暂无匹配的交易记录
                       </td>
                     </tr>
@@ -724,10 +761,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 width: '100%',
                                 textAlign: 'right',
                                 fontFamily: 'var(--font-mono)',
-                                color: row.amount >= 0 ? 'var(--income)' : '#262626',
+                                color: row.amount >= 0 ? 'var(--income)' : 'var(--expense)',
                               }}
                               value={row.amount}
                               onChange={(e) => handleCellChange(row.id, 'amount', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="pt-input"
+                              style={{ width: '100%' }}
+                              value={row.ledger || ''}
+                              onChange={(e) => handleCellChange(row.id, 'ledger', e.target.value)}
                             />
                           </td>
                         </tr>
@@ -1098,7 +1144,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         >
           <div style={{ width: '100%', maxWidth: 640 }}>
             <PlatinumWindow
-              title="原始文本批量导入 · Import Text"
+              title="CSV 批量导入 · CSV Import"
               onClose={() => setShowParseModal(false)}
             >
               <div style={{ padding: '12px 14px' }}>
@@ -1131,6 +1177,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <th>分类</th>
                             <th>备注</th>
                             <th>金额</th>
+                            <th>账本</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1145,6 +1192,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
                                 {it.amount}
                               </td>
+                              <td>{it.ledger || 'Default'}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1191,6 +1239,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </PlatinumWindow>
           </div>
+        </div>
+      )}
+
+      {/* ── Floating SQL Execution Success Toast ── */}
+      {sqlToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            top: 18,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 80,
+            width: 'min(480px, calc(100vw - 24px))',
+          }}
+        >
+          <PlatinumWindow
+            title={sqlToast.title}
+            onClose={() => setSqlToast(null)}
+            closeTitle="关闭提示"
+          >
+            <div
+              style={{
+                padding: '10px 12px',
+                background: '#dcfce7',
+                color: '#166534',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 12,
+              }}
+            >
+              <PixelDot color="#15803d" />
+              <span style={{ flex: 1, fontWeight: 'bold' }}>{sqlToast.detail}</span>
+              <button
+                type="button"
+                className="pt-btn tab"
+                onClick={() => setSqlToast(null)}
+              >
+                确定
+              </button>
+            </div>
+          </PlatinumWindow>
         </div>
       )}
     </div>

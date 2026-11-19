@@ -1,8 +1,6 @@
 import type {
   ActivityLog,
   ApiRequestLog,
-  AppSettings,
-  ThemeStyle,
   Transaction,
 } from '../types';
 
@@ -292,27 +290,6 @@ export async function batchSaveTransactions(
   }
 
   return { failed };
-}
-
-/* ------------------------------------------------------------------ */
-/* 设置                                                                */
-/* ------------------------------------------------------------------ */
-
-export async function fetchSettings(): Promise<AppSettings> {
-  try {
-    const json = await request<AppSettings>('/api/settings', { auth: false });
-    const style = json.data?.theme_style;
-    return { theme_style: style === 'receipt' ? style : 'receipt' };
-  } catch {
-    return { theme_style: 'receipt' };
-  }
-}
-
-export async function updateThemeStyle(value: ThemeStyle): Promise<void> {
-  await request('/api/settings', {
-    method: 'PUT',
-    body: { theme_style: value },
-  });
 }
 
 /* ------------------------------------------------------------------ */

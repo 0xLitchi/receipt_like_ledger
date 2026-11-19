@@ -1,21 +1,20 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import type { DateGroup, LedgerFilters, LedgerType, SummaryStats, Transaction } from '../../types';
-import { categoryLabel, computeStats, summaryKey } from '../../features/ledger/use-ledger';
+import { categoryLabel, summaryKey } from '../../features/ledger/use-ledger';
 import { formatCurrency } from '../../utils/formatters';
-import { PixelDot, PlatinumWindow } from './PlatinumChrome';
+import { PixelDot, PlatinumSelect, PlatinumWindow } from './PlatinumChrome';
 import { buildMemberColorMap, memberDotColor } from './colors';
-import { CashflowChart } from './CashflowChart';
 
 interface LedgerDeskProps {
   allTransactions: Transaction[];
   monthTransactions: Transaction[];
-  filteredTransactions: Transaction[];
   dateGroups: DateGroup[];
   stats: SummaryStats;
-  months: string[];
+  years: string[];
+  monthsByYear: Record<string, string[]>;
+  allMonths: string[];
   filters: LedgerFilters;
   onPatchFilters: (next: Partial<LedgerFilters>) => void;
-  onResetFilters: () => void;
   hasFullAccess: boolean;
   isAdmin: boolean;
   onOpenAdmin: () => void;
@@ -37,31 +36,16 @@ function formatMonthTab(m: string): string {
   return `${y}年${mm.padStart(2, '0')}月`;
 }
 
-function formatDeltaPct(current: number, previous: number): string {
-  if (previous === 0) return current > 0 ? '新增' : '—';
-  const pct = ((current - previous) / previous) * 100;
-  const sign = pct > 0 ? '+' : '';
-  return `${sign}${pct.toFixed(1)}%`;
-}
-
-function prevMonthOf(month: string): string | null {
-  if (!month || month === 'ALL') return null;
-  const [y, m] = month.split('-').map(Number);
-  if (!y || !m) return null;
-  const d = new Date(y, m - 2, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
 export const LedgerDesk: React.FC<LedgerDeskProps> = ({
   allTransactions,
   monthTransactions,
-  filteredTransactions,
   dateGroups,
   stats,
-  months,
+  years,
+  monthsByYear,
+  allMonths,
   filters,
   onPatchFilters,
-  onResetFilters,
   hasFullAccess,
   isAdmin,
   onOpenAdmin,
@@ -70,21 +54,50 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const selectedMonth = filters.month || months[0] || 'ALL';
+  const selectedMonth =
+    filters.month && allMonths.includes(filters.month) ? filters.month : allMonths[0] || '';
+  const selectedYear = selectedMonth ? selectedMonth.slice(0, 4) : years[0] || '';
+  const selectedMonthNum = selectedMonth ? selectedMonth.slice(5, 7) : '';
+
+  const yearOptions = useMemo(
+    () => years.map((y) => ({ value: y, label: `${y}年` })),
+    [years]
+  );
+
+  const availableMonthsForYear = useMemo(
+    () => (selectedYear ? monthsByYear[selectedYear] ?? [] : []),
+    [monthsByYear, selectedYear]
+  );
+
+  const monthOptions = useMemo(
+    () => availableMonthsForYear.map((mm) => ({ value: mm, label: `${mm}月` })),
+    [availableMonthsForYear]
+  );
+
+  const handleYearChange = useCallback(
+    (newYear: string) => {
+      const candidateMonths = monthsByYear[newYear] ?? [];
+      if (candidateMonths.length === 0) return;
+      const nextMonthNum = candidateMonths.includes(selectedMonthNum)
+        ? selectedMonthNum
+        : candidateMonths[0];
+      onPatchFilters({ month: `${newYear}-${nextMonthNum}`, category: 'ALL' });
+    },
+    [monthsByYear, selectedMonthNum, onPatchFilters]
+  );
+
+  const handleMonthChange = useCallback(
+    (newMonthNum: string) => {
+      if (!selectedYear) return;
+      onPatchFilters({ month: `${selectedYear}-${newMonthNum}`, category: 'ALL' });
+    },
+    [selectedYear, onPatchFilters]
+  );
 
   // Collapse detail drawer when month changes
   useEffect(() => {
     setExpandedId(null);
   }, [selectedMonth]);
-
-  // Previous month stats for MoM comparison on tiles
-  const prevStats = useMemo(() => {
-    const pm = prevMonthOf(selectedMonth);
-    if (!pm) return null;
-    const prevTxs = allTransactions.filter((t) => t.date?.startsWith(pm));
-    if (prevTxs.length === 0) return null;
-    return computeStats(prevTxs);
-  }, [allTransactions, selectedMonth]);
 
   // Category breakdown (always based on current month scope, not filtered by category itself)
   const categoryRows = useMemo<BreakdownRow[]>(() => {
@@ -131,14 +144,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     [allTransactions]
   );
 
-  const activeDays = dateGroups.length;
-  const dailyAvgExpense = activeDays > 0 ? stats.totalExpense / activeDays : 0;
-  const expenseCount = useMemo(
-    () => filteredTransactions.filter((t) => t.amount < 0).length,
-    [filteredTransactions]
-  );
-  const avgPerExpense = expenseCount > 0 ? stats.totalExpense / expenseCount : 0;
-
   const hasActiveFilters =
     filters.category !== 'ALL' ||
     filters.member !== 'ALL' ||
@@ -164,52 +169,34 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
   const maskVal = (val: number, showPlus = false) =>
     hasFullAccess ? formatCurrency(val, showPlus, true) : '￥***.**';
 
-  const periodCaption = useMemo(() => {
-    if (selectedMonth === 'ALL') {
-      if (allTransactions.length === 0) return '全部周期';
-      const dates = allTransactions
-        .map((t) => t.date)
-        .filter(Boolean)
-        .sort();
-      return dates.length >= 2 ? `${dates[0]} – ${dates[dates.length - 1]}` : dates[0] || '全部周期';
-    }
-    const [y, m] = selectedMonth.split('-').map(Number);
-    if (!y || !m) return selectedMonth;
-    const lastDay = new Date(y, m, 0).getDate();
-    return `${selectedMonth}-01 – ${selectedMonth}-${String(lastDay).padStart(2, '0')}`;
-  }, [selectedMonth, allTransactions]);
-
   const accessBadge = isAdmin ? '管理员' : hasFullAccess ? '已解锁' : '脱敏模式';
 
   return (
     <div className="pt-desk">
       {/* ── Window 1: Main Overview (Matches exe.v2core.com/stats top window) ── */}
       <PlatinumWindow
-        title={`Ledger · 小票记账本${selectedMonth && selectedMonth !== 'ALL' ? ` · ${formatMonthTab(selectedMonth)}` : ' · 全部'}`}
+        title={`Ledger${selectedMonth && selectedMonth !== 'ALL' ? ` · ${formatMonthTab(selectedMonth)}` : ''}`}
         onClose={onRefresh}
         closeTitle="刷新数据"
       >
         {/* Range / Month Strip */}
         <div className="pt-strip">
-          {months.map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`pt-btn tab${selectedMonth === m ? ' on' : ''}`}
-              aria-pressed={selectedMonth === m}
-              onClick={() => onPatchFilters({ month: m, category: 'ALL' })}
-            >
-              {formatMonthTab(m)}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={`pt-btn tab${selectedMonth === 'ALL' ? ' on' : ''}`}
-            aria-pressed={selectedMonth === 'ALL'}
-            onClick={() => onPatchFilters({ month: 'ALL', category: 'ALL' })}
-          >
-            全部
-          </button>
+          <PlatinumSelect
+            value={selectedYear}
+            options={yearOptions}
+            onChange={handleYearChange}
+            ariaLabel="选择年份"
+            placeholder="暂无年份"
+            minWidth={88}
+          />
+          <PlatinumSelect
+            value={selectedMonthNum}
+            options={monthOptions}
+            onChange={handleMonthChange}
+            ariaLabel="选择月份"
+            placeholder="暂无月份"
+            minWidth={74}
+          />
 
           <span
             style={{
@@ -305,87 +292,24 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
         {/* KPI Metric Tiles */}
         <div className="pt-tiles">
           <div className="pt-tile">
-            <div className="tl">净收支</div>
+            <div className="tl">支出</div>
             <div
               className="tv"
-              style={{
-                color: !hasFullAccess
-                  ? '#666'
-                  : stats.netBalance >= 0
-                  ? 'var(--income)'
-                  : 'var(--expense)',
-              }}
+              style={{ color: hasFullAccess ? 'var(--expense)' : '#666' }}
             >
-              {maskVal(stats.netBalance, true)}
-            </div>
-            <div className="td">
-              {hasFullAccess && prevStats
-                ? `较上月 ${formatDeltaPct(stats.netBalance, prevStats.netBalance)}`
-                : hasFullAccess
-                ? stats.netBalance >= 0
-                  ? '结余'
-                  : '超支'
-                : '已隐藏'}
+              {maskVal(-stats.totalExpense)}
             </div>
           </div>
 
           <div className="pt-tile">
-            <div className="tl">总支出</div>
-            <div className="tv">{maskVal(-stats.totalExpense)}</div>
-            <div className="td">
-              {hasFullAccess && prevStats
-                ? `较上月 ${formatDeltaPct(stats.totalExpense, prevStats.totalExpense)}`
-                : `${expenseCount} 笔支出`}
+            <div className="tl">收入</div>
+            <div
+              className="tv"
+              style={{ color: hasFullAccess ? 'var(--income)' : '#666' }}
+            >
+              {maskVal(stats.totalIncome, true)}
             </div>
           </div>
-
-          <div className="pt-tile">
-            <div className="tl">总收入</div>
-            <div className="tv">{maskVal(stats.totalIncome, true)}</div>
-            <div className="td">
-              {hasFullAccess && prevStats
-                ? `较上月 ${formatDeltaPct(stats.totalIncome, prevStats.totalIncome)}`
-                : `${stats.count - expenseCount} 笔收入`}
-            </div>
-          </div>
-
-          <div className="pt-tile">
-            <div className="tl">交易笔数</div>
-            <div className="tv">{stats.count}</div>
-            <div className="td">{activeDays} 天有记录</div>
-          </div>
-
-          <div className="pt-tile">
-            <div className="tl">日均支出</div>
-            <div className="tv">{maskVal(dailyAvgExpense)}</div>
-            <div className="td">
-              {hasFullAccess ? `单笔均 ${formatCurrency(avgPerExpense)}` : '—'}
-            </div>
-          </div>
-        </div>
-
-        {/* SVG Cashflow Trend Chart */}
-        <CashflowChart
-          transactions={filteredTransactions}
-          selectedMonth={selectedMonth}
-          hasFullAccess={hasFullAccess}
-        />
-
-        {/* Window 1 Status Bar */}
-        <div className="pt-statusbar">
-          <span>
-            {periodCaption} · {prevStats ? '含上月环比 · ' : ''}按 "." 键呼出后台
-          </span>
-          <span style={{ display: 'inline-flex', gap: 10 }}>
-            {hasActiveFilters && (
-              <button type="button" className="pt-link" onClick={onResetFilters}>
-                重置视图
-              </button>
-            )}
-            <button type="button" className="pt-link" onClick={onOpenAdmin}>
-              Admin
-            </button>
-          </span>
         </div>
       </PlatinumWindow>
 
@@ -422,19 +346,15 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                         ? '#666'
                         : item.netTotal >= 0
                         ? 'var(--income)'
-                        : '#333',
+                        : 'var(--expense)',
                     }}
                   >
-                    {hasFullAccess ? formatCurrency(item.netTotal, false, false) : '***.**'}
+                    {hasFullAccess ? formatCurrency(item.netTotal, true, false) : '***.**'}
                   </span>
                 </button>
               );
             })
           )}
-        </div>
-        <div className="pt-statusbar">
-          <span>点击条目可筛选对应分类明细</span>
-          <span>{categoryRows.length} 项</span>
         </div>
       </PlatinumWindow>
 
@@ -467,16 +387,13 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
               当前筛选条件下暂无记账明细
             </div>
           ) : (
-            dateGroups.map((group) => {
-              const dayNet = group.items.reduce((acc, it) => acc + it.amount, 0);
-              return (
-                <React.Fragment key={group.date}>
-                  <div className="pt-live-group-header">
-                    <span>{group.date}</span>
-                    {hasFullAccess && <span>{formatCurrency(dayNet, true, true)}</span>}
-                  </div>
+            dateGroups.map((group) => (
+              <React.Fragment key={group.date}>
+                <div className="pt-live-group-header">
+                  <span>{group.date}</span>
+                </div>
 
-                  {group.items.map((tx) => {
+                {group.items.map((tx) => {
                     const isActive = expandedId === tx.id;
                     const cat = categoryLabel(tx);
                     const memberName = tx.member || '默认';
@@ -523,7 +440,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                 ? '#777'
                                 : tx.amount >= 0
                                 ? 'var(--income)'
-                                : '#262626',
+                                : 'var(--expense)',
                             }}
                             title={hasFullAccess ? '点击复制金额' : undefined}
                             onClick={(e) => void handleCopyAmount(e, tx.id, tx.amount)}
@@ -620,18 +537,34 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                       </React.Fragment>
                     );
                   })}
-                </React.Fragment>
-              );
-            })
+              </React.Fragment>
+            ))
           )}
         </div>
 
         <div className="pt-statusbar">
           <span>
-            共计 {stats.count} 笔 · 收入 {maskVal(stats.totalIncome, true)} · 支出{' '}
-            {maskVal(-stats.totalExpense)}
+            共计 {stats.count} 笔 · 收入{' '}
+            <span style={{ color: hasFullAccess ? 'var(--income)' : undefined }}>
+              {maskVal(stats.totalIncome, true)}
+            </span>{' '}
+            · 支出{' '}
+            <span style={{ color: hasFullAccess ? 'var(--expense)' : undefined }}>
+              {maskVal(-stats.totalExpense)}
+            </span>
           </span>
-          <b style={{ fontFamily: 'var(--font-mono)' }}>净计: {maskVal(stats.netBalance, true)}</b>
+          <b
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: !hasFullAccess
+                ? undefined
+                : stats.netBalance >= 0
+                ? 'var(--income)'
+                : 'var(--expense)',
+            }}
+          >
+            净计: {maskVal(stats.netBalance, true)}
+          </b>
         </div>
       </PlatinumWindow>
     </div>

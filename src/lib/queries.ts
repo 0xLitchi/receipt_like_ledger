@@ -5,16 +5,13 @@ import {
   deleteTransaction,
   fetchActivityLogs,
   fetchApiLogs,
-  fetchSettings,
   fetchTransactions,
-  updateThemeStyle,
   updateTransaction,
 } from '../lib/api-client';
-import type { ActivityLog, ApiRequestLog, ThemeStyle, Transaction } from '../types';
+import type { ActivityLog, ApiRequestLog, Transaction } from '../types';
 
 export const queryKeys = {
   transactions: ['transactions'] as const,
-  settings: ['settings'] as const,
   activityLogs: ['logs', 'activity'] as const,
   apiLogs: ['logs', 'api'] as const,
 };
@@ -24,13 +21,6 @@ export function useTransactionsQuery() {
   return useQuery({
     queryKey: queryKeys.transactions,
     queryFn: fetchTransactions,
-  });
-}
-
-export function useSettingsQuery() {
-  return useQuery({
-    queryKey: queryKeys.settings,
-    queryFn: fetchSettings,
   });
 }
 
@@ -77,16 +67,6 @@ export function useTransactionMutations() {
   });
 
   return { batch, single, remove };
-}
-
-export function useThemeStyleMutation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (style: ThemeStyle) => updateThemeStyle(style),
-    onSuccess: (_, style) => {
-      qc.setQueryData(queryKeys.settings, { theme_style: style });
-    },
-  });
 }
 
 export type { ActivityLog, ApiRequestLog };

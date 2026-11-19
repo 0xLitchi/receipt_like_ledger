@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface PlatinumWindowProps {
   title: string;
@@ -73,3 +73,153 @@ export const PixelDot: React.FC<PixelDotProps> = ({ color, title }) => (
     />
   </svg>
 );
+
+export interface PlatinumSelectOption {
+  value: string;
+  label: string;
+}
+
+interface PlatinumSelectProps {
+  value: string;
+  options: PlatinumSelectOption[];
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  placeholder?: string;
+  disabled?: boolean;
+  minWidth?: number;
+}
+
+/**
+ * Classic Mac OS 8/9 Platinum Pop-up Menu —
+ * beveled push-button trigger with double-triangle arrow cap and
+ * crisp drop-shadowed menu list with checkmark & navy selection highlight.
+ */
+export const PlatinumSelect: React.FC<PlatinumSelectProps> = ({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  placeholder = '—',
+  disabled = false,
+  minWidth = 84,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [highlightedIdx, setHighlightedIdx] = useState(-1);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const selectedOption = options.find((opt) => opt.value === value);
+  const isDisabled = disabled || options.length === 0;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  const toggleOpen = () => {
+    if (isDisabled) return;
+    setOpen((prev) => {
+      if (!prev) {
+        const idx = options.findIndex((opt) => opt.value === value);
+        setHighlightedIdx(idx >= 0 ? idx : 0);
+      }
+      return !prev;
+    });
+  };
+
+  const handleSelect = (optValue: string) => {
+    setOpen(false);
+    if (optValue !== value) {
+      onChange(optValue);
+    }
+    triggerRef.current?.focus();
+  };
+
+  const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (isDisabled) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) {
+        const idx = options.findIndex((opt) => opt.value === value);
+        setHighlightedIdx(idx >= 0 ? idx : 0);
+        setOpen(true);
+      } else {
+        setHighlightedIdx((prev) => {
+          const delta = e.key === 'ArrowDown' ? 1 : -1;
+          const next = (prev + delta + options.length) % options.length;
+          return next;
+        });
+      }
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      if (open && highlightedIdx >= 0 && options[highlightedIdx]) {
+        e.preventDefault();
+        handleSelect(options[highlightedIdx].value);
+      }
+    }
+  };
+
+  return (
+    <div ref={wrapRef} className="pt-select-wrap" style={{ minWidth }}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`pt-select${open ? ' open' : ''}`}
+        disabled={isDisabled}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={toggleOpen}
+        onKeyDown={handleTriggerKeyDown}
+      >
+        <span className="pt-select-label">{selectedOption ? selectedOption.label : placeholder}</span>
+        <span className="pt-select-arrows" aria-hidden="true">
+          <svg viewBox="0 0 7 11" width="7" height="11">
+            <path d="M3.5 0L7 4H0zM3.5 11L0 7h7z" fill="currentColor" />
+          </svg>
+        </span>
+      </button>
+
+      {open && options.length > 0 && (
+        <div className="pt-menu" role="listbox" aria-label={ariaLabel}>
+          {options.map((opt, idx) => {
+            const isSelected = opt.value === value;
+            const isHighlighted = idx === highlightedIdx;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                className={`pt-menu-item${isSelected ? ' selected' : ''}${isHighlighted ? ' highlighted' : ''}`}
+                onMouseEnter={() => setHighlightedIdx(idx)}
+                onClick={() => handleSelect(opt.value)}
+              >
+                <span className="pt-menu-check" aria-hidden="true">
+                  {isSelected ? '✓' : ''}
+                </span>
+                <span>{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};

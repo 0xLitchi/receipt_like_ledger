@@ -1,5 +1,3 @@
-@import "tailwindcss";
-
 /* ==========================================================================
    Platinum Desktop Chrome (inspired by exe.v2core.com/stats / Mac OS 8-9)
    ========================================================================== */
@@ -17,8 +15,8 @@
   --hl: #333399;
   --lav: #ccf;
   --orange: #ff6600;
-  --income: #333399;
-  --expense: #ff6600;
+  --income: #b91c1c;
+  --expense: #15803d;
   --danger: #b91c1c;
   --ok: #15803d;
 
@@ -57,6 +55,13 @@ body {
   font: 12px/1.45 var(--font-ui);
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
 a {
   color: var(--hl);
 }
@@ -66,34 +71,13 @@ a {
   color: var(--black);
 }
 
-/* ── Desk layout (matches exe.v2core.com/stats .sdesk / .sgrid) ── */
+/* ── Desk layout ── */
 .pt-desk {
   max-width: 70%;
   margin: 0 auto;
   padding: 24px 12px 48px;
   padding-left: max(12px, env(safe-area-inset-left));
   padding-right: max(12px, env(safe-area-inset-right));
-}
-
-.pt-grid {
-  display: flex;
-  flex-direction: column;
-}
-.pt-grid .pt-lane {
-  min-width: 0;
-}
-.pt-grid .pt-window {
-  min-width: 0;
-}
-@media (min-width: 720px) {
-  .pt-grid {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 24px;
-  }
-  .pt-grid .pt-lane {
-    flex: 1 1 0;
-  }
 }
 
 /* ── Window Chrome ── */
@@ -313,6 +297,120 @@ a {
   color: #fff;
 }
 
+/* ── Classic Platinum Pop-up Menu (Select) ── */
+.pt-select-wrap {
+  position: relative;
+  display: inline-block;
+}
+.pt-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 22px;
+  padding: 0;
+  background: var(--g300);
+  color: var(--black);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid var(--black);
+  border-radius: 3px;
+  box-shadow:
+    inset 1px 1px 0 var(--g300),
+    inset -1px -1px 0 #777,
+    inset 2px 2px 0 #fff,
+    inset -2px -2px 0 #aaa;
+}
+.pt-select:hover:not(:disabled) {
+  background: #e5e5e5;
+}
+.pt-select.open,
+.pt-select:active:not(:disabled) {
+  background: var(--g800);
+  color: #fff;
+  box-shadow:
+    inset 1px 1px 0 #444,
+    inset -1px -1px 0 #888,
+    inset 2px 2px 0 #555,
+    inset -2px -2px 0 #777;
+}
+.pt-select:disabled {
+  color: var(--g700);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.pt-select-label {
+  flex: 1;
+  padding: 0 8px;
+  text-align: left;
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pt-select-arrows {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 100%;
+  flex: none;
+  border-left: 1px solid #888;
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.7);
+}
+.pt-select.open .pt-select-arrows,
+.pt-select:active:not(:disabled) .pt-select-arrows {
+  border-left-color: #444;
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.2);
+}
+.pt-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 40;
+  padding: 2px 0;
+  background: var(--g300);
+  border: 1px solid var(--black);
+  box-shadow:
+    2px 2px 0 var(--black),
+    inset 1px 1px 0 #fff,
+    inset -1px -1px 0 var(--g600);
+}
+.pt-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 3px 10px 3px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--black);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 16px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pt-menu-item.highlighted,
+.pt-menu-item:hover {
+  background: var(--hl);
+  color: #fff;
+}
+.pt-menu-check {
+  display: inline-block;
+  width: 14px;
+  flex: none;
+  font-size: 11px;
+  text-align: center;
+}
+
 /* ── Filter Chips ── */
 .pt-chips {
   font-size: 11px;
@@ -375,7 +473,6 @@ textarea.pt-input {
 .pt-tiles {
   display: flex;
   flex-wrap: wrap;
-  border-bottom: 1px solid var(--g300);
 }
 .pt-tile {
   flex: 1 1 110px;
@@ -388,139 +485,17 @@ textarea.pt-input {
   border-right: 0;
 }
 .pt-tile .tl {
-  font-size: 11px;
+  font-size: 13px;
   color: #555;
   white-space: nowrap;
 }
 .pt-tile .tv {
-  font-size: 17px;
+  font-size: 20px;
   font-weight: bold;
-  line-height: 24px;
+  line-height: 28px;
   font-family: var(--font-mono);
   letter-spacing: -0.02em;
   white-space: nowrap;
-}
-.pt-tile .td {
-  font-size: 11px;
-  color: #555;
-  min-height: 14px;
-  white-space: nowrap;
-}
-
-/* ── SVG Line Chart (exact exe.v2core.com/stats proportions) ── */
-.pt-chart {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  padding: 8px 12px 6px;
-}
-.pt-chart .legend {
-  grid-column: 2;
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 12px;
-  min-height: 18px;
-  align-items: center;
-  font-size: 11px;
-  color: #555;
-}
-.pt-chart .legend i {
-  display: inline-block;
-  width: 12px;
-  height: 2px;
-  margin-right: 5px;
-  vertical-align: middle;
-  background: var(--income);
-}
-.pt-chart .legend i.exp {
-  background: var(--expense);
-}
-.pt-chart .legend i.end {
-  background: var(--g500);
-}
-.pt-chart .ys {
-  position: relative;
-  height: 160px;
-  margin-right: 6px;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: #555;
-}
-.pt-chart .ys span {
-  position: absolute;
-  right: 0;
-  transform: translateY(-50%);
-  white-space: nowrap;
-}
-.pt-chart .plot {
-  position: relative;
-  height: 160px;
-  border-left: 1px solid var(--black);
-  border-bottom: 1px solid var(--black);
-}
-.pt-chart .gl {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 0;
-  border-top: 1px solid var(--g300);
-}
-.pt-chart svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  overflow: visible;
-}
-.pt-chart polyline {
-  fill: none;
-  stroke-width: 2px;
-  vector-effect: non-scaling-stroke;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-.pt-chart .inc {
-  stroke: var(--income);
-}
-.pt-chart .exp {
-  stroke: var(--expense);
-}
-.pt-chart .inc.end {
-  stroke: #9999ff;
-}
-.pt-chart .exp.end {
-  stroke: #ffcc99;
-}
-.pt-chart .xs {
-  grid-column: 2;
-  position: relative;
-  height: 18px;
-  margin-top: 4px;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: #555;
-}
-.pt-chart .xs span {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-.pt-chart .xs span.first {
-  transform: none;
-}
-.pt-chart .xs span.last {
-  transform: translateX(-100%);
-}
-.pt-chart .none {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  color: #777;
 }
 
 /* ── Breakdown Bar Rows (exact exe.v2core.com/stats .rows / .row) ── */
@@ -605,11 +580,11 @@ textarea.pt-input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 3px 12px;
+  padding: 4px 12px;
   background: var(--g200);
   border-top: 1px solid var(--g300);
   border-bottom: 1px solid var(--g300);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: bold;
   color: #444;
   font-family: var(--font-mono);
@@ -621,9 +596,10 @@ textarea.pt-input {
 .pt-live-row {
   display: flex;
   align-items: center;
-  min-height: 26px;
-  padding: 3px 12px;
+  min-height: 30px;
+  padding: 4px 12px;
   gap: 8px;
+  font-size: 14px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
 }
@@ -637,8 +613,8 @@ textarea.pt-input {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 5px;
-  width: 82px;
+  gap: 10px;
+  width: 104px;
   white-space: nowrap;
   overflow: hidden;
 }
@@ -648,8 +624,8 @@ textarea.pt-input {
 }
 .pt-live-row .cc {
   flex: none;
-  width: 96px;
-  font: 10px var(--font-mono);
+  width: 110px;
+  font: 12px var(--font-mono);
   color: #555;
   white-space: nowrap;
   overflow: hidden;
@@ -665,9 +641,9 @@ textarea.pt-input {
 }
 .pt-live-row .amt {
   flex: none;
-  min-width: 78px;
+  min-width: 88px;
   text-align: right;
-  font: bold 11px var(--font-mono);
+  font: bold 13px var(--font-mono);
   white-space: nowrap;
 }
 
@@ -750,13 +726,6 @@ textarea.pt-input {
   }
   .pt-tile .tv {
     font-size: 14px;
-  }
-  .pt-chart {
-    grid-template-columns: 38px 1fr;
-    padding: 8px 8px 6px;
-  }
-  .pt-chart .xs span:nth-child(even) {
-    display: none;
   }
   .pt-live-row .who {
     width: 64px;

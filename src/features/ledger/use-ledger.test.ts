@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildAvailableYearMonths,
   buildFilterOptions,
   buildMonthList,
   categoryLabel,
@@ -136,5 +137,43 @@ describe('buildMonthList / buildFilterOptions', () => {
     expect(opts.categories).toContain('杂项/麻将');
     expect(opts.categories).toContain('餐饮');
     expect(opts.categories).not.toContain('杂项');
+  });
+});
+
+describe('buildAvailableYearMonths', () => {
+  it('returns only years and months that exist in transactions, descending without limit', () => {
+    const result = buildAvailableYearMonths([
+      t({ date: '2024-02-05' }),
+      t({ date: '2026-11-10' }),
+      t({ date: '2026-08-01' }),
+      t({ date: '2026-11-02' }),
+      t({ date: '2025-12-20' }),
+      t({ date: '2025-03-11' }),
+      t({ date: '2025-01-01' }),
+      t({ date: 'invalid' }),
+    ]);
+
+    expect(result.years).toEqual(['2026', '2025', '2024']);
+    expect(result.monthsByYear).toEqual({
+      '2026': ['11', '08'],
+      '2025': ['12', '03', '01'],
+      '2024': ['02'],
+    });
+    expect(result.allMonths).toEqual([
+      '2026-11',
+      '2026-08',
+      '2025-12',
+      '2025-03',
+      '2025-01',
+      '2024-02',
+    ]);
+  });
+
+  it('returns empty arrays when there are no transactions', () => {
+    expect(buildAvailableYearMonths([])).toEqual({
+      years: [],
+      monthsByYear: {},
+      allMonths: [],
+    });
   });
 });

@@ -11,9 +11,6 @@ export interface Transaction {
   isMasked?: boolean;     // 未鉴权时服务端脱敏标记
 }
 
-/** 目前只保留拟真小票一种主题 */
-export type ThemeStyle = 'receipt';
-
 export type LedgerType = 'ALL' | 'EXPENSE' | 'INCOME';
 
 /** 账本页的筛选条件，全部来源于 URL query */
@@ -38,9 +35,6 @@ export interface SummaryStats {
   count: number;
 }
 
-/** 访问者权限层级：管理员 / 已解密 / 脱敏 */
-export type AccessMode = 'admin' | 'decrypted' | 'masked';
-
 export interface ActivityLog {
   id: string;
   timestamp: string;
@@ -63,8 +57,4 @@ export interface ApiRequestLog {
   payload_summary: string;
   execution_ms: number;
   created_at?: string;
-}
-
-export interface AppSettings {
-  theme_style: ThemeStyle;
 }
