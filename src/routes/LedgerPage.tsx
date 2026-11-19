@@ -1,35 +1,39 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { tokenStore } from '../lib/api-client';
 import { useTransactionsQuery } from '../lib/queries';
-import { useLedger } from '../features/ledger/use-ledger';
+import { buildMonthList, useLedger } from '../features/ledger/use-ledger';
 import { useLedgerFilters } from '../features/ledger/use-ledger-filters';
-import { ReceiptView } from '../components/Receipt/ReceiptView';
+import { LedgerDesk } from '../components/Platinum/LedgerDesk';
+import { PlatinumWindow } from '../components/Platinum/PlatinumChrome';
 import { ReceiptSkeleton } from '../components/ReceiptSkeleton';
 import { AdminAuthModal } from '../components/Admin/AdminAuthModal';
 
 export const LedgerPage: React.FC = () => {
   const navigate = useNavigate();
   const { data, isLoading, isError, error, refetch } = useTransactionsQuery();
-  const { filters, patch } = useLedgerFilters();
+  const { filters, patch, reset } = useLedgerFilters();
 
   const [showAuthModal, setShowAuthModal] = useState(false);
-  // token 变化后（login/logout）需要重新判断权限；路由切回本页时会重新渲染
-  // 是否为管理员会话（能进后台）。URL 上的 access token 只解锁数据，不等于管理员
   const isAdmin = tokenStore.hasSession();
 
   const transactions = useMemo(() => data?.data ?? [], [data]);
   const hasFullAccess = data?.hasFullAccess ?? true;
 
-  const { months, stats, dateGroups } = useLedger(transactions, filters);
+  // Show up to 6 recent months in the Platinum range strip
+  const months = useMemo(() => buildMonthList(transactions, 6), [transactions]);
+  const { filtered, stats, dateGroups } = useLedger(transactions, filters);
 
-  // 分类汇总始终基于「当月全量」而非已筛选结果，否则点选分类后汇总面板会自我塌陷
+  // Month-scoped transactions (used for Category & Member breakdown windows)
   const monthTransactions = useMemo(
-    () => (filters.month ? transactions.filter((t) => t.date?.startsWith(filters.month)) : transactions),
+    () =>
+      filters.month && filters.month !== 'ALL'
+        ? transactions.filter((t) => t.date?.startsWith(filters.month))
+        : transactions,
     [transactions, filters.month]
   );
 
-  // 尚未选择月份时，回填最近一个月
+  // Default to most recent month on initial load
   useEffect(() => {
     if (!filters.month && months.length > 0) {
       patch({ month: months[0] });
@@ -41,7 +45,7 @@ export const LedgerPage: React.FC = () => {
     else setShowAuthModal(true);
   }, [navigate]);
 
-  // 全局快捷键："." 呼出后台
+  // Global shortcut: "." opens Admin
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -62,74 +66,53 @@ export const LedgerPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [openAdmin]);
 
-  const selectedMonth = filters.month || months[0] || '';
-
-  /** 切换月份时一并清掉分类筛选，避免筛选被带到别的月份 */
-  const handleSelectMonth = useCallback(
-    (month: string) => patch({ month, category: 'ALL' }),
-    [patch]
-  );
-
-  /**
-   * 选中分类后，点击页面其它任何位置都还原筛选。
-   *
-   * 在 pointerdown（捕获阶段）就判断落点是否属于分类汇总，并记在 ref 里；
-   * 随后的 click（冒泡阶段）再执行还原。这样分类条目自己的 onClick
-   * 已经处理完选中/切换，不会被这次外部点击清掉。
-   */
-  const categoryHitRef = useRef(false);
-  useEffect(() => {
-    const mark = (e: PointerEvent) => {
-      const el = e.target as HTMLElement | null;
-      categoryHitRef.current = !!el?.closest('[data-category-summary]');
-    };
-    document.addEventListener('pointerdown', mark, true);
-    return () => document.removeEventListener('pointerdown', mark, true);
-  }, []);
-
-  useEffect(() => {
-    if (filters.category === 'ALL') return;
-    const clear = () => {
-      if (categoryHitRef.current) return;
-      patch({ category: 'ALL' });
-    };
-    document.addEventListener('click', clear);
-    return () => document.removeEventListener('click', clear);
-  }, [filters.category, patch]);
-
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start pt-6 pb-10 px-3 font-mono selection:bg-slate-700 selection:text-white relative">
+    <main>
       {isLoading ? (
         <ReceiptSkeleton />
       ) : isError ? (
-        <div className="w-full max-w-md mx-auto my-6 rounded-xl border border-slate-800 bg-slate-900/70 p-6 text-center font-mono">
-          <p className="text-xs text-rose-400 mb-1">数据加载失败</p>
-          <p className="text-[11px] text-slate-500 mb-4 break-all">
-            {error instanceof Error ? error.message : '未知错误'}
-          </p>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-200 text-[11px] font-bold hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            重试
-          </button>
+        <div className="pt-desk" style={{ maxWidth: 480 }}>
+          <PlatinumWindow title="Error · 数据加载失败">
+            <div style={{ padding: '20px 16px', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 6px', fontWeight: 'bold', color: 'var(--danger)' }}>
+                无法加载账本数据
+              </p>
+              <p
+                style={{
+                  margin: '0 0 14px',
+                  fontSize: 11,
+                  color: '#555',
+                  fontFamily: 'var(--font-mono)',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {error instanceof Error ? error.message : '未知错误'}
+              </p>
+              <button type="button" className="pt-btn primary" onClick={() => void refetch()}>
+                重试
+              </button>
+            </div>
+          </PlatinumWindow>
         </div>
       ) : (
-        <main className="w-full max-w-md mx-auto">
-          <ReceiptView
-            dateGroups={dateGroups}
-            transactions={monthTransactions}
-            activeCategory={filters.category}
-            onSelectCategory={(category) => patch({ category })}
-            stats={stats}
-            selectedMonth={selectedMonth}
-            months={months}
-            onSelectMonth={handleSelectMonth}
-            hasFullAccess={hasFullAccess}
-            isAdmin={isAdmin}
-          />
-        </main>
+        <LedgerDesk
+          allTransactions={transactions}
+          monthTransactions={monthTransactions}
+          filteredTransactions={filtered}
+          dateGroups={dateGroups}
+          stats={stats}
+          months={months}
+          filters={filters}
+          onPatchFilters={patch}
+          onResetFilters={() => {
+            reset();
+            if (months.length > 0) patch({ month: months[0] });
+          }}
+          hasFullAccess={hasFullAccess}
+          isAdmin={isAdmin}
+          onOpenAdmin={openAdmin}
+          onRefresh={() => void refetch()}
+        />
       )}
 
       <AdminAuthModal
@@ -140,6 +123,6 @@ export const LedgerPage: React.FC = () => {
           navigate('/admin');
         }}
       />
-    </div>
+    </main>
   );
 };

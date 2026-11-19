@@ -1,0 +1,738 @@
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import type { DateGroup, LedgerFilters, LedgerType, SummaryStats, Transaction } from '../../types';
+import { categoryLabel, computeStats, summaryKey } from '../../features/ledger/use-ledger';
+import { formatCurrency, getTransactionName } from '../../utils/formatters';
+import { PixelDot, PlatinumWindow } from './PlatinumChrome';
+import { memberDotColor } from './colors';
+import { CashflowChart } from './CashflowChart';
+
+interface LedgerDeskProps {
+  allTransactions: Transaction[];
+  monthTransactions: Transaction[];
+  filteredTransactions: Transaction[];
+  dateGroups: DateGroup[];
+  stats: SummaryStats;
+  months: string[];
+  filters: LedgerFilters;
+  onPatchFilters: (next: Partial<LedgerFilters>) => void;
+  onResetFilters: () => void;
+  hasFullAccess: boolean;
+  isAdmin: boolean;
+  onOpenAdmin: () => void;
+  onRefresh: () => void;
+}
+
+interface BreakdownRow {
+  name: string;
+  netTotal: number;
+  absVal: number;
+  count: number;
+  barPct: number;
+}
+
+function formatMonthTab(m: string): string {
+  if (m === 'ALL') return '全部';
+  const [y, mm] = m.split('-');
+  const nowY = String(new Date().getFullYear());
+  return y === nowY ? `${Number(mm)}月` : `${y.slice(2)}/${mm}`;
+}
+
+function formatDeltaPct(current: number, previous: number): string {
+  if (previous === 0) return current > 0 ? '新增' : '—';
+  const pct = ((current - previous) / previous) * 100;
+  const sign = pct > 0 ? '+' : '';
+  return `${sign}${pct.toFixed(1)}%`;
+}
+
+function prevMonthOf(month: string): string | null {
+  if (!month || month === 'ALL') return null;
+  const [y, m] = month.split('-').map(Number);
+  if (!y || !m) return null;
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export const LedgerDesk: React.FC<LedgerDeskProps> = ({
+  allTransactions,
+  monthTransactions,
+  filteredTransactions,
+  dateGroups,
+  stats,
+  months,
+  filters,
+  onPatchFilters,
+  onResetFilters,
+  hasFullAccess,
+  isAdmin,
+  onOpenAdmin,
+  onRefresh,
+}) => {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const selectedMonth = filters.month || months[0] || 'ALL';
+
+  // Collapse detail drawer when month changes
+  useEffect(() => {
+    setExpandedId(null);
+  }, [selectedMonth]);
+
+  // Previous month stats for MoM comparison on tiles
+  const prevStats = useMemo(() => {
+    const pm = prevMonthOf(selectedMonth);
+    if (!pm) return null;
+    const prevTxs = allTransactions.filter((t) => t.date?.startsWith(pm));
+    if (prevTxs.length === 0) return null;
+    return computeStats(prevTxs);
+  }, [allTransactions, selectedMonth]);
+
+  // Category breakdown (always based on current month scope, not filtered by category itself)
+  const categoryRows = useMemo<BreakdownRow[]>(() => {
+    const scope = monthTransactions.filter((t) => {
+      if (filters.member !== 'ALL' && t.member !== filters.member) return false;
+      if (filters.type === 'EXPENSE' && t.amount >= 0) return false;
+      if (filters.type === 'INCOME' && t.amount <= 0) return false;
+      return true;
+    });
+
+    const map = new Map<string, { net: number; count: number }>();
+    scope.forEach((t) => {
+      const key = summaryKey(t);
+      const cur = map.get(key) || { net: 0, count: 0 };
+      cur.net += hasFullAccess ? t.amount : 0;
+      cur.count += 1;
+      map.set(key, cur);
+    });
+
+    const list: BreakdownRow[] = Array.from(map.entries()).map(([name, v]) => ({
+      name,
+      netTotal: v.net,
+      absVal: Math.abs(v.net),
+      count: v.count,
+      barPct: 0,
+    }));
+
+    list.sort((a, b) => (hasFullAccess ? b.absVal - a.absVal : b.count - a.count));
+    const maxMetric = list.reduce(
+      (m, r) => Math.max(m, hasFullAccess ? r.absVal : r.count),
+      0
+    );
+    list.forEach((r) => {
+      const val = hasFullAccess ? r.absVal : r.count;
+      r.barPct = maxMetric > 0 ? Math.max(val > 0 ? 3 : 0, (val / maxMetric) * 100) : 0;
+    });
+
+    return list;
+  }, [monthTransactions, filters.member, filters.type, hasFullAccess]);
+
+  // Member breakdown (based on current month scope, not filtered by member itself)
+  const memberRows = useMemo<BreakdownRow[]>(() => {
+    const scope = monthTransactions.filter((t) => {
+      if (filters.category !== 'ALL' && summaryKey(t) !== filters.category) return false;
+      if (filters.type === 'EXPENSE' && t.amount >= 0) return false;
+      if (filters.type === 'INCOME' && t.amount <= 0) return false;
+      return true;
+    });
+
+    const map = new Map<string, { net: number; count: number }>();
+    scope.forEach((t) => {
+      const key = t.member || '默认';
+      const cur = map.get(key) || { net: 0, count: 0 };
+      cur.net += hasFullAccess ? t.amount : 0;
+      cur.count += 1;
+      map.set(key, cur);
+    });
+
+    const list: BreakdownRow[] = Array.from(map.entries()).map(([name, v]) => ({
+      name,
+      netTotal: v.net,
+      absVal: Math.abs(v.net),
+      count: v.count,
+      barPct: 0,
+    }));
+
+    list.sort((a, b) => (hasFullAccess ? b.absVal - a.absVal : b.count - a.count));
+    const maxMetric = list.reduce(
+      (m, r) => Math.max(m, hasFullAccess ? r.absVal : r.count),
+      0
+    );
+    list.forEach((r) => {
+      const val = hasFullAccess ? r.absVal : r.count;
+      r.barPct = maxMetric > 0 ? Math.max(val > 0 ? 3 : 0, (val / maxMetric) * 100) : 0;
+    });
+
+    return list;
+  }, [monthTransactions, filters.category, filters.type, hasFullAccess]);
+
+  const activeDays = dateGroups.length;
+  const dailyAvgExpense = activeDays > 0 ? stats.totalExpense / activeDays : 0;
+  const expenseCount = useMemo(
+    () => filteredTransactions.filter((t) => t.amount < 0).length,
+    [filteredTransactions]
+  );
+  const avgPerExpense = expenseCount > 0 ? stats.totalExpense / expenseCount : 0;
+
+  const hasActiveFilters =
+    filters.category !== 'ALL' ||
+    filters.member !== 'ALL' ||
+    filters.type !== 'ALL' ||
+    filters.search.trim().length > 0;
+
+  const handleCopyAmount = useCallback(
+    async (e: React.MouseEvent, id: string, amount: number) => {
+      e.stopPropagation();
+      if (!hasFullAccess) return;
+      const text = formatCurrency(amount, false, true).replace('￥', '');
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopiedId(id);
+        window.setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 1200);
+      } catch {
+        /* ignore clipboard errors */
+      }
+    },
+    [hasFullAccess]
+  );
+
+  const maskVal = (val: number, showPlus = false) =>
+    hasFullAccess ? formatCurrency(val, showPlus, true) : '￥***.**';
+
+  const periodCaption = useMemo(() => {
+    if (selectedMonth === 'ALL') {
+      if (allTransactions.length === 0) return '全部周期';
+      const dates = allTransactions
+        .map((t) => t.date)
+        .filter(Boolean)
+        .sort();
+      return dates.length >= 2 ? `${dates[0]} – ${dates[dates.length - 1]}` : dates[0] || '全部周期';
+    }
+    const [y, m] = selectedMonth.split('-').map(Number);
+    if (!y || !m) return selectedMonth;
+    const lastDay = new Date(y, m, 0).getDate();
+    return `${selectedMonth}-01 – ${selectedMonth}-${String(lastDay).padStart(2, '0')}`;
+  }, [selectedMonth, allTransactions]);
+
+  const accessBadge = isAdmin ? '管理员' : hasFullAccess ? '已解锁' : '脱敏模式';
+
+  return (
+    <div className="pt-desk">
+      {/* ── Window 1: Main Overview (Matches exe.v2core.com/stats top window) ── */}
+      <PlatinumWindow
+        title={`Ledger · 小票记账本${selectedMonth && selectedMonth !== 'ALL' ? ` · ${selectedMonth}` : ' · All'}`}
+        onClose={onRefresh}
+        closeTitle="刷新数据"
+      >
+        {/* Range / Month Strip */}
+        <div className="pt-strip">
+          {months.map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`pt-btn tab${selectedMonth === m ? ' on' : ''}`}
+              aria-pressed={selectedMonth === m}
+              onClick={() => onPatchFilters({ month: m, category: 'ALL' })}
+            >
+              {formatMonthTab(m)}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={`pt-btn tab${selectedMonth === 'ALL' ? ' on' : ''}`}
+            aria-pressed={selectedMonth === 'ALL'}
+            onClick={() => onPatchFilters({ month: 'ALL', category: 'ALL' })}
+          >
+            全部
+          </button>
+
+          <span
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 11,
+              color: '#333',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <PixelDot color={isAdmin ? '#333399' : hasFullAccess ? '#336633' : '#999999'} />
+              {accessBadge}
+            </span>
+            <button type="button" className="pt-btn tab" onClick={onOpenAdmin}>
+              后台
+            </button>
+          </span>
+        </div>
+
+        {/* Active Filter Chips Strip (shown only when filtered) */}
+        {hasActiveFilters && (
+          <div className="pt-strip pt-chips">
+            <span>筛选:</span>
+            {filters.category !== 'ALL' && (
+              <span className="pt-chip">
+                分类 <b>{filters.category}</b>
+                <button
+                  type="button"
+                  aria-label="清除分类筛选"
+                  onClick={() => onPatchFilters({ category: 'ALL' })}
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            {filters.member !== 'ALL' && (
+              <span className="pt-chip">
+                成员 <b>{filters.member}</b>
+                <button
+                  type="button"
+                  aria-label="清除成员筛选"
+                  onClick={() => onPatchFilters({ member: 'ALL' })}
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            {filters.type !== 'ALL' && (
+              <span className="pt-chip">
+                类型 <b>{filters.type === 'EXPENSE' ? '仅支出' : '仅收入'}</b>
+                <button
+                  type="button"
+                  aria-label="清除收支类型筛选"
+                  onClick={() => onPatchFilters({ type: 'ALL' })}
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            {filters.search.trim() && (
+              <span className="pt-chip">
+                搜索 <b>{filters.search.trim()}</b>
+                <button
+                  type="button"
+                  aria-label="清除搜索关键词"
+                  onClick={() => onPatchFilters({ search: '' })}
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => onPatchFilters({ category: 'ALL', member: 'ALL', type: 'ALL', search: '' })}
+              style={{
+                marginLeft: 'auto',
+                background: 'none',
+                border: 0,
+                color: 'var(--hl)',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                fontSize: 11,
+              }}
+            >
+              清除全部
+            </button>
+          </div>
+        )}
+
+        {/* KPI Metric Tiles */}
+        <div className="pt-tiles">
+          <div className="pt-tile">
+            <div className="tl">净收支</div>
+            <div
+              className="tv"
+              style={{
+                color: !hasFullAccess
+                  ? '#666'
+                  : stats.netBalance >= 0
+                  ? 'var(--income)'
+                  : 'var(--expense)',
+              }}
+            >
+              {maskVal(stats.netBalance, true)}
+            </div>
+            <div className="td">
+              {hasFullAccess && prevStats
+                ? `较上月 ${formatDeltaPct(stats.netBalance, prevStats.netBalance)}`
+                : hasFullAccess
+                ? stats.netBalance >= 0
+                  ? '结余'
+                  : '超支'
+                : '已隐藏'}
+            </div>
+          </div>
+
+          <div className="pt-tile">
+            <div className="tl">总支出</div>
+            <div className="tv">{maskVal(-stats.totalExpense)}</div>
+            <div className="td">
+              {hasFullAccess && prevStats
+                ? `较上月 ${formatDeltaPct(stats.totalExpense, prevStats.totalExpense)}`
+                : `${expenseCount} 笔支出`}
+            </div>
+          </div>
+
+          <div className="pt-tile">
+            <div className="tl">总收入</div>
+            <div className="tv">{maskVal(stats.totalIncome, true)}</div>
+            <div className="td">
+              {hasFullAccess && prevStats
+                ? `较上月 ${formatDeltaPct(stats.totalIncome, prevStats.totalIncome)}`
+                : `${stats.count - expenseCount} 笔收入`}
+            </div>
+          </div>
+
+          <div className="pt-tile">
+            <div className="tl">交易笔数</div>
+            <div className="tv">{stats.count}</div>
+            <div className="td">{activeDays} 天有记录</div>
+          </div>
+
+          <div className="pt-tile">
+            <div className="tl">日均支出</div>
+            <div className="tv">{maskVal(dailyAvgExpense)}</div>
+            <div className="td">
+              {hasFullAccess ? `单笔均 ${formatCurrency(avgPerExpense)}` : '—'}
+            </div>
+          </div>
+        </div>
+
+        {/* SVG Cashflow Trend Chart */}
+        <CashflowChart
+          transactions={filteredTransactions}
+          selectedMonth={selectedMonth}
+          hasFullAccess={hasFullAccess}
+        />
+
+        {/* Window 1 Status Bar */}
+        <div className="pt-statusbar">
+          <span>
+            {periodCaption} · {prevStats ? '含上月环比 · ' : ''}按 "." 键呼出后台
+          </span>
+          <span style={{ display: 'inline-flex', gap: 10 }}>
+            {hasActiveFilters && (
+              <button type="button" className="pt-link" onClick={onResetFilters}>
+                重置视图
+              </button>
+            )}
+            <button type="button" className="pt-link" onClick={onOpenAdmin}>
+              Admin
+            </button>
+          </span>
+        </div>
+      </PlatinumWindow>
+
+      {/* ── Two-Column Breakdown Grid (Categories + Members) ── */}
+      <div className="pt-grid">
+        <div className="pt-lane">
+          <PlatinumWindow title="分类统计 · Categories">
+            <div className="pt-rows" data-category-summary>
+              {categoryRows.length === 0 ? (
+                <div className="none">本月暂无分类数据</div>
+              ) : (
+                categoryRows.map((item) => {
+                  const isSelected = filters.category === item.name;
+                  return (
+                    <button
+                      key={item.name}
+                      type="button"
+                      className={`pt-row clickable${isSelected ? ' selected' : ''}`}
+                      aria-pressed={isSelected}
+                      title={isSelected ? '点击取消分类筛选' : `按 ${item.name} 筛选`}
+                      onClick={() =>
+                        onPatchFilters({ category: isSelected ? 'ALL' : item.name })
+                      }
+                    >
+                      <span className="lab">
+                        <span className="bar" style={{ width: `${item.barPct.toFixed(1)}%` }} />
+                        <span className="lab-inner">
+                          <span className="lab-text">{item.name}</span>
+                          <span className="tag">{item.count}笔</span>
+                        </span>
+                      </span>
+                      <span
+                        className="n"
+                        style={{
+                          color: !hasFullAccess
+                            ? '#666'
+                            : item.netTotal >= 0
+                            ? 'var(--income)'
+                            : '#333',
+                        }}
+                      >
+                        {hasFullAccess ? formatCurrency(item.netTotal, false, false) : '***.**'}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="pt-statusbar">
+              <span>点击条目可筛选对应分类明细</span>
+              <span>{categoryRows.length} 项</span>
+            </div>
+          </PlatinumWindow>
+        </div>
+
+        <div className="pt-lane">
+          <PlatinumWindow title="成员统计 · Members">
+            <div className="pt-rows">
+              {memberRows.length === 0 ? (
+                <div className="none">本月暂无成员数据</div>
+              ) : (
+                memberRows.map((item) => {
+                  const isSelected = filters.member === item.name;
+                  return (
+                    <button
+                      key={item.name}
+                      type="button"
+                      className={`pt-row clickable${isSelected ? ' selected' : ''}`}
+                      aria-pressed={isSelected}
+                      title={isSelected ? '点击取消成员筛选' : `按 ${item.name} 筛选`}
+                      onClick={() =>
+                        onPatchFilters({ member: isSelected ? 'ALL' : item.name })
+                      }
+                    >
+                      <span className="lab">
+                        <span className="bar" style={{ width: `${item.barPct.toFixed(1)}%` }} />
+                        <span className="lab-inner">
+                          <PixelDot color={memberDotColor(item.name)} />
+                          <span className="lab-text">{item.name}</span>
+                          <span className="tag">{item.count}笔</span>
+                        </span>
+                      </span>
+                      <span
+                        className="n"
+                        style={{
+                          color: !hasFullAccess
+                            ? '#666'
+                            : item.netTotal >= 0
+                            ? 'var(--income)'
+                            : '#333',
+                        }}
+                      >
+                        {hasFullAccess ? formatCurrency(item.netTotal, false, false) : '***.**'}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="pt-statusbar">
+              <span>点击成员可按人员过滤</span>
+              <span>{memberRows.length} 人</span>
+            </div>
+          </PlatinumWindow>
+        </div>
+      </div>
+
+      {/* ── Window 3: Transactions Feed (Matches exe.v2core.com/stats Live window) ── */}
+      <PlatinumWindow title="账单明细 · Transactions">
+        <div className="pt-strip">
+          {(['ALL', 'EXPENSE', 'INCOME'] as LedgerType[]).map((tp) => {
+            const label = tp === 'ALL' ? '全部' : tp === 'EXPENSE' ? '支出' : '收入';
+            return (
+              <button
+                key={tp}
+                type="button"
+                className={`pt-btn tab${filters.type === tp ? ' on' : ''}`}
+                aria-pressed={filters.type === tp}
+                onClick={() => onPatchFilters({ type: tp })}
+              >
+                {label}
+              </button>
+            );
+          })}
+
+          <input
+            type="search"
+            className="pt-input"
+            value={filters.search}
+            onChange={(e) => onPatchFilters({ search: e.target.value })}
+            placeholder="搜索备注 / 成员 / 分类…"
+            style={{ width: 200, maxWidth: '100%' }}
+            aria-label="搜索账单明细"
+          />
+
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555' }}>
+            共 {stats.count} 笔
+          </span>
+        </div>
+
+        <div>
+          {dateGroups.length === 0 ? (
+            <div style={{ padding: '32px 12px', textAlign: 'center', color: '#777', fontSize: 12 }}>
+              当前筛选条件下暂无记账明细
+            </div>
+          ) : (
+            dateGroups.map((group) => {
+              const dayNet = group.items.reduce((acc, it) => acc + it.amount, 0);
+              return (
+                <React.Fragment key={group.date}>
+                  <div className="pt-live-group-header">
+                    <span>{group.date}</span>
+                    <span>
+                      {group.items.length} 笔
+                      {hasFullAccess ? ` · ${formatCurrency(dayNet, true, true)}` : ''}
+                    </span>
+                  </div>
+
+                  {group.items.map((tx) => {
+                    const isActive = expandedId === tx.id;
+                    const cat = categoryLabel(tx);
+                    const nameText = hasFullAccess ? getTransactionName(tx) : '***';
+                    const dotColor = !hasFullAccess
+                      ? '#999999'
+                      : tx.amount >= 0
+                      ? '#333399'
+                      : '#ff6600';
+
+                    return (
+                      <React.Fragment key={tx.id}>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={isActive}
+                          className={`pt-live-row${isActive ? ' active' : ''}`}
+                          onClick={() => setExpandedId((prev) => (prev === tx.id ? null : tx.id))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setExpandedId((prev) => (prev === tx.id ? null : tx.id));
+                            }
+                          }}
+                        >
+                          <span className="who" title={tx.member || '默认'}>
+                            <PixelDot color={dotColor} />
+                            <span>{tx.member || '默认'}</span>
+                          </span>
+
+                          <span className="cc" title={cat}>
+                            {cat || '—'}
+                          </span>
+
+                          <span className="pg" title={nameText}>
+                            {nameText}
+                          </span>
+
+                          <span
+                            className="amt"
+                            style={{
+                              color: !hasFullAccess
+                                ? '#777'
+                                : tx.amount >= 0
+                                ? 'var(--income)'
+                                : '#262626',
+                            }}
+                            title={hasFullAccess ? '点击复制金额' : undefined}
+                            onClick={(e) => void handleCopyAmount(e, tx.id, tx.amount)}
+                          >
+                            {copiedId === tx.id
+                              ? '已复制'
+                              : hasFullAccess
+                              ? formatCurrency(tx.amount, true, false)
+                              : '***.**'}
+                          </span>
+                        </div>
+
+                        {isActive && (
+                          <div className="pt-inspector">
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                marginBottom: 6,
+                                paddingBottom: 4,
+                                borderBottom: '1px solid #ddd',
+                              }}
+                            >
+                              <b style={{ fontSize: 12 }}>{nameText}</b>
+                              <button
+                                type="button"
+                                className="pt-btn tab"
+                                onClick={() => setExpandedId(null)}
+                              >
+                                收起
+                              </button>
+                            </div>
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                                gap: '4px 16px',
+                                fontSize: 11,
+                              }}
+                            >
+                              <div>
+                                <span style={{ color: '#666' }}>日期: </span>
+                                <span style={{ fontFamily: 'var(--font-mono)' }}>{tx.date}</span>
+                              </div>
+                              <div>
+                                <span style={{ color: '#666' }}>成员: </span>
+                                <b>{tx.member || '—'}</b>
+                              </div>
+                              <div>
+                                <span style={{ color: '#666' }}>分类: </span>
+                                <b>{cat || '—'}</b>
+                              </div>
+                              <div>
+                                <span style={{ color: '#666' }}>账本: </span>
+                                <span>{tx.ledger || 'Default'}</span>
+                              </div>
+                              <div>
+                                <span style={{ color: '#666' }}>金额: </span>
+                                <b
+                                  style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    color: !hasFullAccess
+                                      ? '#666'
+                                      : tx.amount >= 0
+                                      ? 'var(--income)'
+                                      : 'var(--expense)',
+                                  }}
+                                >
+                                  {maskVal(tx.amount, true)}
+                                </b>
+                              </div>
+                              {tx.title && (
+                                <div>
+                                  <span style={{ color: '#666' }}>备注: </span>
+                                  <span>{hasFullAccess ? tx.title : '***'}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div
+                              style={{
+                                marginTop: 6,
+                                paddingTop: 4,
+                                borderTop: '1px dashed #ccc',
+                                fontSize: 10,
+                                color: '#777',
+                                fontFamily: 'var(--font-mono)',
+                              }}
+                            >
+                              ID: {tx.id}
+                            </div>
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })
+          )}
+        </div>
+
+        <div className="pt-statusbar">
+          <span>
+            共计 {stats.count} 笔 · 收入 {maskVal(stats.totalIncome, true)} · 支出{' '}
+            {maskVal(-stats.totalExpense)}
+          </span>
+          <b style={{ fontFamily: 'var(--font-mono)' }}>净计: {maskVal(stats.netBalance, true)}</b>
+        </div>
+      </PlatinumWindow>
+    </div>
+  );
+};

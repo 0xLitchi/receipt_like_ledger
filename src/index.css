@@ -1,488 +1,779 @@
 @import "tailwindcss";
 
-@layer utilities {
-  /* 兼容别名：拟物部件（打印机机头、小票纸张）统一使用与正文相同的等宽字体 */
-  .font-pixel {
-    font-family: var(--font-mono);
-  }
-
-  /* 拟物化小票边缘：齿面 */
-  .receipt-sawtooth-top {
-    clip-path: polygon(
-      0% 10px, 2% 0px, 4% 10px, 6% 0px, 8% 10px, 10% 0px, 12% 10px, 14% 0px, 16% 10px, 18% 0px, 20% 10px,
-      22% 0px, 24% 10px, 26% 0px, 28% 10px, 30% 0px, 32% 10px, 34% 0px, 36% 10px, 38% 0px, 40% 10px,
-      42% 0px, 44% 10px, 46% 0px, 48% 10px, 50% 0px, 52% 10px, 54% 0px, 56% 10px, 58% 0px, 60% 10px,
-      62% 0px, 64% 10px, 66% 0px, 68% 10px, 70% 0px, 72% 10px, 74% 0px, 76% 10px, 78% 0px, 80% 10px,
-      82% 0px, 84% 10px, 86% 0px, 88% 10px, 90% 0px, 92% 10px, 94% 0px, 96% 10px, 98% 0px, 100% 10px,
-      100% 100%, 0% 100%
-    );
-  }
-
-  .receipt-sawtooth-bottom {
-    clip-path: polygon(
-      0% 0%, 100% 0%, 100% calc(100% - 10px),
-      98% 100%, 96% calc(100% - 10px), 94% 100%, 92% calc(100% - 10px), 90% 100%, 88% calc(100% - 10px),
-      86% 100%, 84% calc(100% - 10px), 82% 100%, 80% calc(100% - 10px), 78% 100%, 76% calc(100% - 10px),
-      74% 100%, 72% calc(100% - 10px), 70% 100%, 68% calc(100% - 10px), 66% 100%, 64% calc(100% - 10px),
-      62% 100%, 60% calc(100% - 10px), 58% 100%, 56% calc(100% - 10px), 54% 100%, 52% calc(100% - 10px),
-      50% 100%, 48% calc(100% - 10px), 46% 100%, 44% calc(100% - 10px), 42% 100%, 40% calc(100% - 8px),
-      38% 100%, 36% calc(100% - 10px), 34% 100%, 32% calc(100% - 10px), 30% 100%, 28% calc(100% - 10px),
-      26% 100%, 24% calc(100% - 10px), 22% 100%, 20% calc(100% - 10px), 18% 100%, 16% calc(100% - 10px),
-      14% 100%, 12% calc(100% - 10px), 10% 100%, 8% calc(100% - 10px), 6% 100%, 4% calc(100% - 10px),
-      2% 100%, 0% calc(100% - 10px)
-    );
-  }
-
-  .receipt-both-sawtooth {
-    clip-path: polygon(
-      0% 8px, 2% 0px, 4% 8px, 6% 0px, 8% 8px, 10% 0px, 12% 8px, 14% 0px, 16% 8px, 18% 0px, 20% 8px,
-      22% 0px, 24% 8px, 26% 0px, 28% 8px, 30% 0px, 32% 8px, 34% 0px, 36% 8px, 38% 0px, 40% 8px,
-      42% 0px, 44% 8px, 46% 0px, 48% 8px, 50% 0px, 52% 8px, 54% 0px, 56% 8px, 58% 0px, 60% 8px,
-      62% 0px, 64% 8px, 66% 0px, 68% 8px, 70% 0px, 72% 8px, 74% 0px, 76% 8px, 78% 0px, 80% 8px,
-      82% 0px, 84% 8px, 86% 0px, 88% 8px, 90% 0px, 92% 8px, 94% 0px, 96% 8px, 98% 0px, 100% 8px,
-      100% calc(100% - 8px), 98% 100%, 96% calc(100% - 8px), 94% 100%, 92% calc(100% - 8px),
-      90% 100%, 88% calc(100% - 8px), 86% 100%, 84% calc(100% - 8px), 82% 100%, 80% calc(100% - 8px),
-      78% 100%, 76% calc(100% - 8px), 74% 100%, 72% calc(100% - 8px), 70% 100%, 68% calc(100% - 8px),
-      66% 100%, 64% calc(100% - 8px), 62% 100%, 60% calc(100% - 8px), 58% 100%, 56% calc(100% - 8px),
-      54% 100%, 52% calc(100% - 8px), 50% 100%, 48% calc(100% - 8px), 46% 100%, 44% calc(100% - 8px),
-      42% 100%, 40% calc(100% - 8px), 38% 100%, 36% calc(100% - 8px), 34% 100%, 32% calc(100% - 8px),
-      30% 100%, 28% calc(100% - 8px), 26% 100%, 24% calc(100% - 8px), 22% 100%, 20% calc(100% - 8px),
-      18% 100%, 16% calc(100% - 8px), 14% 100%, 12% calc(100% - 8px), 10% 100%, 8% calc(100% - 8px),
-      6% 100%, 4% calc(100% - 8px), 2% 100%, 0% calc(100% - 8px)
-    );
-  }
-}
+/* ==========================================================================
+   Platinum Desktop Chrome (inspired by exe.v2core.com/stats / Mac OS 8-9)
+   ========================================================================== */
 
 :root {
-  /* 西文/数字用 JetBrains Mono，中文回落到 Noto Sans SC，两者字重对齐 */
-  --font-mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, monospace;
-  /* 小票内部字号全局比例：调整整体字号只改这里 */
-  --receipt-font-scale: 0.92;
-  font-family: var(--font-mono);
+  --black: #262626;
+  --g100: #f6f6f6;
+  --g200: #eee;
+  --g300: #ddd;
+  --g400: #ccc;
+  --g500: #bbb;
+  --g600: #999;
+  --g700: #808080;
+  --g800: #666;
+  --hl: #333399;
+  --lav: #ccf;
+  --orange: #ff6600;
+  --income: #333399;
+  --expense: #ff6600;
+  --danger: #b91c1c;
+  --ok: #15803d;
+
+  --font-ui: "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana,
+    -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: Monaco, "JetBrains Mono", "Courier New", ui-monospace, SFMono-Regular, Menlo, monospace;
+
   font-variant-numeric: tabular-nums;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── 动效 token ─────────────────────────────────────────────
- * 时长与缓动集中在这里，小票各处共用同一套节奏：
- * 即时反馈 ~120ms、状态切换 ~200ms、入场 ~380ms（以纸带展开为主）。
- */
-:root {
-  --ease-out-print: cubic-bezier(0.16, 1, 0.3, 1);   /* 快出慢收：纸被吐出 */
-  --ease-in-print: cubic-bezier(0.55, 0, 0.9, 0.5);  /* 慢起快收：纸被收回 */
-  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
-  --dur-tap: 120ms;
-  --dur-state: 200ms;
-  --dur-in: 380ms;
+@font-face {
+  font-family: "Geneva";
+  font-weight: normal;
+  src: local("Geneva");
+}
+@font-face {
+  font-family: "Geneva";
+  font-weight: bold;
+  src: local("Lucida Grande Bold"), local("Lucida Grande");
 }
 
-/* 页面底色：深色网格，衬托米色小票（不再依赖 body class，避免 SPA 路由切换时丢失） */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
-  background-color: #0f172a;
-  background-image:
-    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, #0f172a, #0b1120);
-  background-size: 16px 16px, 100% 100%;
-  background-attachment: fixed;
-  color: #e2e8f0;
+  margin: 0;
+  background: var(--g400);
+  color: var(--black);
+  cursor: default;
+  font: 12px/1.45 var(--font-ui);
 }
 
-/* 小票纸张：米色纸面 + 墨色文字（独立于全局配色，避免被暗色主题吞掉） */
-.receipt-paper-box {
-  font-size: calc(1rem * var(--receipt-font-scale));
-  background-color: #ffffff;
-  background-image:
-    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.010) 3px, transparent 4px),
-    radial-gradient(rgba(0, 0, 0, 0.10) 0.4px, transparent 0.5px);
-  background-size: 100% 100%, 5px 5px;
-  color: #111827;
+a {
+  color: var(--hl);
+}
+
+::selection {
+  background: var(--lav);
+  color: var(--black);
+}
+
+/* ── Desk layout (matches exe.v2core.com/stats .sdesk / .sgrid) ── */
+.pt-desk {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 12px 48px;
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+}
+
+.pt-grid {
+  display: flex;
+  flex-direction: column;
+}
+.pt-grid .pt-lane {
+  min-width: 0;
+}
+.pt-grid .pt-window {
+  min-width: 0;
+}
+@media (min-width: 720px) {
+  .pt-grid {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 24px;
+  }
+  .pt-grid .pt-lane {
+    flex: 1 1 0;
+  }
+}
+
+/* ── Window Chrome ── */
+.pt-window {
+  position: relative;
+  margin: 0 0 22px;
+  background: var(--g400);
+  border: 1px solid var(--black);
+  box-shadow: 2px 2px 0 var(--black);
+}
+.pt-window::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
   box-shadow:
-    0 1px 1px rgba(0,0,0,0.15),
-    0 10px 0 -5px #f4f4f4,
-    0 10px 1px -4px rgba(0,0,0,0.12),
-    0 20px 0 -10px #ececec,
-    0 20px 1px -9px rgba(0,0,0,0.12),
-    0 30px 40px -10px rgba(0, 0, 0, 0.6);
+    inset 1px 1px 0 rgba(255, 255, 255, 0.5),
+    inset -1px -1px 0 var(--g600),
+    inset 1px 1px 0 #fff;
 }
 
-/* 极简科技感 Webkit 滚动条 */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+.pt-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  background: var(--g400);
+  user-select: none;
 }
 
-::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
-  border-radius: 4px;
+.pt-titlebar .pt-stripe {
+  flex: 1;
+  height: 12px;
+  min-width: 8px;
+  position: relative;
+  background-color: var(--g300);
+  background-image: linear-gradient(#fff, #fff 50%, #777 50%, #777);
+  background-size: 100% 2px;
+  background-repeat: repeat;
+}
+.pt-titlebar .pt-stripe::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background-image: linear-gradient(#fff, #fff 50%, #ccc 50%, #ccc);
+  background-size: 100% 2px;
+  background-repeat: repeat;
+  border-bottom: 1px solid #ccc;
+}
+.pt-titlebar .pt-stripe::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  background-image: linear-gradient(#ccc, #ccc 50%, #777 50%, #777);
+  background-size: 100% 2px;
+  background-repeat: repeat;
 }
 
-::-webkit-scrollbar-thumb {
-  background: rgba(51, 65, 85, 0.8);
-  border-radius: 4px;
+.pt-titlebar .pt-title {
+  font-weight: bold;
+  font-size: 12px;
+  line-height: 13px;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 78%;
+  background: var(--g400);
+  color: var(--black);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #10b981;
-}
-
-/* Day 模式下的精美滚动条 */
-.day-admin-workbench ::-webkit-scrollbar-track {
-  background: rgba(241, 245, 249, 0.8);
-}
-.day-admin-workbench ::-webkit-scrollbar-thumb {
-  background: rgba(203, 213, 225, 0.9);
-}
-.day-admin-workbench ::-webkit-scrollbar-thumb:hover {
-  background: #059669;
-}
-
-/* 热敏打印机头部金属槽 */
-.printer-slot-head {
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  box-shadow: 
-    inset 0 1px 1px rgba(255, 255, 255, 0.15),
-    0 4px 12px rgba(0, 0, 0, 0.5);
-}
-
-/* 出纸缝：打印机底部的金属槽口，纸从这里吐出 */
-.printer-slot-lip {
-  background: linear-gradient(180deg, #0b1220 0%, #1e293b 45%, #000 100%);
-  border-radius: 0 0 4px 4px;
+.pt-tbox {
+  display: block;
+  width: 13px;
+  height: 13px;
+  flex: none;
+  position: relative;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: linear-gradient(135deg, #9a9a9a 0%, #f1f1f1 100%) 50% / 9px 9px;
   box-shadow:
-    inset 0 -2px 3px rgba(0, 0, 0, 0.9),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 2px 6px rgba(0, 0, 0, 0.6);
+    inset 1px 1px 0 var(--g700),
+    inset -1px -1px 0 #fff,
+    inset 0 0 0 2px var(--black),
+    inset 3px 3px 0 #fff,
+    inset -3px -3px 0 var(--g700);
+}
+.pt-tbox:active::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  z-index: 1;
+  background-image: linear-gradient(135deg, #353535cc 0%, #9c9c9ccc 100%);
 }
 
-/* 机器齿轮与打字马达高频微幅震动 */
-@keyframes machineVibrate {
-  0%, 100% { transform: translateY(0); }
-  25% { transform: translateY(-0.8px) rotate(-0.1deg); }
-  50% { transform: translateY(0.8px) rotate(0.1deg); }
-  75% { transform: translateY(-0.4px); }
+.pt-frame {
+  margin: 0 4px 4px;
+  border: 1px solid var(--black);
+  background: #fff;
+  box-shadow: -1px -1px 0 var(--g600), 1px 1px 0 #fff;
 }
 
-.animate-machine-vibrate {
-  animation: machineVibrate 0.12s infinite linear;
+/* ── Control Strip & Status Bar ── */
+.pt-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--black);
+  background: var(--g300);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.6), inset -1px -1px 0 #aaa;
 }
 
-/* 明细聚焦遮罩淡入 */
-@keyframes focusFade {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.pt-statusbar {
+  border-top: 1px solid var(--black);
+  background: var(--g300);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.6), inset -1px -1px 0 #aaa;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #333;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.pt-statusbar a,
+.pt-statusbar button.pt-link {
+  font-weight: bold;
+  text-decoration: none;
+  color: var(--hl);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: bold;
+  cursor: pointer;
+}
+.pt-statusbar a:hover,
+.pt-statusbar button.pt-link:hover {
+  text-decoration: underline;
 }
 
-.animate-focus-fade {
-  animation: focusFade 0.22s ease-out;
+/* ── Beveled Push Buttons & Tabs ── */
+.pt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-sizing: border-box;
+  min-width: 58px;
+  height: 22px;
+  padding: 2px 11px;
+  background: var(--g300);
+  color: var(--black);
+  text-decoration: none;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 14px;
+  font-weight: bold;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid var(--black);
+  border-radius: 3px;
+  box-shadow:
+    inset 1px 1px 0 var(--g300),
+    inset -1px -1px 0 #777,
+    inset 2px 2px 0 #fff,
+    inset -2px -2px 0 #aaa;
+}
+.pt-btn:hover:not(:disabled) {
+  background: #e5e5e5;
+}
+.pt-btn:active:not(:disabled),
+.pt-btn.on {
+  background: var(--g800);
+  color: #fff;
+  box-shadow:
+    inset 1px 1px 0 #444,
+    inset -1px -1px 0 #888,
+    inset 2px 2px 0 #555,
+    inset -2px -2px 0 #777;
+}
+.pt-btn:disabled {
+  color: var(--g700);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.pt-btn.tab {
+  min-width: 0;
+  height: 20px;
+  padding: 2px 8px;
+}
+.pt-btn.primary {
+  box-shadow:
+    0 0 0 1px var(--black),
+    inset 1px 1px 0 var(--g300),
+    inset -1px -1px 0 #777,
+    inset 2px 2px 0 #fff,
+    inset -2px -2px 0 #aaa;
+}
+.pt-btn.danger:not(:disabled) {
+  color: #991b1b;
+}
+.pt-btn.danger:active:not(:disabled) {
+  background: #991b1b;
+  color: #fff;
 }
 
-/* 拍立得暗房热感显影激光扫线 */
-@keyframes polaroidLaserScan {
-  0% {
-    top: 0%;
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    top: 100%;
-    opacity: 0;
-  }
+/* ── Filter Chips ── */
+.pt-chips {
+  font-size: 11px;
+  color: #333;
+}
+.pt-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 0 0 6px;
+  border: 1px solid var(--black);
+  background: #fff;
+  white-space: nowrap;
+}
+.pt-chip b {
+  color: var(--black);
+  margin-left: 4px;
+}
+.pt-chip button {
+  display: inline-block;
+  padding: 0 6px;
+  margin-left: 5px;
+  border: 0;
+  border-left: 1px solid var(--black);
+  height: 100%;
+  line-height: 17px;
+  text-decoration: none;
+  color: var(--black);
+  background: var(--g300);
+  cursor: pointer;
+  font-weight: bold;
+}
+.pt-chip button:hover {
+  background: var(--g800);
+  color: #fff;
 }
 
-.animate-polaroid-laser {
-  animation: polaroidLaserScan 1.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+/* ── Sunken Input / Select / Textarea ── */
+.pt-input {
+  height: 22px;
+  padding: 2px 6px;
+  background: #fff;
+  color: var(--black);
+  border: 1px solid var(--black);
+  box-shadow: inset 1px 1px 0 var(--g600);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  outline: none;
+}
+.pt-input:focus {
+  box-shadow: inset 1px 1px 0 var(--hl), 0 0 0 1px var(--hl);
+}
+textarea.pt-input {
+  height: auto;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
 }
 
-/* 拍立得相片暗房显影 Keyframes */
-@keyframes polaroidInkDevelop {
-  0% {
-    opacity: 0.05;
-    filter: blur(3px) sepia(100%) hue-rotate(-20deg) brightness(1.5);
-  }
-  30% {
-    opacity: 0.3;
-    filter: blur(1.5px) sepia(80%) hue-rotate(-10deg) brightness(1.2);
-  }
-  70% {
-    opacity: 0.85;
-    filter: blur(0.5px) sepia(30%) brightness(1.05);
-  }
-  100% {
-    opacity: 1;
-    filter: blur(0) sepia(0%) brightness(1);
-  }
+/* ── KPI Metric Tiles ── */
+.pt-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--g300);
+}
+.pt-tile {
+  flex: 1 1 110px;
+  min-width: 110px;
+  padding: 8px 12px 9px;
+  border-right: 1px solid var(--g300);
+  border-bottom: 1px solid transparent;
+}
+.pt-tile:last-child {
+  border-right: 0;
+}
+.pt-tile .tl {
+  font-size: 11px;
+  color: #555;
+  white-space: nowrap;
+}
+.pt-tile .tv {
+  font-size: 17px;
+  font-weight: bold;
+  line-height: 24px;
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.pt-tile .td {
+  font-size: 11px;
+  color: #555;
+  min-height: 14px;
+  white-space: nowrap;
 }
 
-.animate-ink-develop {
-  animation: polaroidInkDevelop 1.65s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+/* ── SVG Line Chart (exact exe.v2core.com/stats proportions) ── */
+.pt-chart {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  padding: 8px 12px 6px;
 }
-
-.thermal-dashed-line {
-  border-bottom: 2px dashed currentColor;
-  opacity: 0.35;
-  margin: 10px 0;
+.pt-chart .legend {
+  grid-column: 2;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 18px;
+  align-items: center;
+  font-size: 11px;
+  color: #555;
 }
-
-.thermal-double-line {
-  border-bottom: 3px double currentColor;
-  opacity: 0.5;
-  margin: 10px 0;
+.pt-chart .legend i {
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+  background: var(--income);
 }
-
-/* ── 动效层 ─────────────────────────────────────────────────
- * 只用 transform / opacity / clip-path 等合成友好的属性，
- * 避免动画过程中触发布局；纸面内部的「打印」质感靠 CSS 完成，
- * 时间线与出纸时长对齐（见 ReceiptView 的 --paper-wipe）。
- */
-
-/* 指针悬停只在真正支持悬停的设备上生效，避免触屏「点一下就卡在高亮态」 */
-@custom-variant can-hover (@media (hover: hover) and (pointer: fine));
-
-/* 纸面内容的「逐行打印」：随出纸进度自上而下显影（mask 只影响绘制，不参与布局） */
-@keyframes paperWipe {
-  from {
-    -webkit-mask-position: 0 100%;
-    mask-position: 0 100%;
-  }
-  to {
-    -webkit-mask-position: 0 0%;
-    mask-position: 0 0%;
-  }
+.pt-chart .legend i.exp {
+  background: var(--expense);
 }
-
-.paper-reveal {
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    #000 calc(100% - var(--paper-feather, 0%)),
-    rgba(0, 0, 0, 0.16) 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    #000 calc(100% - var(--paper-feather, 0%)),
-    rgba(0, 0, 0, 0.16) 100%
-  );
-  -webkit-mask-size: 100% 200%;
-  mask-size: 100% 200%;
-  animation: paperWipe var(--paper-wipe, 1.2s) linear both;
+.pt-chart .legend i.end {
+  background: var(--g500);
 }
-
-/* 新月份弹出时纸面轻震一下，像刚被送纸滚轮咬住 */
-@keyframes paperSettle {
-  0% { transform: translate3d(0, -3px, 0); }
-  60% { transform: translate3d(0, 1px, 0); }
-  100% { transform: translate3d(0, 0, 0); }
+.pt-chart .ys {
+  position: relative;
+  height: 160px;
+  margin-right: 6px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #555;
 }
-
-.paper-settle {
-  animation: paperSettle calc(var(--dur-in) * 1.2) var(--ease-out-print) both;
-  will-change: transform;
+.pt-chart .ys span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
 }
-
-/* 两个纸面动效同时挂上时（显影 + 落纸轻震），按顺序叠成一条 animation 列表 */
-.paper-reveal.paper-settle {
-  animation:
-    paperWipe var(--paper-wipe, 1.2s) linear both,
-    paperSettle calc(var(--dur-in) * 1.2) var(--ease-out-print) both;
+.pt-chart .plot {
+  position: relative;
+  height: 160px;
+  border-left: 1px solid var(--black);
+  border-bottom: 1px solid var(--black);
 }
-
-/* 墨条：网点随长度一起浮现，像墨头一笔扫过 */
-@keyframes inkSweep {
-  from {
-    clip-path: inset(0 100% 0 0);
-    opacity: 0.35;
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-    opacity: 1;
-  }
-}
-
-.ink-sweep {
-  animation: inkSweep 520ms var(--ease-out-print) both;
-  will-change: clip-path;
-}
-
-/* 分类被选中：左侧墨色标记「盖」上去 */
-.cat-mark {
+.pt-chart .gl {
   position: absolute;
   left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 3px;
-  border-radius: 2px;
-  background: currentColor;
-  transform-origin: top;
-  transform: scaleY(0);
-  transition: transform 220ms var(--ease-out-print), opacity 180ms linear;
-  opacity: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--g300);
+}
+.pt-chart svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.pt-chart polyline {
+  fill: none;
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.pt-chart .inc {
+  stroke: var(--income);
+}
+.pt-chart .exp {
+  stroke: var(--expense);
+}
+.pt-chart .inc.end {
+  stroke: #9999ff;
+}
+.pt-chart .exp.end {
+  stroke: #ffcc99;
+}
+.pt-chart .xs {
+  grid-column: 2;
+  position: relative;
+  height: 18px;
+  margin-top: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #555;
+}
+.pt-chart .xs span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.pt-chart .xs span.first {
+  transform: none;
+}
+.pt-chart .xs span.last {
+  transform: translateX(-100%);
+}
+.pt-chart .none {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #777;
 }
 
-[data-selected='true'] > .cat-mark {
-  transform: scaleY(1);
-  opacity: 0.85;
+/* ── Breakdown Bar Rows (exact exe.v2core.com/stats .rows / .row) ── */
+.pt-rows {
+  padding: 6px 12px 8px;
 }
-
-/* 月份切换：旧月份由右向左卷走，新月份从左侧贴上（方向 = 时间方向） */
-@keyframes monthInNext {
-  from { opacity: 0; transform: translate3d(10px, 0, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+.pt-row {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
 }
-
-@keyframes monthInPrev {
-  from { opacity: 0; transform: translate3d(-10px, 0, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+.pt-row.clickable {
+  cursor: pointer;
 }
-
-.month-roll-next {
-  animation: monthInNext 240ms var(--ease-out-print) both;
+.pt-row.clickable:hover .lab-text {
+  text-decoration: underline;
 }
-
-.month-roll-prev {
-  animation: monthInPrev 240ms var(--ease-out-print) both;
+.pt-row.selected .bar {
+  background: #a8a8f0;
 }
-
-/* 按钮按下的「机械按键」反馈：极短、极小的位移，不做弹跳 */
-.press-fx {
-  transition: transform var(--dur-tap) var(--ease-inout), opacity var(--dur-state) linear,
-    background-color var(--dur-state) linear, color var(--dur-state) linear;
+.pt-row.selected .lab-text {
+  font-weight: bold;
+  color: var(--hl);
 }
-
-.press-fx:active:not(:disabled) {
-  transform: translateY(1px) scale(0.985);
+.pt-row .lab {
+  flex: 1 1 0;
+  position: relative;
+  min-width: 0;
+  height: 18px;
+  line-height: 18px;
 }
-
-/* 金额被点中时轻轻记一下（复制 / 聚焦），只用 opacity 强调，不改字号以免跳动 */
-@keyframes amountNudge {
-  0% { transform: translateY(0); }
-  35% { transform: translateY(-1.5px); }
-  100% { transform: translateY(0); }
+.pt-row .bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--lav);
+  transition: width 180ms ease-out;
 }
-
-.amount-nudge {
-  animation: amountNudge 260ms var(--ease-out-print);
-}
-
-/* 提示条：从纸缝处滑出 */
-@keyframes tipIn {
-  from { opacity: 0; transform: translate3d(0, -4px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
-}
-
-.tip-in {
-  animation: tipIn 200ms var(--ease-out-print) both;
-}
-
-/* 登录失败：输入框横向抖一下（幅度小、单次） */
-@keyframes fieldShake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-4px); }
-  45% { transform: translateX(3px); }
-  70% { transform: translateX(-2px); }
-}
-
-.field-shake {
-  animation: fieldShake 320ms var(--ease-inout);
-}
-
-/* 后台对话 / 弹窗入场 */
-@keyframes modalIn {
-  from { opacity: 0; transform: translate3d(0, 8px, 0) scale(0.985); }
-  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-}
-
-.modal-in {
-  animation: modalIn 220ms var(--ease-out-print) both;
-}
-
-/* 减少动态效果：保留状态变化，去掉位移 / 滚动 / 闪烁 / 遮罩动画 */
-@media (prefers-reduced-motion: reduce) {
-  /* 循环类动画（打印震动、激光扫描、骨架脉冲）一律停住，静态状态本身已能说明结果 */
-  .animate-machine-vibrate,
-  .animate-focus-fade,
-  .animate-polaroid-laser,
-  .animate-ink-develop,
-  .animate-pulse {
-    animation: none !important;
-  }
-
-  .paper-reveal,
-  .paper-settle,
-  .ink-sweep,
-  .month-roll-next,
-  .month-roll-prev,
-  .amount-nudge,
-  .tip-in,
-  .modal-in,
-  .field-shake {
-    animation: none !important;
-  }
-
-  .paper-reveal {
-    -webkit-mask-image: none !important;
-    mask-image: none !important;
-  }
-
-  .press-fx:active:not(:disabled) {
-    transform: none;
-  }
-
-  .cat-mark {
-    transition: opacity 150ms linear;
-  }
-
-  :root {
-    --dur-tap: 0ms;
-    --dur-state: 1ms;
-  }
-}
-
-/* ── 纸带展开 / 收回 ────────────────────────────────────────
- * 用 grid 行高 0 ↔ 1fr 做高度动画：浏览器能对 1fr 做插值，
- * 重新挂载时也不会丢失旧高度（framer 的 height:'auto' 在重挂载时会瞬间塌成 0）。
- * data-feed 标记当前处于「回卷」还是「吐纸」，切换时由 class 驱动过渡。
- */
-.paper-slot {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--paper-feed, 1600ms) linear;
-}
-
-.paper-slot[data-feed='out'] {
-  grid-template-rows: 1fr;
-}
-
-.paper-slot > * {
-  min-height: 0;
+.pt-row .lab-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+  color: var(--black);
+  white-space: nowrap;
   overflow: hidden;
 }
-
-/* 回卷：快出慢收，纸被尽快吸回缝里 */
-.paper-slot[data-feed='in'] {
-  transition: grid-template-rows 0.3s var(--ease-in-print);
+.pt-row .lab-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pt-row .tag {
+  font: 10px var(--font-mono);
+  color: #555;
+  flex: none;
+}
+.pt-row .n {
+  flex: none;
+  min-width: 72px;
+  text-align: right;
+  font: 11px var(--font-mono);
+  color: #333;
+}
+.pt-rows .none {
+  font-size: 11px;
+  color: #777;
+  padding: 6px 4px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .paper-slot,
-  .paper-slot[data-feed='in'] {
-    transition-duration: 1ms;
+/* ── Live / Transactions Feed Rows ── */
+.pt-live-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 12px;
+  background: var(--g200);
+  border-top: 1px solid var(--g300);
+  border-bottom: 1px solid var(--g300);
+  font-size: 11px;
+  font-weight: bold;
+  color: #444;
+  font-family: var(--font-mono);
+}
+.pt-live-group-header:first-child {
+  border-top: 0;
+}
+
+.pt-live-row {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 12px;
+  gap: 8px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+}
+.pt-live-row:hover {
+  background: #f5f5ff;
+}
+.pt-live-row.active {
+  background: var(--lav);
+}
+.pt-live-row .who {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 82px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pt-live-row .who span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pt-live-row .cc {
+  flex: none;
+  width: 96px;
+  font: 10px var(--font-mono);
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pt-live-row .pg {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--black);
+}
+.pt-live-row .amt {
+  flex: none;
+  min-width: 78px;
+  text-align: right;
+  font: bold 11px var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Pixel Dot SVG */
+.pt-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  display: block;
+  shape-rendering: crispEdges;
+}
+.pt-dot .k {
+  fill: #262626;
+}
+.pt-dot .w {
+  fill: #fff;
+}
+@media (min-resolution: 1.01dppx) and (max-resolution: 1.99dppx) {
+  .pt-dot {
+    shape-rendering: geometricPrecision;
   }
 }
 
-@media print {
-  body {
-    background: white !important;
-    color: black !important;
+/* ── Detail Inspector Drawer inside Transaction Row ── */
+.pt-inspector {
+  background: var(--g100);
+  border-bottom: 1px solid var(--black);
+  box-shadow: inset 0 1px 0 var(--g500);
+  padding: 8px 12px 10px;
+}
+
+/* ── Classic Platinum Table (Admin Console) ── */
+.pt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.pt-table th,
+.pt-table td {
+  border: 1px solid var(--g500);
+  padding: 3px 6px;
+  vertical-align: middle;
+}
+.pt-table th {
+  background: var(--g300);
+  font-weight: bold;
+  text-align: left;
+  white-space: nowrap;
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #aaa;
+}
+.pt-table tbody tr:hover {
+  background: #f5f5ff;
+}
+
+/* ── Scrollbar (Classic Platinum) ── */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: var(--g300);
+  border-left: 1px solid var(--g600);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--g400);
+  border: 1px solid var(--black);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 #888;
+}
+
+/* ── Responsive Tweaks ── */
+@media (max-width: 560px) {
+  .pt-desk {
+    padding: 12px 8px 32px;
   }
-  .no-print {
-    display: none !important;
+  .pt-tile {
+    flex-basis: 96px;
+    min-width: 96px;
+    padding: 6px 8px 7px;
   }
-  .receipt-container {
-    box-shadow: none !important;
-    margin: 0 !important;
-    width: 100% !important;
-    max-width: 80mm !important;
+  .pt-tile .tv {
+    font-size: 14px;
   }
+  .pt-chart {
+    grid-template-columns: 38px 1fr;
+    padding: 8px 8px 6px;
+  }
+  .pt-chart .xs span:nth-child(even) {
+    display: none;
+  }
+  .pt-live-row .who {
+    width: 64px;
+  }
+  .pt-live-row .cc {
+    width: 66px;
+  }
+  .pt-live-row .amt {
+    min-width: 64px;
+  }
+}
+
+/* ── Field shake for invalid password ── */
+@keyframes pt-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+.field-shake {
+  animation: pt-shake 240ms ease-in-out;
 }
