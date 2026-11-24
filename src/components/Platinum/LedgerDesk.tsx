@@ -466,6 +466,11 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                     const dotColor =
                       memberColorMap.get(memberName) ?? memberDotColor(memberName);
                     const transferRoute = `${fromLedger} -> ${toLedger}`;
+                    const transferLedgerLabel = isTransferOut
+                      ? fromLedger
+                      : isTransferIn
+                      ? toLedger
+                      : legLedger;
                     const amountColor = !hasFullAccess
                       ? '#777'
                       : tx.amount >= 0
@@ -506,12 +511,12 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                             className="pg"
                             title={
                               isTransfer
-                                ? `${transferRoute}${noteText ? ` · ${noteText}` : ''}`
+                                ? `${transferLedgerLabel}${noteText ? ` · ${noteText}` : ''}`
                                 : noteText || undefined
                             }
                           >
                             {isTransfer && (
-                              <span className="pt-transfer-route">{transferRoute}</span>
+                              <span className="pt-transfer-route">{transferLedgerLabel}</span>
                             )}
                             {noteText}
                           </span>
@@ -544,7 +549,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                             >
                               <b style={{ fontSize: 12 }}>
                                 {noteText ||
-                                  (isTransfer ? `${rowCatLabel} · ${transferRoute}` : cat) ||
+                                  (isTransfer ? `${rowCatLabel} · ${transferLedgerLabel}` : cat) ||
                                   '交易详情'}
                               </b>
                               <button
