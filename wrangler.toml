@@ -9,3 +9,13 @@ database_id = "c512fbb0-d637-4e1d-a22c-d15135c65362"
 
 [vars]
 DEFAULT_LEDGER_TITLE = "小票记账本 (Receipt Ledger)"
+DB_TABLE_PREFIX = ""
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "receipt_ledger_db"
+database_id = "c512fbb0-d637-4e1d-a22c-d15135c65362"
+
+[env.preview.vars]
+DEFAULT_LEDGER_TITLE = "小票记账本 (Test)"
+DB_TABLE_PREFIX = "test_"

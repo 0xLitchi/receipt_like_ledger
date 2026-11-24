@@ -1,5 +1,6 @@
 import {
   getCorsHeaders,
+  getTableNames,
   isAdminAuthorized,
   type SharedEnv,
 } from './_shared';
@@ -21,9 +22,10 @@ const jsonHeaders = (request: Request, env: Env, extra: Record<string, string> =
 });
 
 // 全局设置表（幂等建表）
-const ensureSettingsTable = async (db: D1Database): Promise<void> => {
+const ensureSettingsTable = async (db: D1Database, env: SharedEnv): Promise<void> => {
+  const { appSettings } = getTableNames(env);
   await db.prepare(
-    `CREATE TABLE IF NOT EXISTS app_settings (
+    `CREATE TABLE IF NOT EXISTS ${appSettings} (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -50,9 +52,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    await ensureSettingsTable(env.DB);
+    await ensureSettingsTable(env.DB, env);
+    const { appSettings } = getTableNames(env);
     const { results } = await env.DB.prepare(
-      'SELECT key, value FROM app_settings'
+      `SELECT key, value FROM ${appSettings}`
     ).all<{ key: string; value: string }>();
 
     (results || []).forEach((row) => {
@@ -110,7 +113,8 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       });
     }
 
-    await ensureSettingsTable(env.DB);
+    await ensureSettingsTable(env.DB, env);
+    const { appSettings } = getTableNames(env);
     for (const [key, rawValue] of entries) {
       const value = String(rawValue);
       if (!isValidValue(key, value)) {
@@ -123,13 +127,13 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
         });
       }
       await env.DB.prepare(
-        `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+        `INSERT INTO ${appSettings} (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
       ).bind(key, value).run();
     }
 
     const { results } = await env.DB.prepare(
-      'SELECT key, value FROM app_settings'
+      `SELECT key, value FROM ${appSettings}`
     ).all<{ key: string; value: string }>();
     const data: Record<string, string> = { ...DEFAULT_SETTINGS };
     (results || []).forEach((row) => {

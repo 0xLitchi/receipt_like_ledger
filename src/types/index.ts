@@ -19,7 +19,7 @@ export type LedgerType = 'ALL' | 'EXPENSE' | 'INCOME' | 'TRANSFER';
 
 /** 账本页的筛选条件 */
 export interface LedgerFilters {
-  ledger: string;         // "ALL" 或 具体账本名（默认 "Default"）
+  ledger: string;         // "ALL" 或 具体账本名（默认 "ALL"）
   month: string;          // "ALL" 或 "2026-08"
   member: string;         // "ALL" 或 具体成员
   category: string;       // "ALL" 或 具体分类（可含 "杂项/麻将" 形式）

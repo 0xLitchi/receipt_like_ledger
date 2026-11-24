@@ -282,6 +282,13 @@ a {
   height: 20px;
   padding: 2px 8px;
 }
+.pt-btn.compact {
+  min-width: 0;
+  height: 20px;
+  padding: 1px 7px;
+  font-size: 11px;
+  line-height: 13px;
+}
 .pt-btn.primary {
   box-shadow:
     0 0 0 1px var(--black),
@@ -410,6 +417,26 @@ a {
   flex: none;
   font-size: 11px;
   text-align: center;
+}
+.pt-select.compact {
+  height: 20px;
+  font-size: 11px;
+  line-height: 13px;
+}
+.pt-select.compact .pt-select-label {
+  padding: 0 5px;
+}
+.pt-select.compact .pt-select-arrows {
+  width: 15px;
+}
+.pt-menu.compact .pt-menu-item {
+  padding: 2px 8px 2px 5px;
+  font-size: 11px;
+  line-height: 15px;
+}
+.pt-menu.compact .pt-menu-check {
+  width: 12px;
+  font-size: 10px;
 }
 
 /* ── Filter Chips ── */

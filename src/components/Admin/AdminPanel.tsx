@@ -8,8 +8,17 @@ import {
   isTransferTransaction,
   normalizeLedgerName,
 } from '../../features/ledger/use-ledger';
+import {
+  ADMIN_TX_KIND_LABELS,
+  applyAdminTxKind,
+  applyAmountForKind,
+  deriveAdminTxKind,
+  findInvalidTransfer,
+  type AdminTxKind,
+} from '../../features/admin/transaction-form';
 import { parseRawLedgerText } from '../../utils/parser';
 import { PixelDot, PlatinumWindow } from '../Platinum/PlatinumChrome';
+import { AddTransactionModal } from './AddTransactionModal';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -73,6 +82,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [apiLogsError, setApiLogsError] = useState<string | null>(null);
   const [apiLogSearchQuery, setApiLogSearchQuery] = useState('');
 
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [rowKindOverrides, setRowKindOverrides] = useState<Record<string, AdminTxKind>>({});
   const [showParseModal, setShowParseModal] = useState(false);
   const [rawText, setRawText] = useState('');
   const [parseStep, setParseStep] = useState<'input' | 'preview'>('input');
@@ -89,6 +100,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setRows(JSON.parse(JSON.stringify(transactions)));
       setDeletedIds([]);
       setSelectedIds(new Set());
+      setRowKindOverrides({});
       setStatusMsg(null);
     }
   }, [isOpen, transactions]);
@@ -206,65 +218,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const availableLedgers = useMemo(() => buildAvailableLedgers(rows), [rows]);
 
-  const handleCellChange = useCallback((id: string, field: keyof Transaction, value: string) => {
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.id !== id) return r;
-        if (field === 'tx_type') {
-          const nextType: TransactionKind = value === 'transfer' ? 'transfer' : 'normal';
-          return {
-            ...r,
-            tx_type: nextType,
-            amount: nextType === 'transfer' ? Math.abs(r.amount) : r.amount,
-            category:
-              nextType === 'transfer' && (!r.category || r.category === '杂项' || r.category === '其它')
-                ? '转账'
-                : r.category,
-            to_ledger: nextType === 'transfer' ? r.to_ledger || '' : '',
-          };
-        }
-        return {
-          ...r,
-          [field]: field === 'amount' ? (value === '' ? 0 : parseFloat(value) || 0) : value,
-        };
-      })
-    );
+  const handleKindChange = useCallback((id: string, nextKind: AdminTxKind) => {
+    setRowKindOverrides((prev) => ({ ...prev, [id]: nextKind }));
+    setRows((prev) => prev.map((r) => (r.id === id ? applyAdminTxKind(r, nextKind) : r)));
   }, []);
 
-  const handleAddRow = () => {
-    const newId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const newRow: Transaction = {
-      id: newId,
-      date: new Date().toISOString().split('T')[0],
-      member: '荔枝',
-      category: '杂项',
-      subcategory: '',
-      title: '',
-      amount: 0,
-      ledger: 'Default',
-      tx_type: 'normal',
-      to_ledger: '',
-    };
-    setRows((prev) => [newRow, ...prev]);
-  };
+  const handleCellChange = useCallback(
+    (id: string, field: keyof Transaction, value: string) => {
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.id !== id) return r;
+          if (field === 'amount') {
+            const kind = deriveAdminTxKind(r, rowKindOverrides[id]);
+            return {
+              ...r,
+              amount: applyAmountForKind(kind, value),
+            };
+          }
+          return {
+            ...r,
+            [field]: value,
+          };
+        })
+      );
+    },
+    [rowKindOverrides]
+  );
 
-  const handleAddTransferRow = () => {
-    const newId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const defaultTarget = availableLedgers.find((l) => l !== 'Default') || '';
-    const newRow: Transaction = {
-      id: newId,
-      date: new Date().toISOString().split('T')[0],
-      member: '荔枝',
-      category: '转账',
-      subcategory: '',
-      title: '',
-      amount: 0,
-      ledger: 'Default',
-      tx_type: 'transfer',
-      to_ledger: defaultTarget,
-    };
+  const handleAddTransactionFromModal = useCallback((newRow: Transaction) => {
+    const kind = deriveAdminTxKind(newRow);
+    setRowKindOverrides((prev) => ({ ...prev, [newRow.id]: kind }));
     setRows((prev) => [newRow, ...prev]);
-  };
+    setStatusMsg({
+      type: 'success',
+      text: `已新增 1 条${ADMIN_TX_KIND_LABELS[kind]}记录至待保存区，请点击“保存变动”提交。`,
+    });
+  }, []);
 
   const handleToggleSelectAll = (filteredRows: Transaction[]) => {
     const allFilteredIds = filteredRows.map((r) => r.id);
@@ -313,8 +302,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     let result = [...rows];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      result = result.filter(
-        (r) =>
+      result = result.filter((r) => {
+        const kind = deriveAdminTxKind(r, rowKindOverrides[r.id]);
+        const kindText = `${ADMIN_TX_KIND_LABELS[kind]} ${kind}`;
+        return (
           (r.title || '').toLowerCase().includes(q) ||
           (r.member || '').toLowerCase().includes(q) ||
           (r.category || '').toLowerCase().includes(q) ||
@@ -322,13 +313,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           (r.date || '').toLowerCase().includes(q) ||
           (r.ledger || '').toLowerCase().includes(q) ||
           (r.to_ledger || '').toLowerCase().includes(q) ||
-          (isTransferTransaction(r) ? '转账 transfer' : '收支 normal').includes(q) ||
+          kindText.includes(q) ||
           String(r.amount).includes(q)
-      );
+        );
+      });
     }
 
     if (sortField) {
       result.sort((a, b) => {
+        if (sortField === 'tx_type') {
+          const kindA = ADMIN_TX_KIND_LABELS[deriveAdminTxKind(a, rowKindOverrides[a.id])];
+          const kindB = ADMIN_TX_KIND_LABELS[deriveAdminTxKind(b, rowKindOverrides[b.id])];
+          return sortAsc
+            ? kindA.localeCompare(kindB, 'zh-CN')
+            : kindB.localeCompare(kindA, 'zh-CN');
+        }
         const valA = a[sortField] ?? '';
         const valB = b[sortField] ?? '';
         if (typeof valA === 'number' && typeof valB === 'number') {
@@ -340,7 +339,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
     }
     return result;
-  }, [rows, searchQuery, sortField, sortAsc]);
+  }, [rows, searchQuery, sortField, sortAsc, rowKindOverrides]);
 
   const filteredLogs = useMemo(() => {
     if (!logSearchQuery.trim()) return logs;
@@ -407,14 +406,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       ...pendingChanges.modified.map((m) => m.current),
     ];
 
-    const invalidTransfer = changedItems.find((item) => {
-      if (!isTransferTransaction(item)) return false;
-      const from = normalizeLedgerName(item.ledger);
-      const to = (item.to_ledger || '').trim();
-      return !to || from === to;
-    });
-    if (invalidTransfer) {
-      setSaveError('存在无效的转账记录：请填写「转入账本」，且不能与「账本」相同。');
+    const transferValidationError = findInvalidTransfer(changedItems);
+    if (transferValidationError) {
+      setSaveError(transferValidationError);
       return;
     }
 
@@ -604,11 +598,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 placeholder="筛选日期 / 备注 / 成员 / 分类 / 金额 / 账本…"
                 style={{ width: 240, maxWidth: '100%' }}
               />
-              <button type="button" className="pt-btn tab" onClick={handleAddRow}>
+              <button
+                type="button"
+                className="pt-btn tab"
+                onClick={() => setShowAddModal(true)}
+              >
                 + 新增行
-              </button>
-              <button type="button" className="pt-btn tab" onClick={handleAddTransferRow}>
-                + 新增转账
               </button>
               <button
                 type="button"
@@ -714,7 +709,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   ) : (
                     processedRows.map((row) => {
                       const status = getRowChangeStatus(row);
-                      const isTransfer = isTransferTransaction(row);
+                      const rowKind = deriveAdminTxKind(row, rowKindOverrides[row.id]);
+                      const isTransfer = rowKind === 'transfer';
+                      const kindColor =
+                        rowKind === 'transfer'
+                          ? 'var(--transfer)'
+                          : rowKind === 'income'
+                          ? 'var(--income)'
+                          : 'var(--expense)';
                       const bg =
                         status === 'added'
                           ? '#dcfce7'
@@ -754,13 +756,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               style={{
                                 width: '100%',
                                 padding: '0 4px',
-                                color: isTransfer ? 'var(--transfer)' : undefined,
-                                fontWeight: isTransfer ? 'bold' : undefined,
+                                color: kindColor,
+                                fontWeight: 'bold',
                               }}
-                              value={isTransfer ? 'transfer' : 'normal'}
-                              onChange={(e) => handleCellChange(row.id, 'tx_type', e.target.value)}
+                              value={rowKind}
+                              onChange={(e) =>
+                                handleKindChange(row.id, e.target.value as AdminTxKind)
+                              }
                             >
-                              <option value="normal">收支</option>
+                              <option value="expense">支出</option>
+                              <option value="income">收入</option>
                               <option value="transfer">转账</option>
                             </select>
                           </td>
@@ -813,17 +818,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <input
                               type="number"
                               step="0.01"
-                              min={isTransfer ? 0 : undefined}
+                              min={rowKind === 'expense' ? undefined : 0}
                               className="pt-input"
                               style={{
                                 width: '100%',
                                 textAlign: 'right',
                                 fontFamily: 'var(--font-mono)',
-                                color: isTransfer
-                                  ? 'var(--transfer)'
-                                  : row.amount >= 0
-                                  ? 'var(--income)'
-                                  : 'var(--expense)',
+                                color: kindColor,
                               }}
                               value={row.amount}
                               onChange={(e) => handleCellChange(row.id, 'amount', e.target.value)}
@@ -1335,6 +1336,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
       )}
+
+      <AddTransactionModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        existingRows={rows}
+        availableLedgers={availableLedgers}
+        onAdd={handleAddTransactionFromModal}
+      />
 
       {/* ── Floating SQL Execution Success Toast ── */}
       {sqlToast && (

@@ -16,8 +16,6 @@ interface LedgerDeskProps {
   dateGroups: DateGroup[];
   stats: SummaryStats;
   ledgers: string[];
-  years: string[];
-  monthsByYear: Record<string, string[]>;
   allMonths: string[];
   filters: LedgerFilters;
   onPatchFilters: (next: Partial<LedgerFilters>) => void;
@@ -49,8 +47,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
   dateGroups,
   stats,
   ledgers,
-  years,
-  monthsByYear,
   allMonths,
   filters,
   onPatchFilters,
@@ -62,7 +58,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const selectedLedger = filters.ledger || 'Default';
+  const selectedLedger = filters.ledger || 'ALL';
   const ledgerOptions = useMemo(
     () => [
       { value: 'ALL', label: '全部账本' },
@@ -77,24 +73,14 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     : filters.month && allMonths.includes(filters.month)
     ? filters.month
     : allMonths[0] || '';
-  const selectedYear = isAllMonths ? '' : selectedMonth ? selectedMonth.slice(0, 4) : years[0] || '';
-  const selectedMonthNum = isAllMonths ? '' : selectedMonth ? selectedMonth.slice(5, 7) : '';
 
-  const yearOptions = useMemo(
-    () => years.map((y) => ({ value: y, label: `${y}年` })),
-    [years]
-  );
-
-  const fallbackYearForMonths = selectedYear || years[0] || '';
-  const availableMonthsForYear = useMemo(
-    () => (fallbackYearForMonths ? monthsByYear[fallbackYearForMonths] ?? [] : []),
-    [monthsByYear, fallbackYearForMonths]
-  );
-
-  const monthOptions = useMemo(
-    () => availableMonthsForYear.map((mm) => ({ value: mm, label: `${mm}月` })),
-    [availableMonthsForYear]
-  );
+  const yearMonthOptions = useMemo(() => {
+    const monthItems = allMonths.map((ym) => ({ value: ym, label: formatMonthTab(ym) }));
+    if (isAdmin) {
+      return [{ value: 'ALL', label: '全部' }, ...monthItems];
+    }
+    return monthItems;
+  }, [allMonths, isAdmin]);
 
   const handleLedgerChange = useCallback(
     (newLedger: string) => {
@@ -103,25 +89,11 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     [onPatchFilters]
   );
 
-  const handleYearChange = useCallback(
-    (newYear: string) => {
-      const candidateMonths = monthsByYear[newYear] ?? [];
-      if (candidateMonths.length === 0) return;
-      const nextMonthNum = candidateMonths.includes(selectedMonthNum)
-        ? selectedMonthNum
-        : candidateMonths[0];
-      onPatchFilters({ month: `${newYear}-${nextMonthNum}`, category: 'ALL' });
+  const handleYearMonthChange = useCallback(
+    (newMonth: string) => {
+      onPatchFilters({ month: newMonth, category: 'ALL' });
     },
-    [monthsByYear, selectedMonthNum, onPatchFilters]
-  );
-
-  const handleMonthChange = useCallback(
-    (newMonthNum: string) => {
-      const targetYear = selectedYear || years[0] || '';
-      if (!targetYear) return;
-      onPatchFilters({ month: `${targetYear}-${newMonthNum}`, category: 'ALL' });
-    },
-    [selectedYear, years, onPatchFilters]
+    [onPatchFilters]
   );
 
   // Whether current date/ledger range contains any transfer records
@@ -257,49 +229,32 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
             options={ledgerOptions}
             onChange={handleLedgerChange}
             ariaLabel="选择账本"
-            placeholder="Default"
-            minWidth={96}
+            placeholder="全部账本"
+            minWidth={76}
+            compact
           />
           <PlatinumSelect
-            value={selectedYear}
-            options={yearOptions}
-            onChange={handleYearChange}
-            ariaLabel="选择年份"
-            placeholder={years.length > 0 ? '年份' : '暂无年份'}
-            minWidth={88}
+            value={selectedMonth}
+            options={yearMonthOptions}
+            onChange={handleYearMonthChange}
+            ariaLabel="选择年月"
+            placeholder={allMonths.length > 0 ? '选择年月' : '暂无数据'}
+            minWidth={98}
+            compact
           />
-          <PlatinumSelect
-            value={selectedMonthNum}
-            options={monthOptions}
-            onChange={handleMonthChange}
-            ariaLabel="选择月份"
-            placeholder={availableMonthsForYear.length > 0 ? '月份' : '暂无月份'}
-            minWidth={74}
-          />
-          {isAdmin && (
-            <button
-              type="button"
-              className={`pt-btn${isAllMonths ? ' on' : ''}`}
-              style={{ minWidth: 0, padding: '2px 10px' }}
-              aria-pressed={isAllMonths}
-              onClick={() => onPatchFilters({ month: 'ALL', category: 'ALL' })}
-            >
-              全部
-            </button>
-          )}
 
           <span
             style={{
               marginLeft: 'auto',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
+              gap: 6,
               fontSize: 11,
               color: '#333',
               whiteSpace: 'nowrap',
             }}
           >
-            <button type="button" className="pt-btn tab" onClick={onOpenAdmin}>
+            <button type="button" className="pt-btn compact" onClick={onOpenAdmin}>
               后台
             </button>
           </span>
@@ -441,7 +396,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                     <span className="bar" style={{ width: `${item.barPct.toFixed(1)}%` }} />
                     <span className="lab-inner">
                       <span className="lab-text">{item.name}</span>
-                      <span className="tag">{item.count}笔</span>
                     </span>
                   </span>
                   <span
@@ -698,33 +652,39 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
         </div>
 
         <div className="pt-statusbar">
-          <span>
-            共计 {stats.count} 笔 · 收入{' '}
-            <span style={{ color: hasFullAccess ? 'var(--income)' : undefined }}>
-              {maskVal(stats.totalIncome, true)}
-            </span>{' '}
-            · 支出{' '}
-            <span style={{ color: hasFullAccess ? 'var(--expense)' : undefined }}>
-              {maskVal(-stats.totalExpense)}
+          <span
+            style={{
+              display: 'inline-flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: '0 4px',
+            }}
+          >
+            <span>
+              收入{' '}
+              <span style={{ color: hasFullAccess ? 'var(--income)' : undefined }}>
+                {maskVal(stats.totalIncome, true)}
+              </span>
+            </span>
+            <span>·</span>
+            <span>
+              支出{' '}
+              <span style={{ color: hasFullAccess ? 'var(--expense)' : undefined }}>
+                {maskVal(-stats.totalExpense)}
+              </span>
             </span>
             {stats.totalTransfer > 0 && (
               <>
-                {' '}· 转账{' '}
-                <span style={{ color: hasFullAccess ? 'var(--transfer)' : undefined }}>
-                  {maskVal(stats.totalTransfer)}
+                <span>·</span>
+                <span>
+                  转账{' '}
+                  <span style={{ color: hasFullAccess ? 'var(--transfer)' : undefined }}>
+                    {maskVal(stats.totalTransfer)}
+                  </span>
                 </span>
               </>
             )}
-          </span>
-          <span
-            style={{
-              marginLeft: 'auto',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 10,
-              whiteSpace: 'nowrap',
-            }}
-          >
+            <span>·</span>
             <b
               style={{
                 fontFamily: 'var(--font-mono)',
@@ -737,10 +697,18 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
             >
               净计: {maskVal(stats.netBalance, true)}
             </b>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <PixelDot color={isAdmin ? '#333399' : hasFullAccess ? '#336633' : '#999999'} />
-              {accessBadge}
-            </span>
+          </span>
+          <span
+            style={{
+              marginLeft: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <PixelDot color={isAdmin ? '#333399' : hasFullAccess ? '#336633' : '#999999'} />
+            {accessBadge}
           </span>
         </div>
       </PlatinumWindow>

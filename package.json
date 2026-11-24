@@ -8,7 +8,12 @@
     "build": "tsc -b && tsc -p tsconfig.functions.json && vite build",
     "lint": "oxlint",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "gen:test-seed": "node scripts/generate-test-seed.mjs",
+    "db:init:test": "wrangler d1 execute receipt_ledger_db --remote --file=db/schema.test.sql",
+    "db:seed:test": "wrangler d1 execute receipt_ledger_db --remote --file=db/seed.test.sql",
+    "db:init:test:local": "wrangler d1 execute receipt_ledger_db --local --file=db/schema.test.sql",
+    "db:seed:test:local": "wrangler d1 execute receipt_ledger_db --local --file=db/seed.test.sql"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.5",

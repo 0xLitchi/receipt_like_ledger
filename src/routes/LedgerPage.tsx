@@ -34,8 +34,8 @@ export const LedgerPage: React.FC = () => {
     [transactions, filters.ledger]
   );
 
-  // Extract all years and months that actually have transaction data in current ledger scope
-  const { years, monthsByYear, allMonths } = useMemo(
+  // Extract all months that actually have transaction data in current ledger scope
+  const { allMonths } = useMemo(
     () => buildAvailableYearMonths(ledgerTransactions),
     [ledgerTransactions]
   );
@@ -119,8 +119,6 @@ export const LedgerPage: React.FC = () => {
           dateGroups={dateGroups}
           stats={stats}
           ledgers={ledgers}
-          years={years}
-          monthsByYear={monthsByYear}
           allMonths={allMonths}
           filters={filters}
           onPatchFilters={patch}

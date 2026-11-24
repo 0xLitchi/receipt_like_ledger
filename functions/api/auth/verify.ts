@@ -33,7 +33,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
-    const token = await createAdminSession(context.env.DB);
+    const token = await createAdminSession(context.env.DB, context.env);
     return new Response(JSON.stringify({ success: true, token, message: 'Authentication successful' }), {
       headers: { 'Content-Type': 'application/json' },
     });
