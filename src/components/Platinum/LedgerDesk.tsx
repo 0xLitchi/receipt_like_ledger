@@ -299,10 +299,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
               whiteSpace: 'nowrap',
             }}
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <PixelDot color={isAdmin ? '#333399' : hasFullAccess ? '#336633' : '#999999'} />
-              {accessBadge}
-            </span>
             <button type="button" className="pt-btn tab" onClick={onOpenAdmin}>
               后台
             </button>
@@ -720,18 +716,32 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
               </>
             )}
           </span>
-          <b
+          <span
             style={{
-              fontFamily: 'var(--font-mono)',
-              color: !hasFullAccess
-                ? undefined
-                : stats.netBalance >= 0
-                ? 'var(--income)'
-                : 'var(--expense)',
+              marginLeft: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 10,
+              whiteSpace: 'nowrap',
             }}
           >
-            净计: {maskVal(stats.netBalance, true)}
-          </b>
+            <b
+              style={{
+                fontFamily: 'var(--font-mono)',
+                color: !hasFullAccess
+                  ? undefined
+                  : stats.netBalance >= 0
+                  ? 'var(--income)'
+                  : 'var(--expense)',
+              }}
+            >
+              净计: {maskVal(stats.netBalance, true)}
+            </b>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <PixelDot color={isAdmin ? '#333399' : hasFullAccess ? '#336633' : '#999999'} />
+              {accessBadge}
+            </span>
+          </span>
         </div>
       </PlatinumWindow>
     </div>
