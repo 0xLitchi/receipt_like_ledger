@@ -608,11 +608,11 @@ textarea.pt-input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 12px;
+  padding: 3px 12px;
   background: var(--g200);
   border-top: 1px solid var(--g300);
   border-bottom: 1px solid var(--g300);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: bold;
   color: #444;
   font-family: var(--font-mono);
@@ -624,10 +624,10 @@ textarea.pt-input {
 .pt-live-row {
   display: flex;
   align-items: center;
-  min-height: 30px;
-  padding: 4px 12px;
+  min-height: 28px;
+  padding: 3px 12px;
   gap: 8px;
-  font-size: 14px;
+  font-size: 12px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
 }
@@ -662,7 +662,7 @@ textarea.pt-input {
 .pt-live-row .cc {
   flex: none;
   width: 110px;
-  font: 12px var(--font-mono);
+  font: 11px var(--font-mono);
   color: #555;
   white-space: nowrap;
   overflow: hidden;
@@ -671,6 +671,7 @@ textarea.pt-input {
 .pt-live-row .pg {
   flex: 1 1 0;
   min-width: 0;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -680,7 +681,7 @@ textarea.pt-input {
   flex: none;
   min-width: 88px;
   text-align: right;
-  font: bold 13px var(--font-mono);
+  font: bold 12px var(--font-mono);
   white-space: nowrap;
 }
 
