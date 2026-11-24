@@ -2,7 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { tokenStore } from '../lib/api-client';
 import { useTransactionsQuery } from '../lib/queries';
-import { buildAvailableYearMonths, useLedger } from '../features/ledger/use-ledger';
+import {
+  buildAvailableLedgers,
+  buildAvailableYearMonths,
+  matchesLedgerFilter,
+  useLedger,
+} from '../features/ledger/use-ledger';
 import { useLedgerFilters } from '../features/ledger/use-ledger-filters';
 import { LedgerDesk } from '../components/Platinum/LedgerDesk';
 import { PlatinumWindow } from '../components/Platinum/PlatinumChrome';
@@ -20,28 +25,38 @@ export const LedgerPage: React.FC = () => {
   const transactions = useMemo(() => data?.data ?? [], [data]);
   const hasFullAccess = data?.hasFullAccess ?? true;
 
-  // Extract all years and months that actually have transaction data (no 4-month limit)
+  // All available ledgers (Default always included)
+  const ledgers = useMemo(() => buildAvailableLedgers(transactions), [transactions]);
+
+  // Ledger-scoped transactions for deriving available years/months and category breakdown
+  const ledgerTransactions = useMemo(
+    () => transactions.filter((t) => matchesLedgerFilter(t, filters.ledger)),
+    [transactions, filters.ledger]
+  );
+
+  // Extract all years and months that actually have transaction data in current ledger scope
   const { years, monthsByYear, allMonths } = useMemo(
-    () => buildAvailableYearMonths(transactions),
-    [transactions]
+    () => buildAvailableYearMonths(ledgerTransactions),
+    [ledgerTransactions]
   );
   const { stats, dateGroups } = useLedger(transactions, filters);
 
-  // Month-scoped transactions (used for Category breakdown window)
+  // Ledger + month scoped transactions (used for Category breakdown & transfer tab visibility)
   const monthTransactions = useMemo(
     () =>
       filters.month && filters.month !== 'ALL'
-        ? transactions.filter((t) => t.date?.startsWith(filters.month))
-        : transactions,
-    [transactions, filters.month]
+        ? ledgerTransactions.filter((t) => t.date?.startsWith(filters.month))
+        : ledgerTransactions,
+    [ledgerTransactions, filters.month]
   );
 
-  // Default to most recent month with data on initial load
+  // Default to most recent month with data on initial load (preserve 'ALL' for admin)
   useEffect(() => {
+    if (filters.month === 'ALL' && isAdmin) return;
     if (allMonths.length > 0 && (!filters.month || !allMonths.includes(filters.month))) {
       patch({ month: allMonths[0] });
     }
-  }, [filters.month, allMonths, patch]);
+  }, [filters.month, allMonths, isAdmin, patch]);
 
   const openAdmin = useCallback(() => {
     if (tokenStore.hasSession()) navigate('/admin');
@@ -103,6 +118,7 @@ export const LedgerPage: React.FC = () => {
           monthTransactions={monthTransactions}
           dateGroups={dateGroups}
           stats={stats}
+          ledgers={ledgers}
           years={years}
           monthsByYear={monthsByYear}
           allMonths={allMonths}

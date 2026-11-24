@@ -39,4 +39,25 @@ describe('parseRawLedgerText', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].amount).toBe(20);
   });
+
+  it('parses transfer rows using arrow notation or 7th column', () => {
+    const rows = parseRawLedgerText(
+      '定存\t2026-10-16\t2000\t荔枝\t转账\tDefault→储蓄\n搬砖\t2026-10-17\t-500\t扶正\t其它\tDefault\t投资'
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      tx_type: 'transfer',
+      ledger: 'Default',
+      to_ledger: '储蓄',
+      amount: 2000,
+      category: '转账',
+    });
+    expect(rows[1]).toMatchObject({
+      tx_type: 'transfer',
+      ledger: 'Default',
+      to_ledger: '投资',
+      amount: 500,
+      category: '转账',
+    });
+  });
 });

@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import type { ActivityLog, ApiRequestLog, Transaction } from '../../types';
+import type { ActivityLog, ApiRequestLog, Transaction, TransactionKind } from '../../types';
 import { queryClient } from '../../lib/query-client';
 import { queryKeys } from '../../lib/queries';
 import { ApiError, fetchActivityLogs, fetchApiLogs, fetchTransactions } from '../../lib/api-client';
+import {
+  buildAvailableLedgers,
+  isTransferTransaction,
+  normalizeLedgerName,
+} from '../../features/ledger/use-ledger';
+import { parseRawLedgerText } from '../../utils/parser';
 import { PixelDot, PlatinumWindow } from '../Platinum/PlatinumChrome';
 
 interface AdminPanelProps {
@@ -13,61 +19,6 @@ interface AdminPanelProps {
   onBatchSave: (items: Transaction[], deletedIds: string[]) => Promise<void>;
   onLogout: () => void;
 }
-
-const parseRawLedgerText = (text: string): Transaction[] => {
-  const lines = text.split('\n');
-  const results: Transaction[] = [];
-
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-
-    const parts = line.split('\t').map((p) => p.trim());
-    const fields = parts.length >= 3 ? parts : line.split(/\s{2,}/).map((p) => p.trim());
-
-    if (fields.length < 3) return;
-
-    let title = fields[0] || '';
-    let dateStr = fields[1] || '';
-    let rawAmount = fields[2] || '0';
-    let member = fields[3] || '默认';
-    let categoryFull = fields[4] || '其它';
-    let ledger = fields[5] || 'Default';
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(fields[0])) {
-      title = '';
-      dateStr = fields[0];
-      rawAmount = fields[1] || '0';
-      member = fields[2] || '默认';
-      categoryFull = fields[3] || '其它';
-      ledger = fields[4] || 'Default';
-    }
-
-    const cleanAmountStr = rawAmount.replace(/[￥,]/g, '');
-    const amount = parseFloat(cleanAmountStr) || 0;
-
-    let category = categoryFull;
-    let subcategory = '';
-    if (categoryFull.includes('/')) {
-      const catParts = categoryFull.split('/');
-      category = catParts[0];
-      subcategory = catParts.slice(1).join('/');
-    }
-
-    results.push({
-      id: `parse_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
-      title,
-      date: dateStr || new Date().toISOString().split('T')[0],
-      amount,
-      member,
-      category,
-      subcategory,
-      ledger,
-    });
-  });
-
-  return results;
-};
 
 const describeLogError = (e: unknown): string => {
   if (e instanceof ApiError) {
@@ -210,6 +161,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const orig = originalMap.get(row.id);
       if (!orig) return 'added';
 
+      const origType: TransactionKind = isTransferTransaction(orig) ? 'transfer' : 'normal';
+      const rowType: TransactionKind = isTransferTransaction(row) ? 'transfer' : 'normal';
+
       const isModified =
         (row.date || '') !== (orig.date || '') ||
         (row.member || '') !== (orig.member || '') ||
@@ -217,6 +171,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         (row.subcategory || '') !== (orig.subcategory || '') ||
         (row.title || '') !== (orig.title || '') ||
         (row.ledger || '') !== (orig.ledger || '') ||
+        rowType !== origType ||
+        (row.to_ledger || '') !== (orig.to_ledger || '') ||
         Number(row.amount) !== Number(orig.amount);
 
       return isModified ? 'modified' : 'unchanged';
@@ -248,10 +204,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
   }, [rows, deletedIds, originalMap, getRowChangeStatus]);
 
+  const availableLedgers = useMemo(() => buildAvailableLedgers(rows), [rows]);
+
   const handleCellChange = useCallback((id: string, field: keyof Transaction, value: string) => {
     setRows((prev) =>
       prev.map((r) => {
         if (r.id !== id) return r;
+        if (field === 'tx_type') {
+          const nextType: TransactionKind = value === 'transfer' ? 'transfer' : 'normal';
+          return {
+            ...r,
+            tx_type: nextType,
+            amount: nextType === 'transfer' ? Math.abs(r.amount) : r.amount,
+            category:
+              nextType === 'transfer' && (!r.category || r.category === '杂项' || r.category === '其它')
+                ? '转账'
+                : r.category,
+            to_ledger: nextType === 'transfer' ? r.to_ledger || '' : '',
+          };
+        }
         return {
           ...r,
           [field]: field === 'amount' ? (value === '' ? 0 : parseFloat(value) || 0) : value,
@@ -271,6 +242,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       title: '',
       amount: 0,
       ledger: 'Default',
+      tx_type: 'normal',
+      to_ledger: '',
+    };
+    setRows((prev) => [newRow, ...prev]);
+  };
+
+  const handleAddTransferRow = () => {
+    const newId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const defaultTarget = availableLedgers.find((l) => l !== 'Default') || '';
+    const newRow: Transaction = {
+      id: newId,
+      date: new Date().toISOString().split('T')[0],
+      member: '荔枝',
+      category: '转账',
+      subcategory: '',
+      title: '',
+      amount: 0,
+      ledger: 'Default',
+      tx_type: 'transfer',
+      to_ledger: defaultTarget,
     };
     setRows((prev) => [newRow, ...prev]);
   };
@@ -330,6 +321,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           (r.subcategory || '').toLowerCase().includes(q) ||
           (r.date || '').toLowerCase().includes(q) ||
           (r.ledger || '').toLowerCase().includes(q) ||
+          (r.to_ledger || '').toLowerCase().includes(q) ||
+          (isTransferTransaction(r) ? '转账 transfer' : '收支 normal').includes(q) ||
           String(r.amount).includes(q)
       );
     }
@@ -409,6 +402,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
+    const changedItems: Transaction[] = [
+      ...pendingChanges.added,
+      ...pendingChanges.modified.map((m) => m.current),
+    ];
+
+    const invalidTransfer = changedItems.find((item) => {
+      if (!isTransferTransaction(item)) return false;
+      const from = normalizeLedgerName(item.ledger);
+      const to = (item.to_ledger || '').trim();
+      return !to || from === to;
+    });
+    if (invalidTransfer) {
+      setSaveError('存在无效的转账记录：请填写「转入账本」，且不能与「账本」相同。');
+      return;
+    }
+
     const addedCount = pendingChanges.added.length;
     const modifiedCount = pendingChanges.modified.length;
     const deletedCount = pendingChanges.deleted.length;
@@ -417,11 +426,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setSaving(true);
     setSaveError(null);
     try {
-      const changedItems: Transaction[] = [
-        ...pendingChanges.added,
-        ...pendingChanges.modified.map((m) => m.current),
-      ];
-      await onBatchSave(changedItems, deletedIds);
+      const normalizedChangedItems = changedItems.map((item) =>
+        isTransferTransaction(item)
+          ? {
+              ...item,
+              tx_type: 'transfer' as const,
+              ledger: normalizeLedgerName(item.ledger),
+              to_ledger: (item.to_ledger || '').trim(),
+              amount: Math.abs(Number(item.amount) || 0),
+              category: item.category || '转账',
+            }
+          : {
+              ...item,
+              tx_type: 'normal' as const,
+              ledger: normalizeLedgerName(item.ledger),
+              to_ledger: '',
+            }
+      );
+      await onBatchSave(normalizedChangedItems, deletedIds);
       setDeletedIds([]);
       setShowSavePreviewModal(false);
 
@@ -468,19 +490,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = ['id', 'date', 'title', 'amount', 'member', 'category', 'subcategory', 'ledger'];
+    const headers = ['id', 'date', 'tx_type', 'title', 'amount', 'member', 'category', 'subcategory', 'ledger', 'to_ledger'];
     const csvLines = [headers.join(',')];
 
     processedRows.forEach((r) => {
+      const transfer = isTransferTransaction(r);
       const line = [
         r.id,
         r.date,
+        transfer ? 'transfer' : 'normal',
         `"${(r.title || '').replace(/"/g, '""')}"`,
         r.amount,
         `"${(r.member || '').replace(/"/g, '""')}"`,
         `"${(r.category || '').replace(/"/g, '""')}"`,
         `"${(r.subcategory || '').replace(/"/g, '""')}"`,
-        `"${(r.ledger || 'Default').replace(/"/g, '""')}"`,
+        `"${normalizeLedgerName(r.ledger).replace(/"/g, '""')}"`,
+        `"${(transfer ? (r.to_ledger || '') : '').replace(/"/g, '""')}"`,
       ].join(',');
       csvLines.push(line);
     });
@@ -582,6 +607,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button type="button" className="pt-btn tab" onClick={handleAddRow}>
                 + 新增行
               </button>
+              <button type="button" className="pt-btn tab" onClick={handleAddTransferRow}>
+                + 新增转账
+              </button>
               <button
                 type="button"
                 className="pt-btn tab"
@@ -628,6 +656,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
             </div>
 
+            <datalist id="admin-ledger-options">
+              {availableLedgers.map((l) => (
+                <option key={l} value={l} />
+              ))}
+            </datalist>
+
             <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
               <table className="pt-table">
                 <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
@@ -641,39 +675,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </th>
                     <th style={{ width: 42, textAlign: 'center' }}>状态</th>
-                    <th style={{ width: 108, cursor: 'pointer' }} onClick={() => handleSort('date')}>
+                    <th style={{ width: 68, cursor: 'pointer' }} onClick={() => handleSort('tx_type')}>
+                      类型{sortIndicator('tx_type')}
+                    </th>
+                    <th style={{ width: 102, cursor: 'pointer' }} onClick={() => handleSort('date')}>
                       日期{sortIndicator('date')}
                     </th>
-                    <th style={{ width: 84, cursor: 'pointer' }} onClick={() => handleSort('member')}>
+                    <th style={{ width: 78, cursor: 'pointer' }} onClick={() => handleSort('member')}>
                       成员{sortIndicator('member')}
                     </th>
-                    <th style={{ width: 92, cursor: 'pointer' }} onClick={() => handleSort('category')}>
+                    <th style={{ width: 84, cursor: 'pointer' }} onClick={() => handleSort('category')}>
                       主分类{sortIndicator('category')}
                     </th>
-                    <th style={{ width: 92, cursor: 'pointer' }} onClick={() => handleSort('subcategory')}>
+                    <th style={{ width: 84, cursor: 'pointer' }} onClick={() => handleSort('subcategory')}>
                       子分类{sortIndicator('subcategory')}
                     </th>
-                    <th style={{ minWidth: 160, cursor: 'pointer' }} onClick={() => handleSort('title')}>
+                    <th style={{ minWidth: 130, cursor: 'pointer' }} onClick={() => handleSort('title')}>
                       备注{sortIndicator('title')}
                     </th>
-                    <th style={{ width: 104, cursor: 'pointer' }} onClick={() => handleSort('amount')}>
+                    <th style={{ width: 96, cursor: 'pointer' }} onClick={() => handleSort('amount')}>
                       金额{sortIndicator('amount')}
                     </th>
-                    <th style={{ width: 92, cursor: 'pointer' }} onClick={() => handleSort('ledger')}>
-                      账本{sortIndicator('ledger')}
+                    <th style={{ width: 88, cursor: 'pointer' }} onClick={() => handleSort('ledger')}>
+                      账本(转出){sortIndicator('ledger')}
+                    </th>
+                    <th style={{ width: 88, cursor: 'pointer' }} onClick={() => handleSort('to_ledger')}>
+                      转入账本{sortIndicator('to_ledger')}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {processedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
+                      <td colSpan={11} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
                         暂无匹配的交易记录
                       </td>
                     </tr>
                   ) : (
                     processedRows.map((row) => {
                       const status = getRowChangeStatus(row);
+                      const isTransfer = isTransferTransaction(row);
                       const bg =
                         status === 'added'
                           ? '#dcfce7'
@@ -706,6 +747,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             }}
                           >
                             {status === 'added' ? 'NEW' : status === 'modified' ? 'MOD' : '—'}
+                          </td>
+                          <td>
+                            <select
+                              className="pt-input"
+                              style={{
+                                width: '100%',
+                                padding: '0 4px',
+                                color: isTransfer ? 'var(--transfer)' : undefined,
+                                fontWeight: isTransfer ? 'bold' : undefined,
+                              }}
+                              value={isTransfer ? 'transfer' : 'normal'}
+                              onChange={(e) => handleCellChange(row.id, 'tx_type', e.target.value)}
+                            >
+                              <option value="normal">收支</option>
+                              <option value="transfer">转账</option>
+                            </select>
                           </td>
                           <td>
                             <input
@@ -756,12 +813,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <input
                               type="number"
                               step="0.01"
+                              min={isTransfer ? 0 : undefined}
                               className="pt-input"
                               style={{
                                 width: '100%',
                                 textAlign: 'right',
                                 fontFamily: 'var(--font-mono)',
-                                color: row.amount >= 0 ? 'var(--income)' : 'var(--expense)',
+                                color: isTransfer
+                                  ? 'var(--transfer)'
+                                  : row.amount >= 0
+                                  ? 'var(--income)'
+                                  : 'var(--expense)',
                               }}
                               value={row.amount}
                               onChange={(e) => handleCellChange(row.id, 'amount', e.target.value)}
@@ -770,10 +832,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <td>
                             <input
                               type="text"
+                              list="admin-ledger-options"
                               className="pt-input"
                               style={{ width: '100%' }}
                               value={row.ledger || ''}
                               onChange={(e) => handleCellChange(row.id, 'ledger', e.target.value)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              list="admin-ledger-options"
+                              className="pt-input"
+                              style={{
+                                width: '100%',
+                                background: isTransfer ? '#fff' : '#f0f0f0',
+                                color: isTransfer ? 'var(--transfer)' : '#999',
+                              }}
+                              disabled={!isTransfer}
+                              placeholder={isTransfer ? '目标账本' : '—'}
+                              value={isTransfer ? row.to_ledger || '' : ''}
+                              onChange={(e) => handleCellChange(row.id, 'to_ledger', e.target.value)}
                             />
                           </td>
                         </tr>
@@ -1066,7 +1145,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <ul style={{ margin: '4px 0', paddingLeft: 18, fontSize: 11 }}>
                       {pendingChanges.added.slice(0, 10).map((it) => (
                         <li key={it.id}>
-                          {it.date} · {it.member} · {it.category} · {it.title || '无备注'} ({it.amount})
+                          {it.date} · {it.member} ·{' '}
+                          {isTransferTransaction(it)
+                            ? `转账 ${normalizeLedgerName(it.ledger)}→${it.to_ledger || '?'}`
+                            : it.category}{' '}
+                          · {it.title || '无备注'} ({it.amount})
                         </li>
                       ))}
                     </ul>
@@ -1081,8 +1164,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <ul style={{ margin: '4px 0', paddingLeft: 18, fontSize: 11 }}>
                       {pendingChanges.modified.slice(0, 10).map(({ current }) => (
                         <li key={current.id}>
-                          {current.date} · {current.member} · {current.category} ·{' '}
-                          {current.title || '无备注'} ({current.amount})
+                          {current.date} · {current.member} ·{' '}
+                          {isTransferTransaction(current)
+                            ? `转账 ${normalizeLedgerName(current.ledger)}→${current.to_ledger || '?'}`
+                            : current.category}{' '}
+                          · {current.title || '无备注'} ({current.amount})
                         </li>
                       ))}
                     </ul>
@@ -1097,7 +1183,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <ul style={{ margin: '4px 0', paddingLeft: 18, fontSize: 11 }}>
                       {pendingChanges.deleted.slice(0, 10).map((it) => (
                         <li key={it.id}>
-                          {it.date} · {it.member} · {it.category} · {it.title || '无备注'} ({it.amount})
+                          {it.date} · {it.member} ·{' '}
+                          {isTransferTransaction(it)
+                            ? `转账 ${normalizeLedgerName(it.ledger)}→${it.to_ledger || '?'}`
+                            : it.category}{' '}
+                          · {it.title || '无备注'} ({it.amount})
                         </li>
                       ))}
                     </ul>
@@ -1152,7 +1242,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <>
                     <p style={{ margin: '0 0 8px', fontSize: 11, color: '#444' }}>
                       每行一条，支持 Tab 或双空格分隔：
-                      <code>备注  日期(YYYY-MM-DD)  金额  成员  主分类/子分类  账本</code>
+                      <code>备注  日期(YYYY-MM-DD)  金额  成员  主分类/子分类  账本(转账可写 A→B)</code>
                     </p>
                     <textarea
                       className="pt-input"
@@ -1192,7 +1282,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
                                 {it.amount}
                               </td>
-                              <td>{it.ledger || 'Default'}</td>
+                              <td>
+                                {isTransferTransaction(it)
+                                  ? `${normalizeLedgerName(it.ledger)} → ${it.to_ledger}`
+                                  : it.ledger || 'Default'}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

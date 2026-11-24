@@ -17,6 +17,7 @@
   --orange: #ff6600;
   --income: #b91c1c;
   --expense: #15803d;
+  --transfer: #333399;
   --danger: #b91c1c;
   --ok: #15803d;
 
@@ -73,7 +74,7 @@ a {
 
 /* ── Desk layout ── */
 .pt-desk {
-  max-width: 70%;
+  max-width: 56%;
   margin: 0 auto;
   padding: 24px 12px 48px;
   padding-left: max(12px, env(safe-area-inset-left));
@@ -608,6 +609,23 @@ textarea.pt-input {
 }
 .pt-live-row.active {
   background: var(--lav);
+}
+.pt-live-row.non-default-ledger,
+.pt-live-row.non-default-ledger .cc,
+.pt-live-row.non-default-ledger .amt {
+  font-style: italic;
+}
+.pt-transfer-route {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--transfer);
+  background: #eef0ff;
+  border: 1px solid #b8bce8;
+  border-radius: 2px;
+  vertical-align: baseline;
 }
 .pt-live-row .who {
   flex: none;

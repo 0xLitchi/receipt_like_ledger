@@ -7,7 +7,7 @@ export const ReceiptSkeleton: React.FC = () => {
     <div className="pt-desk" aria-busy="true" aria-label="正在加载账本数据">
       <PlatinumWindow title="Ledger">
         <div className="pt-strip">
-          {[88, 74].map((w, i) => (
+          {[96, 88, 74].map((w, i) => (
             <span
               key={i}
               style={{

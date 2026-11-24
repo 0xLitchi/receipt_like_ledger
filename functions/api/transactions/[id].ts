@@ -1,5 +1,6 @@
 import {
   cleanSecretString,
+  ensureTransactionTransferColumns,
   getClientIp,
   getCorsHeaders,
   insertTransactionsBatch,
@@ -104,6 +105,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       subcategory: url.searchParams.get('subcategory') ?? '',
       date: url.searchParams.get('date') ?? new Date().toISOString().split('T')[0],
       ledger: url.searchParams.get('ledger') ?? 'Default',
+      tx_type: url.searchParams.get('tx_type') ?? url.searchParams.get('record_type') ?? '',
+      to_ledger: url.searchParams.get('to_ledger') ?? url.searchParams.get('toLedger') ?? url.searchParams.get('target_ledger') ?? '',
     };
 
     const source: 'web' | 'api' = isTokenAuthorized ? 'api' : 'web';
@@ -268,24 +271,36 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
   }
 
   try {
+    await ensureTransactionTransferColumns(env.DB);
     const body = await request.json() as Record<string, unknown>;
     const title = typeof body.title === 'string' ? body.title : '';
     const date = typeof body.date === 'string' ? body.date : '';
-    const amount = Number(body.amount);
+    let amount = Number(body.amount);
     const member = typeof body.member === 'string' ? body.member : '默认';
-    const category = typeof body.category === 'string' ? body.category : '其它';
+    let category = typeof body.category === 'string' ? body.category : '其它';
     const subcategory = typeof body.subcategory === 'string' ? body.subcategory : '';
-    const ledger = typeof body.ledger === 'string' ? body.ledger : 'Default';
+    const ledger = typeof body.ledger === 'string' && body.ledger.trim() ? body.ledger.trim() : 'Default';
+    const rawToLedger = typeof body.to_ledger === 'string' ? body.to_ledger.trim() : '';
+    const rawTxType = typeof body.tx_type === 'string' ? body.tx_type.trim().toLowerCase() : '';
+    const txType: 'normal' | 'transfer' =
+      rawTxType === 'transfer' || rawTxType === '转账' || rawToLedger !== '' ? 'transfer' : 'normal';
+    const toLedger = txType === 'transfer' ? rawToLedger : '';
+
+    if (txType === 'transfer') {
+      amount = Math.abs(amount);
+      if (!category || category === '其它') category = '转账';
+    }
 
     await env.DB.prepare(
       `UPDATE transactions
-       SET title = ?, date = ?, amount = ?, member = ?, category = ?, subcategory = ?, ledger = ?
+       SET title = ?, date = ?, amount = ?, member = ?, category = ?, subcategory = ?, ledger = ?, tx_type = ?, to_ledger = ?
        WHERE id = ?`
-    ).bind(title, date, amount, member, category, subcategory, ledger, id).run();
+    ).bind(title, date, amount, member, category, subcategory, ledger, txType, toLedger, id).run();
 
     // 记录修改日志 (网页端修改)
     const catLabel = subcategory ? `${category}/${subcategory}` : category;
-    const logDetails = `更新账目 [${id}]: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}) 日期:${date}`;
+    const transferTag = txType === 'transfer' ? ` [${ledger}→${toLedger}]` : '';
+    const logDetails = `更新账目 [${id}]: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}${transferTag}) 日期:${date}`;
     await recordActivityLog(env.DB, 'web', 'update', logDetails);
 
     await recordApiRequestLog(env.DB, {
@@ -296,7 +311,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       ipAddress,
       userAgent,
       tokenUsed: request.headers.get('X-Admin-Token') || '',
-      payloadSummary: `amt:${amount}, desc:"${title}", tag:"${member}", type:"${catLabel}", date:${date}`,
+      payloadSummary: `amt:${amount}, desc:"${title}", tag:"${member}", type:"${catLabel}"${transferTag}, date:${date}`,
       executionMs: Date.now() - startTime,
     });
 

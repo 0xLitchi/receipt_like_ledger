@@ -1,24 +1,29 @@
+export type TransactionKind = 'normal' | 'transfer';
+
 export interface Transaction {
   id: string;
   title: string;          // 备注 / 项目名称 (如 "小雅退押金" 或 "")
   date: string;           // 日期 YYYY-MM-DD
-  amount: number;         // 金额 (正数为收入，负数为支出)
+  amount: number;         // 金额 (正数为收入，负数为支出；转账时为正数金额)
   member: string;         // 关联人员 (如 "荔枝", "扶正")
-  category: string;       // 主分类 (如 "住房", "杂项", "账单")
+  category: string;       // 主分类 (如 "住房", "杂项", "账单", "转账")
   subcategory: string;    // 子分类 (如 "押金", "麻将", "招商银行", "白条")
-  ledger: string;         // 账本 (如 "Default")
+  ledger: string;         // 账本 (如 "Default"；转账时为转出账本 A)
+  tx_type?: TransactionKind; // 交易类型: normal (收支) | transfer (转账)
+  to_ledger?: string;     // 转入账本 B（仅转账类型使用）
   created_at?: string;
   isMasked?: boolean;     // 未鉴权时服务端脱敏标记
 }
 
-export type LedgerType = 'ALL' | 'EXPENSE' | 'INCOME';
+export type LedgerType = 'ALL' | 'EXPENSE' | 'INCOME' | 'TRANSFER';
 
-/** 账本页的筛选条件，全部来源于 URL query */
+/** 账本页的筛选条件 */
 export interface LedgerFilters {
+  ledger: string;         // "ALL" 或 具体账本名（默认 "Default"）
   month: string;          // "ALL" 或 "2026-08"
   member: string;         // "ALL" 或 具体成员
   category: string;       // "ALL" 或 具体分类（可含 "杂项/麻将" 形式）
-  type: LedgerType;       // 全部 / 仅支出 / 仅收入
+  type: LedgerType;       // 全部 / 仅支出 / 仅收入 / 仅转账
   search: string;         // 搜索关键词
 }
 
@@ -31,6 +36,7 @@ export interface DateGroup {
 export interface SummaryStats {
   totalIncome: number;
   totalExpense: number;
+  totalTransfer: number;
   netBalance: number;
   count: number;
 }

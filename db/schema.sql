@@ -3,11 +3,13 @@ CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     title TEXT DEFAULT '',
     date TEXT NOT NULL,         -- YYYY-MM-DD
-    amount REAL NOT NULL,       -- 正数为收入 (+), 负数为支出 (-)
+    amount REAL NOT NULL,       -- 正数为收入 (+), 负数为支出 (-), 转账时为转账金额
     member TEXT NOT NULL,       -- 关联成员: 荔枝, 扶正, 等
-    category TEXT NOT NULL,     -- 主分类: 住房, 杂项, 账单, 等
+    category TEXT NOT NULL,     -- 主分类: 住房, 杂项, 账单, 转账, 等
     subcategory TEXT DEFAULT '',-- 子分类: 押金, 麻将, 招商银行, 白条, 等
-    ledger TEXT DEFAULT 'Default', -- 账本
+    ledger TEXT DEFAULT 'Default', -- 账本（转账时为转出账本 A）
+    tx_type TEXT DEFAULT 'normal', -- 交易类型: normal (按金额正负区分收支) | transfer (账本间转账)
+    to_ledger TEXT DEFAULT '',     -- 转入账本 B（仅转账类型使用）
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildAvailableLedgers,
   buildAvailableYearMonths,
   buildFilterOptions,
   buildMonthList,
@@ -7,6 +8,9 @@ import {
   computeStats,
   filterTransactions,
   groupByDate,
+  isTransferTransaction,
+  matchesLedgerFilter,
+  normalizeLedgerName,
   summaryKey,
 } from './use-ledger';
 import type { LedgerFilters, Transaction } from '../../types';
@@ -23,7 +27,14 @@ const t = (over: Partial<Transaction>): Transaction => ({
   ...over,
 });
 
-const base: LedgerFilters = { month: 'ALL', member: 'ALL', category: 'ALL', type: 'ALL', search: '' };
+const base: LedgerFilters = {
+  ledger: 'ALL',
+  month: 'ALL',
+  member: 'ALL',
+  category: 'ALL',
+  type: 'ALL',
+  search: '',
+};
 
 describe('categoryLabel', () => {
   it('joins category and subcategory', () => {
@@ -175,5 +186,74 @@ describe('buildAvailableYearMonths', () => {
       monthsByYear: {},
       allMonths: [],
     });
+  });
+});
+
+describe('ledger & transfer helpers', () => {
+  it('normalizes empty ledger names to Default', () => {
+    expect(normalizeLedgerName('')).toBe('Default');
+    expect(normalizeLedgerName('   ')).toBe('Default');
+    expect(normalizeLedgerName(undefined)).toBe('Default');
+    expect(normalizeLedgerName('储蓄')).toBe('储蓄');
+  });
+
+  it('detects transfer transactions by tx_type or to_ledger', () => {
+    expect(isTransferTransaction(t({ tx_type: 'transfer', to_ledger: '储蓄' }))).toBe(true);
+    expect(isTransferTransaction(t({ to_ledger: '储蓄' }))).toBe(true);
+    expect(isTransferTransaction(t({ tx_type: 'normal', to_ledger: '' }))).toBe(false);
+    expect(isTransferTransaction(t({}))).toBe(false);
+  });
+
+  it('builds available ledgers with Default first and includes transfer targets', () => {
+    const ledgers = buildAvailableLedgers([
+      t({ ledger: '投资' }),
+      t({ ledger: 'Default', tx_type: 'transfer', to_ledger: '储蓄' }),
+      t({ ledger: '' }),
+    ]);
+    expect(ledgers[0]).toBe('Default');
+    expect(ledgers).toContain('储蓄');
+    expect(ledgers).toContain('投资');
+    expect(ledgers).toHaveLength(3);
+  });
+
+  it('always includes Default even with no transactions', () => {
+    expect(buildAvailableLedgers([])).toEqual(['Default']);
+  });
+
+  it('matches transfers on both source and target ledger filters', () => {
+    const xfer = t({ ledger: 'Default', tx_type: 'transfer', to_ledger: '储蓄', amount: 1000 });
+    expect(matchesLedgerFilter(xfer, 'ALL')).toBe(true);
+    expect(matchesLedgerFilter(xfer, 'Default')).toBe(true);
+    expect(matchesLedgerFilter(xfer, '储蓄')).toBe(true);
+    expect(matchesLedgerFilter(xfer, '投资')).toBe(false);
+  });
+
+  it('filters transfers separately from income and expense', () => {
+    const rows = [
+      t({ title: '工资', amount: 10000, ledger: 'Default' }),
+      t({ title: '餐费', amount: -50, ledger: 'Default' }),
+      t({ title: '存钱', amount: 2000, ledger: 'Default', tx_type: 'transfer', to_ledger: '储蓄', category: '转账' }),
+      t({ title: '利息', amount: 80, ledger: '储蓄' }),
+    ];
+
+    expect(filterTransactions(rows, { ...base, type: 'TRANSFER' })).toHaveLength(1);
+    expect(filterTransactions(rows, { ...base, type: 'INCOME' })).toHaveLength(2);
+    expect(filterTransactions(rows, { ...base, type: 'EXPENSE' })).toHaveLength(1);
+    expect(filterTransactions(rows, { ...base, ledger: 'Default' })).toHaveLength(3);
+    expect(filterTransactions(rows, { ...base, ledger: '储蓄' })).toHaveLength(2);
+    expect(filterTransactions(rows, { ...base, ledger: '储蓄', type: 'TRANSFER' })).toHaveLength(1);
+  });
+
+  it('computes totalTransfer without counting transfers in income or expense', () => {
+    const stats = computeStats([
+      t({ amount: 500 }),
+      t({ amount: -100 }),
+      t({ amount: 1000, tx_type: 'transfer', ledger: 'Default', to_ledger: '储蓄' }),
+    ]);
+    expect(stats.totalIncome).toBe(500);
+    expect(stats.totalExpense).toBe(100);
+    expect(stats.totalTransfer).toBe(1000);
+    expect(stats.netBalance).toBe(400);
+    expect(stats.count).toBe(3);
   });
 });

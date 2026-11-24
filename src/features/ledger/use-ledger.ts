@@ -5,6 +5,49 @@
 import { useMemo } from 'react';
 import type { DateGroup, LedgerFilters, SummaryStats, Transaction } from '../../types';
 
+/** 规范化账本名称，空值回退为 Default */
+export const normalizeLedgerName = (ledger?: string | null): string => {
+  const trimmed = (ledger ?? '').trim();
+  return trimmed || 'Default';
+};
+
+/** 判断是否为账本间转账记录 */
+export const isTransferTransaction = (
+  t: Pick<Transaction, 'tx_type' | 'to_ledger'>
+): boolean => {
+  if (t.tx_type === 'transfer') return true;
+  if (t.to_ledger && t.to_ledger.trim().length > 0) return true;
+  return false;
+};
+
+/** 判断交易是否属于当前选中的账本（转账记录在转出/转入账本均可见） */
+export const matchesLedgerFilter = (
+  t: Pick<Transaction, 'ledger' | 'tx_type' | 'to_ledger'>,
+  ledgerFilter: string
+): boolean => {
+  if (!ledgerFilter || ledgerFilter === 'ALL') return true;
+  if (normalizeLedgerName(t.ledger) === ledgerFilter) return true;
+  if (isTransferTransaction(t)) {
+    const toLedger = (t.to_ledger ?? '').trim();
+    if (toLedger && toLedger === ledgerFilter) return true;
+  }
+  return false;
+};
+
+/** 提取数据中出现过的所有账本，始终包含 Default 且置顶，其余按中文排序 */
+export function buildAvailableLedgers(transactions: Transaction[]): string[] {
+  const others = new Set<string>();
+  transactions.forEach((t) => {
+    const fromLedger = normalizeLedgerName(t.ledger);
+    if (fromLedger !== 'Default') others.add(fromLedger);
+    if (isTransferTransaction(t)) {
+      const toLedger = (t.to_ledger ?? '').trim();
+      if (toLedger && toLedger !== 'Default') others.add(toLedger);
+    }
+  });
+  return ['Default', ...Array.from(others).sort((a, b) => a.localeCompare(b, 'zh-CN'))];
+}
+
 /** 主分类 + 子分类的展示名，例如 "杂项/麻将" */
 export const categoryLabel = (t: Pick<Transaction, 'category' | 'subcategory'>): string => {
   if (!t.category) return '';
@@ -15,7 +58,10 @@ export const categoryLabel = (t: Pick<Transaction, 'category' | 'subcategory'>):
  * 汇总键：杂项按子分类细分（与分类汇总面板保持一致），其余按主分类。
  * 用于「点击分类 → 过滤明细」的匹配。
  */
-export const summaryKey = (t: Pick<Transaction, 'category' | 'subcategory'>): string => {
+export const summaryKey = (
+  t: Pick<Transaction, 'category' | 'subcategory' | 'tx_type' | 'to_ledger'>
+): string => {
+  if (isTransferTransaction(t)) return t.category || '转账';
   const main = t.category || '其它';
   if (main === '杂项' && t.subcategory) return `杂项/${t.subcategory}`;
   return main;
@@ -91,13 +137,18 @@ export function filterTransactions(transactions: Transaction[], filters: LedgerF
   const keyword = filters.search.trim().toLowerCase();
 
   return transactions.filter((t) => {
+    if (!matchesLedgerFilter(t, filters.ledger)) return false;
     if (filters.month !== 'ALL' && !t.date?.startsWith(filters.month)) return false;
     if (filters.member !== 'ALL' && t.member !== filters.member) return false;
     if (filters.category !== 'ALL' && summaryKey(t) !== filters.category) return false;
-    if (filters.type === 'EXPENSE' && t.amount >= 0) return false;
-    if (filters.type === 'INCOME' && t.amount <= 0) return false;
+
+    const transfer = isTransferTransaction(t);
+    if (filters.type === 'TRANSFER' && !transfer) return false;
+    if (filters.type === 'EXPENSE' && (transfer || t.amount >= 0)) return false;
+    if (filters.type === 'INCOME' && (transfer || t.amount <= 0)) return false;
+
     if (keyword) {
-      const haystack = `${t.title} ${t.member} ${categoryLabel(t)} ${t.ledger}`.toLowerCase();
+      const haystack = `${t.title} ${t.member} ${categoryLabel(t)} ${t.ledger} ${t.to_ledger || ''}`.toLowerCase();
       if (!haystack.includes(keyword)) return false;
     }
     return true;
@@ -107,15 +158,22 @@ export function filterTransactions(transactions: Transaction[], filters: LedgerF
 export function computeStats(transactions: Transaction[]): SummaryStats {
   let income = 0;
   let expense = 0;
+  let transfer = 0;
 
   transactions.forEach((t) => {
-    if (t.amount > 0) income += t.amount;
-    else expense += Math.abs(t.amount);
+    if (isTransferTransaction(t)) {
+      transfer += Math.abs(t.amount);
+    } else if (t.amount > 0) {
+      income += t.amount;
+    } else {
+      expense += Math.abs(t.amount);
+    }
   });
 
   return {
     totalIncome: income,
     totalExpense: expense,
+    totalTransfer: transfer,
     netBalance: income - expense,
     count: transactions.length,
   };

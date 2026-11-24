@@ -1,5 +1,6 @@
 import {
   cleanSecretString,
+  ensureTransactionTransferColumns,
   getCorsHeaders,
   insertTransactionsBatch,
   isAdminAuthorized,
@@ -62,14 +63,21 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   try {
+    await ensureTransactionTransferColumns(env.DB);
     const { results } = await env.DB.prepare(
       'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
     ).all<TransactionRow>();
 
     const data = (results || []).map((t) => {
-      if (hasFullAccess) return t;
-      return {
+      const normalized: TransactionRow = {
         ...t,
+        ledger: t.ledger || 'Default',
+        tx_type: t.tx_type === 'transfer' || (t.to_ledger && t.to_ledger.trim() !== '') ? 'transfer' : 'normal',
+        to_ledger: t.to_ledger || '',
+      };
+      if (hasFullAccess) return normalized;
+      return {
+        ...normalized,
         title: '***',
         amount: 0,
         isMasked: true,

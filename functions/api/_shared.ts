@@ -16,6 +16,8 @@ export interface TransactionRow {
   category: string;
   subcategory: string;
   ledger: string;
+  tx_type?: 'normal' | 'transfer';
+  to_ledger?: string;
   created_at?: string;
 }
 
@@ -258,7 +260,35 @@ export const deleteAdminSession = async (db: D1Database, token: string): Promise
   }
 };
 
-// 统一追加/插入账目核心处理逻辑（兼容 desc/title, amt/amount, tag/member, type: "账单/招商银行"）
+// 幂等补齐 transactions 表的转账扩展字段（兼容存量 D1 库）
+let transferColumnsEnsured = false;
+
+export const ensureTransactionTransferColumns = async (db: D1Database): Promise<void> => {
+  if (transferColumnsEnsured) return;
+  try {
+    const { results } = await db.prepare('PRAGMA table_info(transactions)').all<{ name: string }>();
+    const cols = new Set((results || []).map((c) => c.name));
+    if (!cols.has('tx_type')) {
+      try {
+        await db.prepare("ALTER TABLE transactions ADD COLUMN tx_type TEXT DEFAULT 'normal'").run();
+      } catch {
+        // 并发请求已添加时忽略
+      }
+    }
+    if (!cols.has('to_ledger')) {
+      try {
+        await db.prepare("ALTER TABLE transactions ADD COLUMN to_ledger TEXT DEFAULT ''").run();
+      } catch {
+        // 并发请求已添加时忽略
+      }
+    }
+    transferColumnsEnsured = true;
+  } catch (e) {
+    console.warn('Failed to ensure transfer columns on transactions', e);
+  }
+};
+
+// 统一追加/插入账目核心处理逻辑（兼容 desc/title, amt/amount, tag/member, type: "账单/招商银行", tx_type/to_ledger）
 export const insertTransactionsBatch = async (
   db: D1Database,
   body: unknown,
@@ -268,6 +298,8 @@ export const insertTransactionsBatch = async (
   if (rawItems.length === 0) {
     return { success: false, status: 400, message: '请求体不能为空' };
   }
+
+  await ensureTransactionTransferColumns(db);
 
   const insertedList: TransactionRow[] = [];
   const summaryParts: string[] = [];
@@ -288,7 +320,7 @@ export const insertTransactionsBatch = async (
       : new Date().toISOString().split('T')[0];
 
     const rawAmt = item.amt !== undefined ? item.amt : item.amount;
-    const amount = Number(rawAmt);
+    let amount = Number(rawAmt);
     if (typeof amount !== 'number' || Number.isNaN(amount)) {
       return { success: false, status: 400, message: `金额字段 amt/amount 非法: ${String(rawAmt)}` };
     }
@@ -310,21 +342,46 @@ export const insertTransactionsBatch = async (
       }
     }
 
-    const ledger = item.ledger !== undefined ? String(item.ledger) : 'Default';
+    const ledger = item.ledger !== undefined && String(item.ledger).trim() ? String(item.ledger).trim() : 'Default';
+    const rawToLedger = item.to_ledger ?? item.toLedger ?? item.target_ledger ?? '';
+    const toLedger = String(rawToLedger).trim();
+    const rawTxType = String(item.tx_type ?? item.txType ?? item.record_type ?? '').trim().toLowerCase();
+    const txType: 'normal' | 'transfer' =
+      rawTxType === 'transfer' || rawTxType === '转账' || toLedger !== '' ? 'transfer' : 'normal';
+
+    if (txType === 'transfer') {
+      amount = Math.abs(amount);
+      if (!category || category === '其它') {
+        category = '转账';
+      }
+    }
 
     await db.prepare(
-      `INSERT INTO transactions (id, title, date, amount, member, category, subcategory, ledger)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(id, title, date, amount, member, category, subcategory, ledger).run();
+      `INSERT INTO transactions (id, title, date, amount, member, category, subcategory, ledger, tx_type, to_ledger)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(id, title, date, amount, member, category, subcategory, ledger, txType, txType === 'transfer' ? toLedger : '').run();
 
-    const inserted: TransactionRow = { id, title, date, amount, member, category, subcategory, ledger };
+    const inserted: TransactionRow = {
+      id,
+      title,
+      date,
+      amount,
+      member,
+      category,
+      subcategory,
+      ledger,
+      tx_type: txType,
+      to_ledger: txType === 'transfer' ? toLedger : '',
+    };
     insertedList.push(inserted);
 
     const catLabel = subcategory ? `${category}/${subcategory}` : category;
-    summaryParts.push(`amt:${amount}, desc:"${title}", tag:"${member}", type:"${catLabel}", date:${date}`);
+    const transferTag = txType === 'transfer' ? `, transfer:"${ledger}→${toLedger}"` : '';
+    summaryParts.push(`amt:${amount}, desc:"${title}", tag:"${member}", type:"${catLabel}"${transferTag}, date:${date}`);
 
     // 记录活动日志
-    const logDetails = `新增账目: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}) 日期:${date}`;
+    const logPrefix = txType === 'transfer' ? `新增转账 (${ledger}→${toLedger})` : '新增账目';
+    const logDetails = `${logPrefix}: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}) 日期:${date}`;
     await recordActivityLog(db, source, 'create', logDetails);
   }
 
