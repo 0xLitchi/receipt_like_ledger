@@ -73,12 +73,12 @@ const EXTRA_INCOME_TEMPLATES = [
 ];
 
 const TRANSFER_ROUTES = [
-  { from: 'Default', to: '储蓄', titles: ['月度强制储蓄', '备用金定存', '应急基金转入'], min: 1500, max: 4500 },
-  { from: 'Default', to: '基金理财', titles: ['指数基金定投', '月度理财划转', '纳指/红利加仓'], min: 800, max: 3000 },
-  { from: 'Default', to: '共同账户', titles: ['共同生活费充值', '家庭公共基金', '房租水电预存'], min: 2000, max: 4000 },
-  { from: '储蓄', to: 'Default', titles: ['大额消费周转', '信用卡还款调拨', '短期备用金取回'], min: 500, max: 2200 },
-  { from: '共同账户', to: 'Default', titles: ['垫付采购结算', '旅行支出AA结算'], min: 300, max: 1200 },
-  { from: '基金理财', to: '储蓄', titles: ['盈利落袋转存', '止盈转入定期'], min: 600, max: 2500 },
+  { from: 'Default', to: '储蓄', subcategory: '储蓄划转', titles: ['月度强制储蓄', '备用金定存', '应急基金转入'], min: 1500, max: 4500 },
+  { from: 'Default', to: '基金理财', subcategory: '理财定投', titles: ['指数基金定投', '月度理财划转', '纳指/红利加仓'], min: 800, max: 3000 },
+  { from: 'Default', to: '共同账户', subcategory: '共同基金', titles: ['共同生活费充值', '家庭公共基金', '房租水电预存'], min: 2000, max: 4000 },
+  { from: '储蓄', to: 'Default', subcategory: '资金周转', titles: ['大额消费周转', '信用卡还款调拨', '短期备用金取回'], min: 500, max: 2200 },
+  { from: '共同账户', to: 'Default', subcategory: '账户结算', titles: ['垫付采购结算', '旅行支出AA结算'], min: 300, max: 1200 },
+  { from: '基金理财', to: '储蓄', subcategory: '止盈转存', titles: ['盈利落袋转存', '止盈转入定期'], min: 600, max: 2500 },
 ];
 
 const MEMBERS = ['荔枝', '扶正', '荔枝,扶正'];
@@ -147,7 +147,7 @@ for (const { ym, maxDay, count } of MONTHS) {
     });
   }
 
-  // 2) 固定月度转账 (4~5条，覆盖多条跨账本路线)
+  // 2) 固定月度转账 (4~5条，覆盖多条跨账本路线；转账不带人物 tag，二级分类必填)
   const transferCount = randInt(4, 5);
   for (let i = 0; i < transferCount; i++) {
     const route = i < 3 ? TRANSFER_ROUTES[i] : pick(TRANSFER_ROUTES.slice(2));
@@ -155,9 +155,9 @@ for (const { ym, maxDay, count } of MONTHS) {
       date: fmtDate(randInt(2, maxDay)),
       title: pick(route.titles),
       amount: Math.round(randAmount(route.min, route.max) / 50) * 50,
-      member: route.to === '共同账户' || route.from === '共同账户' ? '荔枝,扶正' : pick(['荔枝', '扶正']),
+      member: '',
       category: '转账',
-      subcategory: '',
+      subcategory: route.subcategory,
       ledger: route.from,
       tx_type: 'transfer',
       to_ledger: route.to,
@@ -222,9 +222,22 @@ for (const { ym, maxDay, count } of MONTHS) {
   const ymCompact = ym.replace('-', '');
   monthRows.forEach((item, idx) => {
     const id = `tx_test_${ymCompact}_${String(idx + 1).padStart(2, '0')}`;
-    if (item.tx_type === 'transfer') totalTransfer += 1;
-    else if (item.amount > 0) totalIncome += 1;
-    else totalExpense += 1;
+    if (!item.category || !item.category.trim()) {
+      throw new Error(`Missing category on ${id}`);
+    }
+    if (!item.subcategory || !item.subcategory.trim()) {
+      throw new Error(`Missing required subcategory on ${id}`);
+    }
+    if (item.tx_type === 'transfer') {
+      if (item.member !== '') {
+        throw new Error(`Transfer ${id} must not have a member tag`);
+      }
+      totalTransfer += 1;
+    } else if (item.amount > 0) {
+      totalIncome += 1;
+    } else {
+      totalExpense += 1;
+    }
     rows.push({ id, ...item });
   });
 }
@@ -256,7 +269,7 @@ lines.push(`DELETE FROM test_activity_logs WHERE id LIKE 'log_test_%';`);
 lines.push(
   `INSERT INTO test_activity_logs (id, timestamp, source, action, details) VALUES`,
   `('log_test_01', '2026-11-24T10:15:00.000Z', 'web', 'create', '新增账目: [工作餐] ￥-36.00 (荔枝 | 餐饮/午餐) 日期:2026-11-24'),`,
-  `('log_test_02', '2026-11-22T14:20:00.000Z', 'web', 'create', '新增转账 (Default→储蓄): [月度强制储蓄] ￥3000.00 (荔枝 | 转账) 日期:2026-11-22'),`,
+  `('log_test_02', '2026-11-22T14:20:00.000Z', 'web', 'create', '新增转账 (Default→储蓄): [月度强制储蓄] ￥3000.00 (转账/储蓄划转) 日期:2026-11-22'),`,
   `('log_test_03', '2026-11-20T09:05:00.000Z', 'api', 'create', '新增账目: [霸王茶姬] ￥-22.00 (扶正 | 餐饮/咖啡奶茶) 日期:2026-11-20'),`,
   `('log_test_04', '2026-11-18T19:42:00.000Z', 'web', 'update', '更新账目 [tx_test_202611_05]: [水电燃气物业费] ￥-312.50 (荔枝,扶正 | 住房/水电煤) 日期:2026-11-18'),`,
   `('log_test_05', '2026-11-12T11:30:00.000Z', 'import', 'batch_save', '测试环境初始化导入 2025-10 至 2026-11 模拟账单共 ${rows.length} 条');`,
@@ -267,7 +280,7 @@ lines.push(`DELETE FROM test_api_request_logs WHERE id LIKE 'apilog_test_%';`);
 lines.push(
   `INSERT INTO test_api_request_logs (id, timestamp, method, endpoint, status_code, success, ip_address, user_agent, token_used, payload_summary, execution_ms) VALUES`,
   `('apilog_test_01', '2026-11-24T10:15:00.000Z', 'POST', '/api/transactions', 200, 1, '127.0.0.1', 'Mozilla/5.0 (Test)', 'ses***', 'amt:-36, desc:"工作餐", tag:"荔枝", type:"餐饮/午餐", date:2026-11-24', 28),`,
-  `('apilog_test_02', '2026-11-22T14:20:00.000Z', 'POST', '/api/transactions', 200, 1, '127.0.0.1', 'Mozilla/5.0 (Test)', 'ses***', 'amt:3000, desc:"月度强制储蓄", tag:"荔枝", type:"转账", transfer:"Default→储蓄", date:2026-11-22', 35),`,
+  `('apilog_test_02', '2026-11-22T14:20:00.000Z', 'POST', '/api/transactions', 200, 1, '127.0.0.1', 'Mozilla/5.0 (Test)', 'ses***', 'amt:3000, desc:"月度强制储蓄", tag:"", type:"转账/储蓄划转", transfer:"Default→储蓄", date:2026-11-22', 35),`,
   `('apilog_test_03', '2026-11-20T09:05:00.000Z', 'GET', '/api/transactions/***?desc=霸王茶姬&amt=-22', 200, 1, '127.0.0.1', 'Shortcuts/1.0', 'tok***', 'amt:-22, desc:"霸王茶姬", tag:"扶正", type:"餐饮/咖啡奶茶", date:2026-11-20', 19);`,
   ''
 );

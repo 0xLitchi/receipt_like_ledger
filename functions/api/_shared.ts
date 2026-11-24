@@ -393,7 +393,7 @@ export const insertTransactionsBatch = async (
       return { success: false, status: 400, message: `金额字段 amt/amount 非法: ${String(rawAmt)}` };
     }
 
-    const member = item.tag !== undefined ? String(item.tag) : (item.member !== undefined ? String(item.member) : '默认');
+    let member = item.tag !== undefined ? String(item.tag) : (item.member !== undefined ? String(item.member) : '默认');
 
     let category = item.category !== undefined ? String(item.category) : '其它';
     let subcategory = item.subcategory !== undefined ? String(item.subcategory) : '';
@@ -419,8 +419,12 @@ export const insertTransactionsBatch = async (
 
     if (txType === 'transfer') {
       amount = Math.abs(amount);
+      member = '';
       if (!category || category === '其它') {
         category = '转账';
+      }
+      if (!subcategory) {
+        subcategory = '内部转账';
       }
     }
 

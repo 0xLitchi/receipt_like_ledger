@@ -125,13 +125,14 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           ledger: from,
           to_ledger: fallbackTo,
           category: '转账',
-          subcategory: '',
+          subcategory: prev.subcategory && prev.category === '转账' ? prev.subcategory : '内部转账',
         };
       }
       return {
         ...prev,
         kind: nextKind,
         category: prev.category === '转账' ? '' : prev.category,
+        subcategory: prev.subcategory === '内部转账' ? '' : prev.subcategory,
         to_ledger: prev.to_ledger,
       };
     });
@@ -284,7 +285,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                   }}
                 >
                   <div style={{ fontSize: 11, fontWeight: 'bold', color: 'var(--transfer)' }}>
-                    账本间转账路径（不计入收支净额）
+                    账本间转账路径（不带人物标记；首页拆分为转入账本收入 + 转出账本支出）
                   </div>
                   <div
                     style={{
@@ -366,15 +367,19 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                     </label>
 
                     <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      <span style={{ fontSize: 11, fontWeight: 'bold', color: '#333' }}>子分类</span>
+                      <span style={{ fontSize: 11, fontWeight: 'bold', color: '#333' }}>二级分类 *</span>
                       <input
                         type="text"
                         list="admin-modal-subcategory-options"
                         className="pt-input"
                         style={{ width: '100%' }}
-                        placeholder="选填（如：午餐 / 麻将）"
+                        placeholder={draft.kind === 'income' ? '如：工资 / 理财 / 报销' : '如：午餐 / 房租 / 麻将'}
                         value={draft.subcategory}
-                        onChange={(e) => setDraft((p) => ({ ...p, subcategory: e.target.value }))}
+                        onChange={(e) => {
+                          setError(null);
+                          setDraft((p) => ({ ...p, subcategory: e.target.value }));
+                        }}
+                        required
                       />
                     </label>
                   </div>
@@ -394,36 +399,50 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 </>
               )}
 
-              {/* 成员 + 备注 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 10 }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  <span style={{ fontSize: 11, fontWeight: 'bold', color: '#333' }}>成员 *</span>
-                  <input
-                    type="text"
-                    list="admin-modal-member-options"
-                    className="pt-input"
-                    style={{ width: '100%' }}
-                    value={draft.member}
-                    onChange={(e) => {
-                      setError(null);
-                      setDraft((p) => ({ ...p, member: e.target.value }));
-                    }}
-                    required
-                  />
-                </label>
-
+              {/* 成员（仅收支） + 备注 */}
+              {isTransfer ? (
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   <span style={{ fontSize: 11, fontWeight: 'bold', color: '#333' }}>备注</span>
                   <input
                     type="text"
                     className="pt-input"
                     style={{ width: '100%' }}
-                    placeholder={isTransfer ? '如：月度定存 / 还款调拨' : '选填备注说明'}
+                    placeholder="如：月度定存 / 还款调拨"
                     value={draft.title}
                     onChange={(e) => setDraft((p) => ({ ...p, title: e.target.value }))}
                   />
                 </label>
-              </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 10 }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <span style={{ fontSize: 11, fontWeight: 'bold', color: '#333' }}>成员 *</span>
+                    <input
+                      type="text"
+                      list="admin-modal-member-options"
+                      className="pt-input"
+                      style={{ width: '100%' }}
+                      value={draft.member}
+                      onChange={(e) => {
+                        setError(null);
+                        setDraft((p) => ({ ...p, member: e.target.value }));
+                      }}
+                      required
+                    />
+                  </label>
+
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <span style={{ fontSize: 11, fontWeight: 'bold', color: '#333' }}>备注</span>
+                    <input
+                      type="text"
+                      className="pt-input"
+                      style={{ width: '100%' }}
+                      placeholder="选填备注说明"
+                      value={draft.title}
+                      onChange={(e) => setDraft((p) => ({ ...p, title: e.target.value }))}
+                    />
+                  </label>
+                </div>
+              )}
 
               {error && (
                 <div

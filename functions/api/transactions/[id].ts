@@ -278,9 +278,9 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
     const title = typeof body.title === 'string' ? body.title : '';
     const date = typeof body.date === 'string' ? body.date : '';
     let amount = Number(body.amount);
-    const member = typeof body.member === 'string' ? body.member : '默认';
+    let member = typeof body.member === 'string' ? body.member : '默认';
     let category = typeof body.category === 'string' ? body.category : '其它';
-    const subcategory = typeof body.subcategory === 'string' ? body.subcategory : '';
+    let subcategory = typeof body.subcategory === 'string' ? body.subcategory : '';
     const ledger = typeof body.ledger === 'string' && body.ledger.trim() ? body.ledger.trim() : 'Default';
     const rawToLedger = typeof body.to_ledger === 'string' ? body.to_ledger.trim() : '';
     const rawTxType = typeof body.tx_type === 'string' ? body.tx_type.trim().toLowerCase() : '';
@@ -290,7 +290,9 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
 
     if (txType === 'transfer') {
       amount = Math.abs(amount);
+      member = '';
       if (!category || category === '其它') category = '转账';
+      if (!subcategory) subcategory = '内部转账';
     }
 
     await env.DB.prepare(

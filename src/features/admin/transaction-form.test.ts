@@ -58,17 +58,20 @@ describe('applyAdminTxKind', () => {
     expect(asExpense.tx_type).toBe('normal');
   });
 
-  it('switches to transfer with positive amount and default category', () => {
-    const asTransfer = applyAdminTxKind(tx({ amount: -500, category: '杂项' }), 'transfer');
+  it('switches to transfer with positive amount, empty member, and default category/subcategory', () => {
+    const asTransfer = applyAdminTxKind(tx({ amount: -500, category: '杂项', subcategory: '' }), 'transfer');
     expect(asTransfer.tx_type).toBe('transfer');
+    expect(asTransfer.member).toBe('');
     expect(asTransfer.amount).toBe(500);
     expect(asTransfer.category).toBe('转账');
+    expect(asTransfer.subcategory).toBe('内部转账');
 
     const backToExpense = applyAdminTxKind({ ...asTransfer, to_ledger: '储蓄' }, 'expense');
     expect(backToExpense.tx_type).toBe('normal');
     expect(backToExpense.to_ledger).toBe('');
     expect(backToExpense.amount).toBe(-500);
     expect(backToExpense.category).toBe('');
+    expect(backToExpense.subcategory).toBe('');
   });
 });
 
@@ -110,7 +113,7 @@ describe('buildTransactionFromDraft', () => {
     }
   });
 
-  it('builds transfer with positive amount and validates source != target', () => {
+  it('builds transfer with positive amount, empty member, and validates source != target', () => {
     const missingTarget = buildTransactionFromDraft(
       baseDraft({ kind: 'transfer', ledger: 'Default', to_ledger: '' })
     );
@@ -122,7 +125,7 @@ describe('buildTransactionFromDraft', () => {
     expect(sameLedger.ok).toBe(false);
 
     const valid = buildTransactionFromDraft(
-      baseDraft({ kind: 'transfer', ledger: 'Default', to_ledger: '储蓄', amount: '2000', category: '' }),
+      baseDraft({ kind: 'transfer', ledger: 'Default', to_ledger: '储蓄', amount: '2000', category: '', subcategory: '', member: '荔枝' }),
       () => 'new_3'
     );
     expect(valid.ok).toBe(true);
@@ -130,18 +133,22 @@ describe('buildTransactionFromDraft', () => {
       expect(valid.transaction).toMatchObject({
         id: 'new_3',
         tx_type: 'transfer',
+        member: '',
         amount: 2000,
         ledger: 'Default',
         to_ledger: '储蓄',
         category: '转账',
+        subcategory: '内部转账',
       });
     }
   });
 
-  it('rejects zero/negative amount and invalid date', () => {
+  it('rejects zero/negative amount, invalid date, missing category, and missing subcategory', () => {
     expect(buildTransactionFromDraft(baseDraft({ amount: '0' })).ok).toBe(false);
     expect(buildTransactionFromDraft(baseDraft({ date: '2026/11/24' })).ok).toBe(false);
     expect(buildTransactionFromDraft(baseDraft({ category: '' })).ok).toBe(false);
+    expect(buildTransactionFromDraft(baseDraft({ subcategory: '' })).ok).toBe(false);
+    expect(buildTransactionFromDraft(baseDraft({ member: '' })).ok).toBe(false);
   });
 });
 

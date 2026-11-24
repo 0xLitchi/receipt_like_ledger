@@ -782,8 +782,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <input
                               type="text"
                               className="pt-input"
-                              style={{ width: '100%' }}
-                              value={row.member}
+                              style={{
+                                width: '100%',
+                                background: isTransfer ? '#f0f0f0' : '#fff',
+                                color: isTransfer ? '#999' : undefined,
+                              }}
+                              disabled={isTransfer}
+                              placeholder={isTransfer ? '—' : ''}
+                              value={isTransfer ? '' : row.member}
                               onChange={(e) => handleCellChange(row.id, 'member', e.target.value)}
                             />
                           </td>

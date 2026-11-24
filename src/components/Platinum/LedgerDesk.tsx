@@ -31,7 +31,6 @@ interface BreakdownRow {
   absVal: number;
   count: number;
   barPct: number;
-  isTransferOnly: boolean;
 }
 
 function formatMonthTab(m: string): string {
@@ -119,46 +118,34 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     setExpandedId(null);
   }, [selectedMonth, selectedLedger]);
 
-  // Category breakdown (always based on current ledger + month scope, not filtered by category itself)
+  // Category breakdown: precise to subcategory level, excludes transfers
   const categoryRows = useMemo<BreakdownRow[]>(() => {
+    if (filters.type === 'TRANSFER') return [];
+
     const scope = monthTransactions.filter((t) => {
+      if (isTransferTransaction(t)) return false;
       if (filters.member !== 'ALL' && t.member !== filters.member) return false;
-      const transfer = isTransferTransaction(t);
-      if (filters.type === 'TRANSFER') return transfer;
-      if (filters.type === 'EXPENSE') return !transfer && t.amount < 0;
-      if (filters.type === 'INCOME') return !transfer && t.amount > 0;
+      if (filters.type === 'EXPENSE') return t.amount < 0;
+      if (filters.type === 'INCOME') return t.amount > 0;
       return true;
     });
 
-    const map = new Map<
-      string,
-      { net: number; transferTotal: number; count: number; transferCount: number }
-    >();
+    const map = new Map<string, { net: number; count: number }>();
     scope.forEach((t) => {
       const key = summaryKey(t);
-      const cur = map.get(key) || { net: 0, transferTotal: 0, count: 0, transferCount: 0 };
-      const transfer = isTransferTransaction(t);
-      if (transfer) {
-        cur.transferTotal += hasFullAccess ? Math.abs(t.amount) : 0;
-        cur.transferCount += 1;
-      } else {
-        cur.net += hasFullAccess ? t.amount : 0;
-      }
+      const cur = map.get(key) || { net: 0, count: 0 };
+      cur.net += hasFullAccess ? t.amount : 0;
       cur.count += 1;
       map.set(key, cur);
     });
 
-    const list: BreakdownRow[] = Array.from(map.entries()).map(([name, v]) => {
-      const isTransferOnly = v.transferCount === v.count && v.count > 0;
-      return {
-        name,
-        netTotal: v.net,
-        absVal: isTransferOnly ? v.transferTotal : Math.abs(v.net),
-        count: v.count,
-        barPct: 0,
-        isTransferOnly,
-      };
-    });
+    const list: BreakdownRow[] = Array.from(map.entries()).map(([name, v]) => ({
+      name,
+      netTotal: v.net,
+      absVal: Math.abs(v.net),
+      count: v.count,
+      barPct: 0,
+    }));
 
     list.sort((a, b) => (hasFullAccess ? b.absVal - a.absVal : b.count - a.count));
     const maxMetric = list.reduce(
@@ -173,9 +160,14 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     return list;
   }, [monthTransactions, filters.member, filters.type, hasFullAccess]);
 
-  // Stable distinct color mapping for each member
+  // Stable distinct color mapping for each member (ignore transfers)
   const memberColorMap = useMemo(
-    () => buildMemberColorMap(allTransactions.map((t) => t.member || '默认')),
+    () =>
+      buildMemberColorMap(
+        allTransactions
+          .filter((t) => !isTransferTransaction(t) && t.member?.trim())
+          .map((t) => t.member.trim())
+      ),
     [allTransactions]
   );
 
@@ -212,7 +204,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
       ? ` · ${selectedLedger}`
       : '';
   const monthTitleSuffix = selectedMonth ? ` · ${formatMonthTab(selectedMonth)}` : '';
-  const showTransferTile = stats.totalTransfer > 0 || filters.type === 'TRANSFER';
 
   return (
     <div className="pt-desk">
@@ -358,18 +349,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
               {maskVal(stats.totalIncome, true)}
             </div>
           </div>
-
-          {showTransferTile && (
-            <div className="pt-tile">
-              <div className="tl">转账</div>
-              <div
-                className="tv"
-                style={{ color: hasFullAccess ? 'var(--transfer)' : '#666' }}
-              >
-                {maskVal(stats.totalTransfer)}
-              </div>
-            </div>
-          )}
         </div>
       </PlatinumWindow>
 
@@ -403,18 +382,12 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                     style={{
                       color: !hasFullAccess
                         ? '#666'
-                        : item.isTransferOnly
-                        ? 'var(--transfer)'
                         : item.netTotal >= 0
                         ? 'var(--income)'
                         : 'var(--expense)',
                     }}
                   >
-                    {hasFullAccess
-                      ? item.isTransferOnly
-                        ? formatCurrency(item.absVal, false, false)
-                        : formatCurrency(item.netTotal, true, false)
-                      : '***.**'}
+                    {hasFullAccess ? formatCurrency(item.netTotal, true, false) : '***.**'}
                   </span>
                 </button>
               );
@@ -467,11 +440,23 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
 
                 {group.items.map((tx) => {
                     const isActive = expandedId === tx.id;
-                    const isTransfer = isTransferTransaction(tx);
-                    const fromLedger = normalizeLedgerName(tx.ledger);
-                    const toLedger = (tx.to_ledger || '').trim() || 'Default';
-                    const isNonDefaultLedger = fromLedger !== 'Default';
+                    const isTransfer = Boolean(tx.transferLeg) || isTransferTransaction(tx);
+                    const isTransferIn = tx.transferLeg === 'in';
+                    const isTransferOut = tx.transferLeg === 'out';
+                    const legLedger = normalizeLedgerName(tx.ledger);
+                    const fromLedger = isTransferIn
+                      ? tx.counterpartyLedger || 'Default'
+                      : legLedger;
+                    const toLedger = isTransferOut
+                      ? tx.counterpartyLedger || normalizeLedgerName(tx.to_ledger)
+                      : legLedger;
+                    const isNonDefaultLedger = legLedger !== 'Default';
                     const cat = categoryLabel(tx);
+                    const rowCatLabel = isTransferIn
+                      ? '转账/转入'
+                      : isTransferOut
+                      ? '转账/转出'
+                      : cat || '—';
                     const memberName = tx.member || '默认';
                     const noteText = hasFullAccess
                       ? (tx.title || '').trim()
@@ -480,8 +465,17 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                       : '';
                     const dotColor =
                       memberColorMap.get(memberName) ?? memberDotColor(memberName);
-                    const displayAmount = isTransfer ? Math.abs(tx.amount) : tx.amount;
                     const transferRoute = `${fromLedger} → ${toLedger}`;
+                    const legBadgeText = isTransferIn
+                      ? `${legLedger} ← ${fromLedger}`
+                      : isTransferOut
+                      ? `${legLedger} → ${toLedger}`
+                      : transferRoute;
+                    const amountColor = !hasFullAccess
+                      ? '#777'
+                      : tx.amount >= 0
+                      ? 'var(--income)'
+                      : 'var(--expense)';
 
                     return (
                       <React.Fragment key={tx.id}>
@@ -500,49 +494,49 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                             }
                           }}
                         >
-                          <span className="who" title={memberName}>
-                            <PixelDot color={dotColor} />
-                            <span>{memberName}</span>
-                          </span>
+                          {isTransfer ? (
+                            <span className="who" aria-hidden="true" />
+                          ) : (
+                            <span className="who" title={memberName}>
+                              <PixelDot color={dotColor} />
+                              <span>{memberName}</span>
+                            </span>
+                          )}
 
-                          <span className="cc" title={cat || (isTransfer ? '转账' : undefined)}>
-                            {cat || (isTransfer ? '转账' : '—')}
+                          <span className="cc" title={rowCatLabel}>
+                            {rowCatLabel}
                           </span>
 
                           <span
                             className="pg"
                             title={
                               isTransfer
-                                ? `${transferRoute}${noteText ? ` · ${noteText}` : ''}`
+                                ? `${legBadgeText}${noteText ? ` · ${noteText}` : ''}`
                                 : noteText || undefined
                             }
                           >
                             {isTransfer && (
-                              <span className="pt-transfer-route">{transferRoute}</span>
+                              <span
+                                className={`pt-transfer-route${
+                                  isTransferIn ? ' in' : isTransferOut ? ' out' : ''
+                                }`}
+                              >
+                                {legBadgeText}
+                              </span>
                             )}
                             {noteText}
                           </span>
 
                           <span
                             className="amt"
-                            style={{
-                              color: !hasFullAccess
-                                ? '#777'
-                                : isTransfer
-                                ? 'var(--transfer)'
-                                : tx.amount >= 0
-                                ? 'var(--income)'
-                                : 'var(--expense)',
-                            }}
+                            style={{ color: amountColor }}
                             title={hasFullAccess ? '点击复制金额' : undefined}
-                            onClick={(e) => void handleCopyAmount(e, tx.id, displayAmount)}
+                            onClick={(e) => void handleCopyAmount(e, tx.id, tx.amount)}
                           >
                             {copiedId === tx.id
                               ? '已复制'
                               : hasFullAccess
-                              ? isTransfer
-                                ? formatCurrency(displayAmount, false, false)
-                                : formatCurrency(tx.amount, true, false)
+                              ? formatCurrency(tx.amount, true, false)
                               : '***.**'}
                           </span>
                         </div>
@@ -560,7 +554,9 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                               }}
                             >
                               <b style={{ fontSize: 12 }}>
-                                {noteText || (isTransfer ? `转账 · ${transferRoute}` : cat) || '交易详情'}
+                                {noteText ||
+                                  (isTransfer ? `${rowCatLabel} · ${legBadgeText}` : cat) ||
+                                  '交易详情'}
                               </b>
                               <button
                                 type="button"
@@ -582,27 +578,36 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                 <span style={{ color: '#666' }}>日期: </span>
                                 <span style={{ fontFamily: 'var(--font-mono)' }}>{tx.date}</span>
                               </div>
-                              <div>
-                                <span style={{ color: '#666' }}>成员: </span>
-                                <b>{tx.member || '—'}</b>
-                              </div>
+                              {!isTransfer && (
+                                <div>
+                                  <span style={{ color: '#666' }}>成员: </span>
+                                  <b>{tx.member || '—'}</b>
+                                </div>
+                              )}
                               <div>
                                 <span style={{ color: '#666' }}>类型: </span>
-                                <b>{isTransfer ? '转账' : tx.amount >= 0 ? '收入' : '支出'}</b>
+                                <b>
+                                  {isTransferIn
+                                    ? '转账 · 收入（转入）'
+                                    : isTransferOut
+                                    ? '转账 · 支出（转出）'
+                                    : tx.amount >= 0
+                                    ? '收入'
+                                    : '支出'}
+                                </b>
                               </div>
                               <div>
                                 <span style={{ color: '#666' }}>分类: </span>
-                                <b>{cat || (isTransfer ? '转账' : '—')}</b>
+                                <b>{cat || rowCatLabel}</b>
                               </div>
-                              {isTransfer ? (
+                              <div>
+                                <span style={{ color: '#666' }}>账本: </span>
+                                <span>{legLedger}</span>
+                              </div>
+                              {isTransfer && (
                                 <div>
-                                  <span style={{ color: '#666' }}>转账账本: </span>
-                                  <b style={{ color: 'var(--transfer)' }}>{transferRoute}</b>
-                                </div>
-                              ) : (
-                                <div>
-                                  <span style={{ color: '#666' }}>账本: </span>
-                                  <span>{fromLedger}</span>
+                                  <span style={{ color: '#666' }}>转账路径: </span>
+                                  <span>{transferRoute}</span>
                                 </div>
                               )}
                               <div>
@@ -612,14 +617,12 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                     fontFamily: 'var(--font-mono)',
                                     color: !hasFullAccess
                                       ? '#666'
-                                      : isTransfer
-                                      ? 'var(--transfer)'
                                       : tx.amount >= 0
                                       ? 'var(--income)'
                                       : 'var(--expense)',
                                   }}
                                 >
-                                  {isTransfer ? maskVal(displayAmount) : maskVal(tx.amount, true)}
+                                  {maskVal(tx.amount, true)}
                                 </b>
                               </div>
                               {tx.title && (
@@ -639,7 +642,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                 fontFamily: 'var(--font-mono)',
                               }}
                             >
-                              ID: {tx.id}
+                              ID: {tx.sourceId || tx.id}
                             </div>
                           </div>
                         )}
@@ -673,17 +676,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                 {maskVal(-stats.totalExpense)}
               </span>
             </span>
-            {stats.totalTransfer > 0 && (
-              <>
-                <span>·</span>
-                <span>
-                  转账{' '}
-                  <span style={{ color: hasFullAccess ? 'var(--transfer)' : undefined }}>
-                    {maskVal(stats.totalTransfer)}
-                  </span>
-                </span>
-              </>
-            )}
             <span>·</span>
             <b
               style={{

@@ -32,27 +32,32 @@ export function deriveAdminTxKind(
   return override ?? 'expense';
 }
 
-/** 切换交易的后台三态类型，自动规范金额正负号、转入账本与默认分类 */
+/** 切换交易的后台三态类型，自动规范金额正负号、转入账本、人物标记与默认分类 */
 export function applyAdminTxKind(tx: Transaction, kind: AdminTxKind): Transaction {
   const abs = Math.abs(Number(tx.amount) || 0);
   if (kind === 'transfer') {
     const nextCategory =
       !tx.category || tx.category === '杂项' || tx.category === '其它' ? '转账' : tx.category;
+    const nextSubcategory = tx.subcategory?.trim() || '内部转账';
     return {
       ...tx,
       tx_type: 'transfer',
+      member: '',
       amount: abs,
       category: nextCategory,
+      subcategory: nextSubcategory,
       to_ledger: tx.to_ledger || '',
     };
   }
 
   const nextCategory = tx.category === '转账' ? '' : tx.category;
+  const nextSubcategory = tx.subcategory === '内部转账' ? '' : tx.subcategory;
   return {
     ...tx,
     tx_type: 'normal',
     to_ledger: '',
     category: nextCategory,
+    subcategory: nextSubcategory,
     amount: kind === 'expense' ? (abs === 0 ? 0 : -abs) : abs,
   };
 }
@@ -83,11 +88,6 @@ export function buildTransactionFromDraft(
   }
   const absAmt = Math.round(Math.abs(parsedAmt) * 100) / 100;
 
-  const member = draft.member.trim();
-  if (!member) {
-    return { ok: false, error: '请填写关联成员' };
-  }
-
   const fromLedger = normalizeLedgerName(draft.ledger);
   const title = draft.title.trim();
   const subcategory = draft.subcategory.trim();
@@ -106,9 +106,9 @@ export function buildTransactionFromDraft(
       transaction: {
         id: idFactory(),
         date,
-        member,
+        member: '',
         category: draft.category.trim() || '转账',
-        subcategory,
+        subcategory: subcategory || '内部转账',
         title,
         amount: absAmt,
         ledger: fromLedger,
@@ -118,9 +118,18 @@ export function buildTransactionFromDraft(
     };
   }
 
+  const member = draft.member.trim();
+  if (!member) {
+    return { ok: false, error: '请填写关联成员' };
+  }
+
   const category = draft.category.trim();
   if (!category) {
     return { ok: false, error: '请填写主分类（例如：餐饮、住房、收入）' };
+  }
+
+  if (!subcategory) {
+    return { ok: false, error: '请填写二级分类（例如：午餐、房租、工资）' };
   }
 
   return {

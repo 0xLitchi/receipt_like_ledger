@@ -15,6 +15,12 @@ export interface Transaction {
   isMasked?: boolean;     // 未鉴权时服务端脱敏标记
 }
 
+export interface DisplayTransaction extends Transaction {
+  sourceId?: string;           // 原始交易 ID（转账拆分后的两行共享同一 sourceId）
+  transferLeg?: 'in' | 'out';  // 转账拆分方向：in = 转入账本收入，out = 转出账本支出
+  counterpartyLedger?: string; // 转账对手方账本
+}
+
 export type LedgerType = 'ALL' | 'EXPENSE' | 'INCOME' | 'TRANSFER';
 
 /** 账本页的筛选条件 */
@@ -22,7 +28,7 @@ export interface LedgerFilters {
   ledger: string;         // "ALL" 或 具体账本名（默认 "ALL"）
   month: string;          // "ALL" 或 "2026-08"
   member: string;         // "ALL" 或 具体成员
-  category: string;       // "ALL" 或 具体分类（可含 "杂项/麻将" 形式）
+  category: string;       // "ALL" 或 具体二级分类（如 "餐饮/午餐"）
   type: LedgerType;       // 全部 / 仅支出 / 仅收入 / 仅转账
   search: string;         // 搜索关键词
 }
@@ -30,13 +36,12 @@ export interface LedgerFilters {
 export interface DateGroup {
   date: string;
   shortDate: string;
-  items: Transaction[];
+  items: DisplayTransaction[];
 }
 
 export interface SummaryStats {
   totalIncome: number;
   totalExpense: number;
-  totalTransfer: number;
   netBalance: number;
   count: number;
 }
