@@ -465,12 +465,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                       : '';
                     const dotColor =
                       memberColorMap.get(memberName) ?? memberDotColor(memberName);
-                    const transferRoute = `${fromLedger} → ${toLedger}`;
-                    const legBadgeText = isTransferIn
-                      ? `${legLedger} ← ${fromLedger}`
-                      : isTransferOut
-                      ? `${legLedger} → ${toLedger}`
-                      : transferRoute;
+                    const transferRoute = `${fromLedger} -> ${toLedger}`;
                     const amountColor = !hasFullAccess
                       ? '#777'
                       : tx.amount >= 0
@@ -511,18 +506,12 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                             className="pg"
                             title={
                               isTransfer
-                                ? `${legBadgeText}${noteText ? ` · ${noteText}` : ''}`
+                                ? `${transferRoute}${noteText ? ` · ${noteText}` : ''}`
                                 : noteText || undefined
                             }
                           >
                             {isTransfer && (
-                              <span
-                                className={`pt-transfer-route${
-                                  isTransferIn ? ' in' : isTransferOut ? ' out' : ''
-                                }`}
-                              >
-                                {legBadgeText}
-                              </span>
+                              <span className="pt-transfer-route">{transferRoute}</span>
                             )}
                             {noteText}
                           </span>
@@ -555,7 +544,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                             >
                               <b style={{ fontSize: 12 }}>
                                 {noteText ||
-                                  (isTransfer ? `${rowCatLabel} · ${legBadgeText}` : cat) ||
+                                  (isTransfer ? `${rowCatLabel} · ${transferRoute}` : cat) ||
                                   '交易详情'}
                               </b>
                               <button
@@ -655,41 +644,18 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
         </div>
 
         <div className="pt-statusbar">
-          <span
+          <b
             style={{
-              display: 'inline-flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: '0 4px',
+              fontFamily: 'var(--font-mono)',
+              color: !hasFullAccess
+                ? undefined
+                : stats.netBalance >= 0
+                ? 'var(--income)'
+                : 'var(--expense)',
             }}
           >
-            <span>
-              收入{' '}
-              <span style={{ color: hasFullAccess ? 'var(--income)' : undefined }}>
-                {maskVal(stats.totalIncome, true)}
-              </span>
-            </span>
-            <span>·</span>
-            <span>
-              支出{' '}
-              <span style={{ color: hasFullAccess ? 'var(--expense)' : undefined }}>
-                {maskVal(-stats.totalExpense)}
-              </span>
-            </span>
-            <span>·</span>
-            <b
-              style={{
-                fontFamily: 'var(--font-mono)',
-                color: !hasFullAccess
-                  ? undefined
-                  : stats.netBalance >= 0
-                  ? 'var(--income)'
-                  : 'var(--expense)',
-              }}
-            >
-              净计: {maskVal(stats.netBalance, true)}
-            </b>
-          </span>
+            净计: {maskVal(stats.netBalance, true)}
+          </b>
           <span
             style={{
               marginLeft: 'auto',

@@ -643,26 +643,8 @@ textarea.pt-input {
   font-style: italic;
 }
 .pt-transfer-route {
-  display: inline-block;
   margin-right: 6px;
-  padding: 0 4px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--transfer);
-  background: #eef0ff;
-  border: 1px solid #b8bce8;
-  border-radius: 2px;
-  vertical-align: baseline;
-}
-.pt-transfer-route.in {
-  color: var(--income);
-  background: #ecf7ec;
-  border-color: #a6cfa6;
-}
-.pt-transfer-route.out {
-  color: var(--expense);
-  background: #fdf0ef;
-  border-color: #e0b3ae;
+  font-style: italic;
 }
 .pt-live-row .who {
   flex: none;

@@ -669,7 +669,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         aria-label="全选"
                       />
                     </th>
-                    <th style={{ width: 42, textAlign: 'center' }}>状态</th>
                     <th style={{ width: 68, cursor: 'pointer' }} onClick={() => handleSort('tx_type')}>
                       类型{sortIndicator('tx_type')}
                     </th>
@@ -702,7 +701,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <tbody>
                   {processedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
+                      <td colSpan={10} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
                         暂无匹配的交易记录
                       </td>
                     </tr>
@@ -734,21 +733,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               checked={selectedIds.has(row.id)}
                               onChange={() => handleToggleSelectRow(row.id)}
                             />
-                          </td>
-                          <td
-                            style={{
-                              textAlign: 'center',
-                              fontSize: 10,
-                              fontFamily: 'var(--font-mono)',
-                              color:
-                                status === 'added'
-                                  ? '#166534'
-                                  : status === 'modified'
-                                  ? '#854d0e'
-                                  : '#777',
-                            }}
-                          >
-                            {status === 'added' ? 'NEW' : status === 'modified' ? 'MOD' : '—'}
                           </td>
                           <td>
                             <select
