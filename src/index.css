@@ -609,6 +609,15 @@ textarea.pt-input {
 }
 
 /* ── Live / Transactions Feed Rows ── */
+.pt-live-list {
+  --col-who: 90px;
+  --col-cc: 96px;
+  --live-gap: 10px;
+}
+.pt-live-list.no-who .pt-live-row .who {
+  display: none;
+}
+
 .pt-live-group-header {
   display: flex;
   align-items: center;
@@ -631,7 +640,7 @@ textarea.pt-input {
   align-items: center;
   min-height: 28px;
   padding: 3px 12px;
-  gap: 6px;
+  gap: var(--live-gap, 10px);
   font-size: 12px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
@@ -654,8 +663,8 @@ textarea.pt-input {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 90px;
+  gap: 5px;
+  width: var(--col-who, 90px);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -665,7 +674,7 @@ textarea.pt-input {
 }
 .pt-live-row .cc {
   flex: none;
-  width: 96px;
+  width: var(--col-cc, 96px);
   font: 11px var(--font-mono);
   color: #555;
   white-space: nowrap;
@@ -757,16 +766,13 @@ textarea.pt-input {
 
 /* ── Responsive Tweaks ── */
 @media (max-width: 960px) {
+  .pt-live-list {
+    --col-who: 78px;
+    --col-cc: 78px;
+    --live-gap: 8px;
+  }
   .pt-live-row {
-    gap: 4px;
     padding: 3px 10px;
-  }
-  .pt-live-row .who {
-    width: 74px;
-    gap: 5px;
-  }
-  .pt-live-row .cc {
-    width: 78px;
   }
 }
 
@@ -774,16 +780,13 @@ textarea.pt-input {
   .pt-desk {
     max-width: 82%;
   }
+  .pt-live-list {
+    --col-who: 72px;
+    --col-cc: 72px;
+    --live-gap: 6px;
+  }
   .pt-live-row {
-    gap: 4px;
     padding: 3px 8px;
-  }
-  .pt-live-row .who {
-    width: 66px;
-    gap: 4px;
-  }
-  .pt-live-row .cc {
-    width: 70px;
   }
 }
 
@@ -806,16 +809,13 @@ textarea.pt-input {
   .pt-row .n {
     min-width: 64px;
   }
+  .pt-live-list {
+    --col-who: 66px;
+    --col-cc: 66px;
+    --live-gap: 6px;
+  }
   .pt-live-row {
-    gap: 4px;
     padding: 3px 8px;
-  }
-  .pt-live-row .who {
-    width: 58px;
-    gap: 4px;
-  }
-  .pt-live-row .cc {
-    width: 64px;
   }
   .pt-live-row .amt {
     min-width: 0;

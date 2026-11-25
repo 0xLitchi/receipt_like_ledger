@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import type { DateGroup, LedgerFilters, LedgerType, SummaryStats, Transaction } from '../../types';
 import {
   categoryLabel,
@@ -7,6 +7,8 @@ import {
   normalizeLedgerName,
   summaryKey,
 } from '../../features/ledger/use-ledger';
+import type { LiveRowTextSample } from '../../features/ledger/live-columns';
+import { useLiveColumnWidths } from '../../features/ledger/use-live-columns';
 import { formatCurrency } from '../../utils/formatters';
 import { PixelDot, PlatinumSelect, PlatinumWindow } from './PlatinumChrome';
 import { SlotNumber } from './SlotNumber';
@@ -193,6 +195,54 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
       ),
     [allTransactions]
   );
+
+  // Extract visible row text samples for adaptive column width sizing
+  const liveListRef = useRef<HTMLDivElement>(null);
+  const liveRowSamples = useMemo<LiveRowTextSample[]>(() => {
+    const out: LiveRowTextSample[] = [];
+    for (const group of dateGroups) {
+      for (const tx of group.items) {
+        const isTransfer = Boolean(tx.transferLeg) || isTransferTransaction(tx);
+        const isTransferIn = tx.transferLeg === 'in';
+        const isTransferOut = tx.transferLeg === 'out';
+        const legLedger = normalizeLedgerName(tx.ledger);
+        const fromLedger = isTransferIn
+          ? tx.counterpartyLedger || 'Default'
+          : legLedger;
+        const toLedger = isTransferOut
+          ? tx.counterpartyLedger || normalizeLedgerName(tx.to_ledger)
+          : legLedger;
+        const cat = categoryLabel(tx);
+        const rowCatLabel = isTransferIn
+          ? '转账/转入'
+          : isTransferOut
+          ? '转账/转出'
+          : cat || '—';
+        const noteText = hasFullAccess
+          ? (tx.title || '').trim()
+          : tx.title
+          ? '***'
+          : '';
+        const transferLedgerLabel = isTransferOut
+          ? fromLedger
+          : isTransferIn
+          ? toLedger
+          : legLedger;
+
+        out.push({
+          isTransfer,
+          isNonDefaultLedger: legLedger !== 'Default',
+          memberName: tx.member || '默认',
+          categoryLabel: rowCatLabel,
+          noteLabel: isTransfer ? transferLedgerLabel : noteText,
+          amountLabel: hasFullAccess ? formatCurrency(tx.amount, true, false) : '***.**',
+        });
+      }
+    }
+    return out;
+  }, [dateGroups, hasFullAccess]);
+
+  const { hideWho } = useLiveColumnWidths(liveListRef, liveRowSamples);
 
   const hasActiveFilters =
     filters.category !== 'ALL' ||
@@ -465,7 +515,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
           </span>
         </div>
 
-        <div>
+        <div ref={liveListRef} className={`pt-live-list${hideWho ? ' no-who' : ''}`}>
           {dateGroups.length === 0 ? (
             <div style={{ padding: '32px 12px', textAlign: 'center', color: '#777', fontSize: 12 }}>
               当前筛选条件下暂无记账明细
