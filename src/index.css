@@ -881,3 +881,89 @@ textarea.pt-input {
 .field-shake {
   animation: pt-shake 240ms ease-in-out;
 }
+
+/* ── CSV Import Modal Demos & Dropzone ── */
+.pt-csv-demo {
+  background: var(--g100);
+  border: 1px solid var(--g500);
+  box-shadow: inset 1px 1px 0 #fff;
+}
+.pt-csv-demo-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 9px;
+  background: var(--g200);
+  border-bottom: 1px solid var(--g500);
+  font-size: 11px;
+  font-weight: bold;
+  color: #333;
+}
+.pt-csv-demo-cols {
+  font-family: var(--font-mono);
+  font-weight: normal;
+  color: #555;
+}
+.pt-csv-demo-list {
+  display: flex;
+  flex-direction: column;
+}
+.pt-csv-demo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-bottom: 1px solid #e5e5e5;
+}
+.pt-csv-demo-row:last-child {
+  border-bottom: 0;
+}
+.pt-csv-tag {
+  flex: none;
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: bold;
+  line-height: 15px;
+  white-space: nowrap;
+}
+.pt-csv-demo-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pt-csv-demo-code {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--black);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+.pt-csv-demo-hint {
+  font-size: 11px;
+  color: #666;
+}
+.pt-csv-demo-foot {
+  padding: 5px 9px;
+  border-top: 1px solid var(--g300);
+  background: #fafafa;
+  font-size: 11px;
+  color: #555;
+}
+.pt-csv-dropzone {
+  padding: 6px;
+  border: 1px dashed transparent;
+  background: transparent;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.pt-csv-dropzone.dragging {
+  border-color: var(--hl);
+  background: #eef2ff;
+}

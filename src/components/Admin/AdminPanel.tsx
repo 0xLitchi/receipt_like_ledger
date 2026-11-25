@@ -16,9 +16,9 @@ import {
   findInvalidTransfer,
   type AdminTxKind,
 } from '../../features/admin/transaction-form';
-import { parseRawLedgerText } from '../../utils/parser';
 import { PixelDot, PlatinumWindow } from '../Platinum/PlatinumChrome';
 import { AddTransactionModal } from './AddTransactionModal';
+import { CsvImportModal } from './CsvImportModal';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -88,9 +88,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [rowKindOverrides, setRowKindOverrides] = useState<Record<string, AdminTxKind>>({});
   const [customLedgers, setCustomLedgers] = useState<string[]>([]);
   const [showParseModal, setShowParseModal] = useState(false);
-  const [rawText, setRawText] = useState('');
-  const [parseStep, setParseStep] = useState<'input' | 'preview'>('input');
-  const [parsedPreviewList, setParsedPreviewList] = useState<Transaction[]>([]);
 
   const originalMap = useMemo(() => {
     const map = new Map<string, Transaction>();
@@ -393,33 +390,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   }, [apiLogs, apiLogSearchQuery]);
 
-  const handleStartParsePreview = () => {
-    if (!rawText.trim()) {
-      alert('请先粘贴需要解析的账单文本数据');
-      return;
-    }
-    const parsed = parseRawLedgerText(rawText);
-    if (parsed.length === 0) {
-      alert('未能成功解析数据，请检查文本格式');
-      return;
-    }
-    setParsedPreviewList(parsed);
-    setParseStep('preview');
-  };
+  const handleImportCsvRows = useCallback((importedRows: Transaction[]) => {
+    if (importedRows.length === 0) return;
+    const kindPatch: Record<string, AdminTxKind> = {};
+    let expenseCount = 0;
+    let incomeCount = 0;
+    let transferCount = 0;
 
-  const handleConfirmImportParsedData = () => {
-    if (parsedPreviewList.length === 0) return;
-    setRows((prev) => [...parsedPreviewList, ...prev]);
-    setRawText('');
-    setParsedPreviewList([]);
-    setParseStep('input');
-    setShowParseModal(false);
+    importedRows.forEach((row) => {
+      const kind = deriveAdminTxKind(row);
+      kindPatch[row.id] = kind;
+      if (kind === 'transfer') transferCount += 1;
+      else if (kind === 'expense') expenseCount += 1;
+      else incomeCount += 1;
+    });
+
+    setRowKindOverrides((prev) => ({ ...prev, ...kindPatch }));
+    setRows((prev) => [...importedRows, ...prev]);
+
+    const parts: string[] = [];
+    if (expenseCount > 0) parts.push(`支出 ${expenseCount}`);
+    if (incomeCount > 0) parts.push(`收入 ${incomeCount}`);
+    if (transferCount > 0) parts.push(`转账 ${transferCount}`);
+
     setStatusMsg({
       type: 'success',
-      text: `已导入 ${parsedPreviewList.length} 条记录至编辑区，请点击“保存变动”提交。`,
+      text: `已导入 ${importedRows.length} 条记录至编辑区（${parts.join(' · ')}），请点击“保存变动”提交。`,
     });
-    setTimeout(() => setStatusMsg(null), 3500);
-  };
+  }, []);
 
   const handleConfirmSaveAllChanges = async () => {
     if (pendingChanges.totalCount === 0) {
@@ -634,10 +632,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 type="button"
                 className="pt-btn tab"
-                onClick={() => {
-                  setParseStep('input');
-                  setShowParseModal(true);
-                }}
+                onClick={() => setShowParseModal(true)}
               >
                 CSV导入
               </button>
@@ -1250,123 +1245,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* ── Modal 2: Raw Text Import ── */}
-      {showParseModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 60,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            background: 'rgba(0,0,0,0.35)',
-          }}
-        >
-          <div style={{ width: '100%', maxWidth: 640 }}>
-            <PlatinumWindow
-              title="CSV 批量导入 · CSV Import"
-              onClose={() => setShowParseModal(false)}
-            >
-              <div style={{ padding: '12px 14px' }}>
-                {parseStep === 'input' ? (
-                  <>
-                    <p style={{ margin: '0 0 8px', fontSize: 11, color: '#444' }}>
-                      每行一条，支持 Tab 或双空格分隔：
-                      <code>备注  日期(YYYY-MM-DD)  金额  成员  主分类/子分类  账本(转账可写 A→B)</code>
-                    </p>
-                    <textarea
-                      className="pt-input"
-                      rows={10}
-                      style={{ width: '100%' }}
-                      value={rawText}
-                      onChange={(e) => setRawText(e.target.value)}
-                      placeholder="示例：午餐	2026-11-19	-38.5	荔枝	餐饮/午饭	Default"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <p style={{ margin: '0 0 8px', fontSize: 11 }}>
-                      解析成功 <b>{parsedPreviewList.length}</b> 条，确认后将追加到编辑区顶部：
-                    </p>
-                    <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-                      <table className="pt-table">
-                        <thead>
-                          <tr>
-                            <th>日期</th>
-                            <th>成员</th>
-                            <th>分类</th>
-                            <th>备注</th>
-                            <th>金额</th>
-                            <th>账本</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {parsedPreviewList.map((it) => (
-                            <tr key={it.id}>
-                              <td style={{ fontFamily: 'var(--font-mono)' }}>{it.date}</td>
-                              <td>{it.member}</td>
-                              <td>
-                                {it.subcategory ? `${it.category}/${it.subcategory}` : it.category}
-                              </td>
-                              <td>{it.title || '—'}</td>
-                              <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-                                {it.amount}
-                              </td>
-                              <td>
-                                {isTransferTransaction(it)
-                                  ? `${normalizeLedgerName(it.ledger)} → ${it.to_ledger}`
-                                  : it.ledger || 'Default'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="pt-statusbar" style={{ padding: '8px 12px', justifyContent: 'flex-end', gap: 8 }}>
-                {parseStep === 'preview' && (
-                  <button
-                    type="button"
-                    className="pt-btn"
-                    onClick={() => setParseStep('input')}
-                  >
-                    返回修改
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="pt-btn"
-                  onClick={() => setShowParseModal(false)}
-                >
-                  取消
-                </button>
-                {parseStep === 'input' ? (
-                  <button
-                    type="button"
-                    className="pt-btn primary"
-                    onClick={handleStartParsePreview}
-                  >
-                    解析预览
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="pt-btn primary"
-                    onClick={handleConfirmImportParsedData}
-                  >
-                    确认导入 ({parsedPreviewList.length})
-                  </button>
-                )}
-              </div>
-            </PlatinumWindow>
-          </div>
-        </div>
-      )}
+      {/* ── Modal 2: CSV Batch Import ── */}
+      <CsvImportModal
+        isOpen={showParseModal}
+        onClose={() => setShowParseModal(false)}
+        availableLedgers={availableLedgers}
+        onImport={handleImportCsvRows}
+      />
 
       <AddTransactionModal
         isOpen={showAddModal}

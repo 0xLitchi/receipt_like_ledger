@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseRawLedgerText } from './parser';
+import {
+  buildCsvDemoTemplate,
+  parseLedgerImport,
+  parseRawLedgerText,
+} from './parser';
 
-describe('parseRawLedgerText', () => {
+describe('parseRawLedgerText (legacy compatibility)', () => {
   it('parses tab-separated rows with title', () => {
     const rows = parseRawLedgerText('小雅退押金\t2026-08-07\t3900\t荔枝\t住房/押金\tDefault');
     expect(rows).toHaveLength(1);
@@ -51,6 +55,7 @@ describe('parseRawLedgerText', () => {
       to_ledger: '储蓄',
       amount: 2000,
       category: '转账',
+      member: '',
     });
     expect(rows[1]).toMatchObject({
       tx_type: 'transfer',
@@ -58,6 +63,150 @@ describe('parseRawLedgerText', () => {
       to_ledger: '投资',
       amount: 500,
       category: '转账',
+      member: '',
     });
+  });
+});
+
+describe('parseLedgerImport (standard CSV & validation)', () => {
+  it('parses the built-in 3-type demo template cleanly with zero issues', () => {
+    const csv = buildCsvDemoTemplate('储蓄');
+    const result = parseLedgerImport(csv);
+
+    expect(result.detectedFormat).toBe('csv-header');
+    expect(result.issues).toHaveLength(0);
+    expect(result.summary).toEqual({ total: 3, expense: 1, income: 1, transfer: 1 });
+
+    expect(result.transactions[0]).toMatchObject({
+      tx_type: 'normal',
+      date: '2026-11-19',
+      amount: -38.5,
+      member: '荔枝',
+      category: '餐饮',
+      subcategory: '午餐',
+      title: '牛肉面',
+      ledger: 'Default',
+      to_ledger: '',
+    });
+
+    expect(result.transactions[1]).toMatchObject({
+      tx_type: 'normal',
+      date: '2026-11-18',
+      amount: 15000,
+      member: '扶正',
+      category: '收入',
+      subcategory: '工资',
+      title: '11月工资',
+      ledger: 'Default',
+      to_ledger: '',
+    });
+
+    expect(result.transactions[2]).toMatchObject({
+      tx_type: 'transfer',
+      date: '2026-11-17',
+      amount: 2000,
+      member: '',
+      category: '转账',
+      subcategory: '内部转账',
+      title: '月度定存',
+      ledger: 'Default',
+      to_ledger: '储蓄',
+    });
+  });
+
+  it('parses headerless rows starting with 支出/收入/转账', () => {
+    const raw = [
+      '支出,2026/11/9,42.5,荔枝,餐饮/早餐,,豆浆油条,Default',
+      '收入,2026-11-10,+800,扶正,收入,兼职,设计费,Default',
+      '转账,2026.11.11,-1000,,,,调拨,Default→储蓄',
+    ].join('\n');
+
+    const result = parseLedgerImport(raw);
+    expect(result.detectedFormat).toBe('csv-typed');
+    expect(result.issues).toHaveLength(0);
+    expect(result.transactions[0]).toMatchObject({
+      date: '2026-11-09',
+      amount: -42.5,
+      category: '餐饮',
+      subcategory: '早餐',
+    });
+    expect(result.transactions[1]).toMatchObject({
+      date: '2026-11-10',
+      amount: 800,
+      category: '收入',
+      subcategory: '兼职',
+    });
+    expect(result.transactions[2]).toMatchObject({
+      tx_type: 'transfer',
+      date: '2026-11-11',
+      amount: 1000,
+      member: '',
+      category: '转账',
+      subcategory: '内部转账',
+      ledger: 'Default',
+      to_ledger: '储蓄',
+    });
+  });
+
+  it('round-trips files exported by Admin CSV Export (BOM + CRLF + quotes)', () => {
+    const exportedCsv =
+      '﻿id,date,tx_type,title,amount,member,category,subcategory,ledger,to_ledger\r\n' +
+      'tx_1,2026-11-19,normal,"牛肉面, ""加蛋""",-42.5,荔枝,餐饮,午餐,"Default",""\r\n' +
+      'tx_2,2026-11-18,normal,"11月工资",15000,扶正,收入,工资,"Default",""\r\n' +
+      'tx_3,2026-11-17,transfer,"定存",2000,"","转账","内部转账","Default","储蓄"\r\n';
+
+    const result = parseLedgerImport(exportedCsv);
+    expect(result.detectedFormat).toBe('csv-header');
+    expect(result.issues).toHaveLength(0);
+    expect(result.summary).toEqual({ total: 3, expense: 1, income: 1, transfer: 1 });
+    expect(result.transactions[0]).toMatchObject({
+      title: '牛肉面, "加蛋"',
+      amount: -42.5,
+      ledger: 'Default',
+    });
+    expect(result.transactions[0].id.startsWith('parse_')).toBe(true);
+    expect(result.transactions[2]).toMatchObject({
+      tx_type: 'transfer',
+      amount: 2000,
+      ledger: 'Default',
+      to_ledger: '储蓄',
+    });
+  });
+
+  it('supports Chinese full-width commas when no ASCII comma is present', () => {
+    const raw =
+      '类型，日期，金额，成员，主分类，二级分类，备注，账本，转入账本\n' +
+      '支出，2026-11-19，25，荔枝，餐饮，咖啡，美式，Default，';
+    const result = parseLedgerImport(raw);
+    expect(result.issues).toHaveLength(0);
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0]).toMatchObject({
+      amount: -25,
+      title: '美式',
+      category: '餐饮',
+      subcategory: '咖啡',
+    });
+  });
+
+  it('reports row-level validation issues without discarding valid rows', () => {
+    const raw = [
+      '类型,日期,金额,成员,主分类,二级分类,备注,账本,转入账本',
+      '支出,2026-11-19,38.50,荔枝,餐饮,午餐,牛肉面,Default,',
+      '支出,2026-02-30,10,荔枝,餐饮,午餐,无效日期,Default,',
+      '转账,2026-11-17,500,,,,缺少转入,Default,',
+      '转账,2026-11-17,500,,,,同账本,Default,Default',
+      '未知,2026-11-17,50,荔枝,餐饮,午餐,未知类型,Default,',
+      '收入,2026-11-18,0,扶正,收入,工资,零金额,Default,',
+    ].join('\n');
+
+    const result = parseLedgerImport(raw);
+    expect(result.transactions).toHaveLength(1);
+    expect(result.issues).toHaveLength(5);
+    expect(result.issues.map((i) => i.lineNumber)).toEqual([3, 4, 5, 6, 7]);
+    expect(result.issues[0].message).toContain('日期格式');
+    expect(result.issues[1].message).toContain('转入账本');
+    expect(result.issues[2].message).toContain('不能相同');
+    expect(result.issues[3].message).toContain('无法识别的类型');
+    expect(result.issues[4].message).toContain('金额');
   });
 });
