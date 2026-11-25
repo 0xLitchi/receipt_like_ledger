@@ -17,6 +17,8 @@ interface AddTransactionModalProps {
   onAdd: (tx: Transaction) => void;
 }
 
+const CREATE_LEDGER_OPTION = '__CREATE_LEDGER__';
+
 const getTodayStr = (): string => {
   const now = new Date();
   const y = now.getFullYear();
@@ -83,12 +85,39 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [draft, setDraft] = useState<NewTransactionDraft>(() =>
     createInitialDraft('荔枝', defaultToLedger)
   );
+  const [customLedgers, setCustomLedgers] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addedCount, setAddedCount] = useState(0);
+
+  const ledgerOptions = useMemo(() => {
+    const others = new Set<string>();
+    const collect = (name?: string) => {
+      const trimmed = (name || '').trim();
+      if (trimmed && trimmed !== 'Default') others.add(trimmed);
+    };
+    availableLedgers.forEach(collect);
+    customLedgers.forEach(collect);
+    collect(draft.ledger);
+    collect(draft.to_ledger);
+    return ['Default', ...Array.from(others).sort((a, b) => a.localeCompare(b, 'zh-CN'))];
+  }, [availableLedgers, customLedgers, draft.ledger, draft.to_ledger]);
+
+  const handleLedgerSelectChange = (field: 'ledger' | 'to_ledger', nextVal: string) => {
+    setError(null);
+    if (nextVal === CREATE_LEDGER_OPTION) {
+      const created = window.prompt('请输入新账本名称：')?.trim();
+      if (!created) return;
+      setCustomLedgers((prev) => (prev.includes(created) ? prev : [...prev, created]));
+      setDraft((p) => ({ ...p, [field]: created }));
+      return;
+    }
+    setDraft((p) => ({ ...p, [field]: nextVal }));
+  };
 
   useEffect(() => {
     if (!isOpen) return;
     setDraft(createInitialDraft('荔枝', defaultToLedger));
+    setCustomLedgers([]);
     setError(null);
     setAddedCount(0);
   }, [isOpen, defaultToLedger]);
@@ -299,19 +328,20 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                       <span style={{ fontSize: 11, fontWeight: 'bold', color: '#333' }}>
                         转出账本 *
                       </span>
-                      <input
-                        type="text"
-                        list="admin-modal-ledger-options"
+                      <select
                         className="pt-input"
-                        style={{ width: '100%' }}
-                        value={draft.ledger}
-                        placeholder="Default"
-                        onChange={(e) => {
-                          setError(null);
-                          setDraft((p) => ({ ...p, ledger: e.target.value }));
-                        }}
+                        style={{ width: '100%', padding: '0 4px' }}
+                        value={normalizeLedgerName(draft.ledger)}
+                        onChange={(e) => handleLedgerSelectChange('ledger', e.target.value)}
                         required
-                      />
+                      >
+                        {ledgerOptions.map((l) => (
+                          <option key={l} value={l}>
+                            {l}
+                          </option>
+                        ))}
+                        <option value={CREATE_LEDGER_OPTION}>+ 新建账本…</option>
+                      </select>
                     </label>
 
                     <button
@@ -329,19 +359,21 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                       <span style={{ fontSize: 11, fontWeight: 'bold', color: '#333' }}>
                         转入账本 *
                       </span>
-                      <input
-                        type="text"
-                        list="admin-modal-ledger-options"
+                      <select
                         className="pt-input"
-                        style={{ width: '100%', color: 'var(--transfer)' }}
+                        style={{ width: '100%', padding: '0 4px', color: 'var(--transfer)' }}
                         value={draft.to_ledger}
-                        placeholder="目标账本（如 储蓄）"
-                        onChange={(e) => {
-                          setError(null);
-                          setDraft((p) => ({ ...p, to_ledger: e.target.value }));
-                        }}
+                        onChange={(e) => handleLedgerSelectChange('to_ledger', e.target.value)}
                         required
-                      />
+                      >
+                        {!draft.to_ledger && <option value="">选择目标账本</option>}
+                        {ledgerOptions.map((l) => (
+                          <option key={l} value={l}>
+                            {l}
+                          </option>
+                        ))}
+                        <option value={CREATE_LEDGER_OPTION}>+ 新建账本…</option>
+                      </select>
                     </label>
                   </div>
                 </div>
@@ -386,15 +418,19 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <span style={{ fontSize: 11, fontWeight: 'bold', color: '#333' }}>所属账本</span>
-                    <input
-                      type="text"
-                      list="admin-modal-ledger-options"
+                    <select
                       className="pt-input"
-                      style={{ width: '100%' }}
-                      placeholder="Default"
-                      value={draft.ledger}
-                      onChange={(e) => setDraft((p) => ({ ...p, ledger: e.target.value }))}
-                    />
+                      style={{ width: '100%', padding: '0 4px' }}
+                      value={normalizeLedgerName(draft.ledger)}
+                      onChange={(e) => handleLedgerSelectChange('ledger', e.target.value)}
+                    >
+                      {ledgerOptions.map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                      <option value={CREATE_LEDGER_OPTION}>+ 新建账本…</option>
+                    </select>
                   </label>
                 </>
               )}
@@ -487,11 +523,6 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               <datalist id="admin-modal-subcategory-options">
                 {subcategorySuggestions.map((s) => (
                   <option key={s} value={s} />
-                ))}
-              </datalist>
-              <datalist id="admin-modal-ledger-options">
-                {availableLedgers.map((l) => (
-                  <option key={l} value={l} />
                 ))}
               </datalist>
             </div>

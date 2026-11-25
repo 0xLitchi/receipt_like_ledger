@@ -5,6 +5,7 @@ import {
   buildFilterOptions,
   buildMonthList,
   categoryLabel,
+  computeCategoryBarWidths,
   computeStats,
   expandTransactionsForDisplay,
   filterTransactions,
@@ -310,5 +311,35 @@ describe('ledger & transfer helpers', () => {
 
     // 各账本净计之和等于全部账本净计
     expect(defaultStats.netBalance + savingsStats.netBalance).toBe(allStats.netBalance);
+  });
+});
+
+describe('computeCategoryBarWidths', () => {
+  it('preserves linear proportions when values have a small dynamic range', () => {
+    const widths = computeCategoryBarWidths([500, 250, 100]);
+    expect(widths[0]).toBeCloseTo(100, 2);
+    expect(widths[1]).toBeCloseTo(50, 2);
+    expect(widths[2]).toBeCloseTo(20, 2);
+  });
+
+  it('produces clear visual separation across multi-order-of-magnitude values without bottom clumping', () => {
+    const values = [26320.27, 3800, 850.82, 293.83, 90.93, 21.53];
+    const widths = computeCategoryBarWidths(values);
+
+    expect(widths[0]).toBeCloseTo(100, 2);
+    // 严格单调递减，且相邻梯度都有明显区分度
+    for (let i = 1; i < widths.length; i++) {
+      expect(widths[i]).toBeLessThan(widths[i - 1] - 3);
+    }
+    // 850 vs 21 之间不再被压成相同极短柱条
+    expect(widths[2] - widths[5]).toBeGreaterThan(15);
+    expect(widths[5]).toBeGreaterThanOrEqual(5.5);
+  });
+
+  it('handles empty, zero, and single-item inputs safely', () => {
+    expect(computeCategoryBarWidths([])).toEqual([]);
+    expect(computeCategoryBarWidths([0, 0])).toEqual([0, 0]);
+    expect(computeCategoryBarWidths([120])).toEqual([100]);
+    expect(computeCategoryBarWidths([100, 0])).toEqual([100, 0]);
   });
 });

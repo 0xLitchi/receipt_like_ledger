@@ -2,12 +2,14 @@ import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import type { DateGroup, LedgerFilters, LedgerType, SummaryStats, Transaction } from '../../types';
 import {
   categoryLabel,
+  computeCategoryBarWidths,
   isTransferTransaction,
   normalizeLedgerName,
   summaryKey,
 } from '../../features/ledger/use-ledger';
 import { formatCurrency } from '../../utils/formatters';
 import { PixelDot, PlatinumSelect, PlatinumWindow } from './PlatinumChrome';
+import { SlotNumber } from './SlotNumber';
 import { buildMemberColorMap, memberDotColor } from './colors';
 
 interface LedgerDeskProps {
@@ -56,6 +58,16 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
 }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [entryAnimating, setEntryAnimating] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
+
+  useEffect(() => {
+    if (!entryAnimating) return;
+    const timer = window.setTimeout(() => setEntryAnimating(false), 1450);
+    return () => window.clearTimeout(timer);
+  }, [entryAnimating]);
 
   const selectedLedger = filters.ledger || 'ALL';
   const ledgerOptions = useMemo(
@@ -148,17 +160,28 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     }));
 
     list.sort((a, b) => (hasFullAccess ? b.absVal - a.absVal : b.count - a.count));
-    const maxMetric = list.reduce(
-      (m, r) => Math.max(m, hasFullAccess ? r.absVal : r.count),
-      0
+    const widths = computeCategoryBarWidths(
+      list.map((r) => (hasFullAccess ? r.absVal : r.count))
     );
-    list.forEach((r) => {
-      const val = hasFullAccess ? r.absVal : r.count;
-      r.barPct = maxMetric > 0 ? Math.max(val > 0 ? 3 : 0, (val / maxMetric) * 100) : 0;
+    list.forEach((r, idx) => {
+      r.barPct = widths[idx] ?? 0;
     });
 
     return list;
   }, [monthTransactions, filters.member, filters.type, hasFullAccess]);
+
+  // Flat index per transaction row (caps entry slot-machine animation to top rows)
+  const rowIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    let idx = 0;
+    for (const group of dateGroups) {
+      for (const item of group.items) {
+        map.set(item.id, idx);
+        idx += 1;
+      }
+    }
+    return map;
+  }, [dateGroups]);
 
   // Stable distinct color mapping for each member (ignore transfers)
   const memberColorMap = useMemo(
@@ -336,7 +359,12 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
               className="tv"
               style={{ color: hasFullAccess ? 'var(--expense)' : '#666' }}
             >
-              {maskVal(-stats.totalExpense)}
+              <SlotNumber
+                text={maskVal(-stats.totalExpense)}
+                animate={entryAnimating && hasFullAccess}
+                delayMs={0}
+                durationMs={560}
+              />
             </div>
           </div>
 
@@ -346,7 +374,12 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
               className="tv"
               style={{ color: hasFullAccess ? 'var(--income)' : '#666' }}
             >
-              {maskVal(stats.totalIncome, true)}
+              <SlotNumber
+                text={maskVal(stats.totalIncome, true)}
+                animate={entryAnimating && hasFullAccess}
+                delayMs={60}
+                durationMs={560}
+              />
             </div>
           </div>
         </div>
@@ -358,8 +391,9 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
           {categoryRows.length === 0 ? (
             <div className="none">{isAllMonths ? '暂无分类数据' : '本月暂无分类数据'}</div>
           ) : (
-            categoryRows.map((item) => {
+            categoryRows.map((item, idx) => {
               const isSelected = filters.category === item.name;
+              const catAmtText = hasFullAccess ? formatCurrency(item.netTotal, true, false) : '***.**';
               return (
                 <button
                   key={item.name}
@@ -387,7 +421,12 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                         : 'var(--expense)',
                     }}
                   >
-                    {hasFullAccess ? formatCurrency(item.netTotal, true, false) : '***.**'}
+                    <SlotNumber
+                      text={catAmtText}
+                      animate={entryAnimating && hasFullAccess && idx < 20}
+                      delayMs={Math.min(idx * 22, 220)}
+                      durationMs={500}
+                    />
                   </span>
                 </button>
               );
@@ -509,16 +548,13 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
 
                           <span
                             className="pg"
-                            title={
-                              isTransfer
-                                ? `${transferLedgerLabel}${noteText ? ` · ${noteText}` : ''}`
-                                : noteText || undefined
-                            }
+                            title={isTransfer ? transferLedgerLabel : noteText || undefined}
                           >
-                            {isTransfer && (
+                            {isTransfer ? (
                               <span className="pt-transfer-route">{transferLedgerLabel}</span>
+                            ) : (
+                              noteText
                             )}
-                            {noteText}
                           </span>
 
                           <span
@@ -527,11 +563,24 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                             title={hasFullAccess ? '点击复制金额' : undefined}
                             onClick={(e) => void handleCopyAmount(e, tx.id, tx.amount)}
                           >
-                            {copiedId === tx.id
-                              ? '已复制'
-                              : hasFullAccess
-                              ? formatCurrency(tx.amount, true, false)
-                              : '***.**'}
+                            {copiedId === tx.id ? (
+                              '已复制'
+                            ) : (
+                              <SlotNumber
+                                text={
+                                  hasFullAccess
+                                    ? formatCurrency(tx.amount, true, false)
+                                    : '***.**'
+                                }
+                                animate={
+                                  entryAnimating &&
+                                  hasFullAccess &&
+                                  (rowIndexMap.get(tx.id) ?? 999) < 24
+                                }
+                                delayMs={Math.min((rowIndexMap.get(tx.id) ?? 0) * 16, 260)}
+                                durationMs={480}
+                              />
+                            )}
                           </span>
                         </div>
 
@@ -659,7 +708,13 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                 : 'var(--expense)',
             }}
           >
-            净计: {maskVal(stats.netBalance, true)}
+            净计:{' '}
+            <SlotNumber
+              text={maskVal(stats.netBalance, true)}
+              animate={entryAnimating && hasFullAccess}
+              delayMs={100}
+              durationMs={560}
+            />
           </b>
           <span
             style={{

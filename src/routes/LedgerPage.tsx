@@ -39,15 +39,28 @@ export const LedgerPage: React.FC = () => {
     () => buildAvailableYearMonths(ledgerTransactions),
     [ledgerTransactions]
   );
-  const { stats, dateGroups } = useLedger(transactions, filters);
+
+  // Resolve default latest month synchronously to avoid a 1-frame all-months flash on entry
+  const effectiveMonth = useMemo(() => {
+    if (filters.month === 'ALL' && isAdmin) return 'ALL';
+    if (filters.month && allMonths.includes(filters.month)) return filters.month;
+    return allMonths[0] || '';
+  }, [filters.month, allMonths, isAdmin]);
+
+  const effectiveFilters = useMemo(
+    () => (effectiveMonth !== filters.month ? { ...filters, month: effectiveMonth } : filters),
+    [filters, effectiveMonth]
+  );
+
+  const { stats, dateGroups } = useLedger(transactions, effectiveFilters);
 
   // Ledger + month scoped transactions (used for Category breakdown & transfer tab visibility)
   const monthTransactions = useMemo(
     () =>
-      filters.month && filters.month !== 'ALL'
-        ? ledgerTransactions.filter((t) => t.date?.startsWith(filters.month))
+      effectiveMonth && effectiveMonth !== 'ALL'
+        ? ledgerTransactions.filter((t) => t.date?.startsWith(effectiveMonth))
         : ledgerTransactions,
-    [ledgerTransactions, filters.month]
+    [ledgerTransactions, effectiveMonth]
   );
 
   // Default to most recent month with data on initial load (preserve 'ALL' for admin)

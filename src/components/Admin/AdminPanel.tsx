@@ -29,6 +29,8 @@ interface AdminPanelProps {
   onLogout: () => void;
 }
 
+const CREATE_LEDGER_OPTION = '__CREATE_LEDGER__';
+
 const describeLogError = (e: unknown): string => {
   if (e instanceof ApiError) {
     if (e.status === 401) return '登录状态已失效，请退出后台重新登录后再查看';
@@ -84,6 +86,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [rowKindOverrides, setRowKindOverrides] = useState<Record<string, AdminTxKind>>({});
+  const [customLedgers, setCustomLedgers] = useState<string[]>([]);
   const [showParseModal, setShowParseModal] = useState(false);
   const [rawText, setRawText] = useState('');
   const [parseStep, setParseStep] = useState<'input' | 'preview'>('input');
@@ -216,7 +219,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
   }, [rows, deletedIds, originalMap, getRowChangeStatus]);
 
-  const availableLedgers = useMemo(() => buildAvailableLedgers(rows), [rows]);
+  const availableLedgers = useMemo(() => {
+    const base = buildAvailableLedgers(rows);
+    if (customLedgers.length === 0) return base;
+    const extras = new Set(base.filter((l) => l !== 'Default'));
+    customLedgers.forEach((l) => {
+      const trimmed = l.trim();
+      if (trimmed && trimmed !== 'Default') extras.add(trimmed);
+    });
+    return ['Default', ...Array.from(extras).sort((a, b) => a.localeCompare(b, 'zh-CN'))];
+  }, [rows, customLedgers]);
 
   const handleKindChange = useCallback((id: string, nextKind: AdminTxKind) => {
     setRowKindOverrides((prev) => ({ ...prev, [id]: nextKind }));
@@ -243,6 +255,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       );
     },
     [rowKindOverrides]
+  );
+
+  const handleLedgerSelectChange = useCallback(
+    (id: string, field: 'ledger' | 'to_ledger', nextVal: string) => {
+      if (nextVal === CREATE_LEDGER_OPTION) {
+        const created = window.prompt('请输入新账本名称：')?.trim();
+        if (!created) return;
+        setCustomLedgers((prev) => (prev.includes(created) ? prev : [...prev, created]));
+        handleCellChange(id, field, created);
+        return;
+      }
+      handleCellChange(id, field, nextVal);
+    },
+    [handleCellChange]
   );
 
   const handleAddTransactionFromModal = useCallback((newRow: Transaction) => {
@@ -651,12 +677,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
             </div>
 
-            <datalist id="admin-ledger-options">
-              {availableLedgers.map((l) => (
-                <option key={l} value={l} />
-              ))}
-            </datalist>
-
             <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
               <table className="pt-table">
                 <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
@@ -690,10 +710,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <th style={{ width: 96, cursor: 'pointer' }} onClick={() => handleSort('amount')}>
                       金额{sortIndicator('amount')}
                     </th>
-                    <th style={{ width: 88, cursor: 'pointer' }} onClick={() => handleSort('ledger')}>
+                    <th style={{ width: 96, cursor: 'pointer' }} onClick={() => handleSort('ledger')}>
                       账本(转出){sortIndicator('ledger')}
                     </th>
-                    <th style={{ width: 88, cursor: 'pointer' }} onClick={() => handleSort('to_ledger')}>
+                    <th style={{ width: 96, cursor: 'pointer' }} onClick={() => handleSort('to_ledger')}>
                       转入账本{sortIndicator('to_ledger')}
                     </th>
                   </tr>
@@ -821,30 +841,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             />
                           </td>
                           <td>
-                            <input
-                              type="text"
-                              list="admin-ledger-options"
+                            <select
                               className="pt-input"
-                              style={{ width: '100%' }}
-                              value={row.ledger || ''}
-                              onChange={(e) => handleCellChange(row.id, 'ledger', e.target.value)}
-                            />
+                              style={{ width: '100%', padding: '0 4px' }}
+                              value={normalizeLedgerName(row.ledger)}
+                              onChange={(e) =>
+                                handleLedgerSelectChange(row.id, 'ledger', e.target.value)
+                              }
+                            >
+                              {availableLedgers.map((l) => (
+                                <option key={l} value={l}>
+                                  {l}
+                                </option>
+                              ))}
+                              <option value={CREATE_LEDGER_OPTION}>+ 新建账本…</option>
+                            </select>
                           </td>
                           <td>
-                            <input
-                              type="text"
-                              list="admin-ledger-options"
+                            <select
                               className="pt-input"
                               style={{
                                 width: '100%',
+                                padding: '0 4px',
                                 background: isTransfer ? '#fff' : '#f0f0f0',
                                 color: isTransfer ? 'var(--transfer)' : '#999',
                               }}
                               disabled={!isTransfer}
-                              placeholder={isTransfer ? '目标账本' : '—'}
                               value={isTransfer ? row.to_ledger || '' : ''}
-                              onChange={(e) => handleCellChange(row.id, 'to_ledger', e.target.value)}
-                            />
+                              onChange={(e) =>
+                                handleLedgerSelectChange(row.id, 'to_ledger', e.target.value)
+                              }
+                            >
+                              {!isTransfer ? (
+                                <option value="">—</option>
+                              ) : (
+                                <>
+                                  {!row.to_ledger && <option value="">目标账本</option>}
+                                  {availableLedgers.map((l) => (
+                                    <option key={l} value={l}>
+                                      {l}
+                                    </option>
+                                  ))}
+                                  <option value={CREATE_LEDGER_OPTION}>+ 新建账本…</option>
+                                </>
+                              )}
+                            </select>
                           </td>
                         </tr>
                       );

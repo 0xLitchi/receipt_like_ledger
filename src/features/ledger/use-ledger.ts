@@ -269,6 +269,41 @@ export function computeStats(
   };
 }
 
+/**
+ * 计算分类统计柱状图宽度百分比（0–100）：
+ * - 当最大/最小正值跨度较小（约 16 倍以内）时保持线性比例，精确反映金额占比；
+ * - 当存在跨数量级大额项（如工资 vs 咖啡奶茶）时，自动采用平滑幂函数压缩，
+ *   避免小额分类全部被压扁到相同极短柱条，保证各层级清晰可辨且严格单调。
+ */
+export function computeCategoryBarWidths(values: number[]): number[] {
+  if (values.length === 0) return [];
+
+  let maxVal = 0;
+  let minPositive = Infinity;
+  for (const raw of values) {
+    const v = Number.isFinite(raw) ? Math.max(0, raw) : 0;
+    if (v > maxVal) maxVal = v;
+    if (v > 0 && v < minPositive) minPositive = v;
+  }
+
+  if (maxVal <= 0) {
+    return values.map(() => 0);
+  }
+
+  const TARGET_MIN_RATIO = 0.06;
+  const ratio = minPositive < Infinity && minPositive > 0 ? maxVal / minPositive : 1;
+  const exponent =
+    ratio > 1
+      ? Math.min(1, Math.max(0.3, Math.log(1 / TARGET_MIN_RATIO) / Math.log(ratio)))
+      : 1;
+
+  return values.map((raw) => {
+    const v = Number.isFinite(raw) ? Math.max(0, raw) : 0;
+    if (v <= 0) return 0;
+    return Math.max(3, Math.pow(v / maxVal, exponent) * 100);
+  });
+}
+
 /** 按日期倒序分组，组内保持服务端顺序 */
 export function groupByDate(transactions: DisplayTransaction[]): DateGroup[] {
   const map = new Map<string, DisplayTransaction[]>();

@@ -626,7 +626,7 @@ textarea.pt-input {
   align-items: center;
   min-height: 28px;
   padding: 3px 12px;
-  gap: 8px;
+  gap: 6px;
   font-size: 12px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
@@ -643,15 +643,14 @@ textarea.pt-input {
   font-style: italic;
 }
 .pt-transfer-route {
-  margin-right: 6px;
   font-style: italic;
 }
 .pt-live-row .who {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 104px;
+  gap: 6px;
+  width: 90px;
   white-space: nowrap;
   overflow: hidden;
 }
@@ -661,7 +660,7 @@ textarea.pt-input {
 }
 .pt-live-row .cc {
   flex: none;
-  width: 110px;
+  width: 96px;
   font: 11px var(--font-mono);
   color: #555;
   white-space: nowrap;
@@ -679,7 +678,7 @@ textarea.pt-input {
 }
 .pt-live-row .amt {
   flex: none;
-  min-width: 88px;
+  min-width: 0;
   text-align: right;
   font: bold 12px var(--font-mono);
   white-space: nowrap;
@@ -752,6 +751,37 @@ textarea.pt-input {
 }
 
 /* ── Responsive Tweaks ── */
+@media (max-width: 960px) {
+  .pt-live-row {
+    gap: 4px;
+    padding: 3px 10px;
+  }
+  .pt-live-row .who {
+    width: 74px;
+    gap: 5px;
+  }
+  .pt-live-row .cc {
+    width: 78px;
+  }
+}
+
+@media (max-width: 720px) {
+  .pt-desk {
+    max-width: 82%;
+  }
+  .pt-live-row {
+    gap: 4px;
+    padding: 3px 8px;
+  }
+  .pt-live-row .who {
+    width: 66px;
+    gap: 4px;
+  }
+  .pt-live-row .cc {
+    width: 70px;
+  }
+}
+
 @media (max-width: 560px) {
   .pt-desk {
     max-width: 100%;
@@ -765,14 +795,75 @@ textarea.pt-input {
   .pt-tile .tv {
     font-size: 14px;
   }
+  .pt-row {
+    gap: 5px;
+  }
+  .pt-row .n {
+    min-width: 64px;
+  }
+  .pt-live-row {
+    gap: 4px;
+    padding: 3px 8px;
+  }
   .pt-live-row .who {
-    width: 64px;
+    width: 58px;
+    gap: 4px;
   }
   .pt-live-row .cc {
-    width: 66px;
+    width: 64px;
   }
   .pt-live-row .amt {
-    min-width: 64px;
+    min-width: 0;
+  }
+}
+
+/* ── Slot-machine entry animation for numbers ── */
+.pt-slot-num {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2em;
+  vertical-align: baseline;
+}
+.pt-slot-static {
+  display: inline-block;
+  height: 1.2em;
+  line-height: 1.2em;
+}
+.pt-slot-window {
+  display: inline-flex;
+  height: 1.2em;
+  line-height: 1.2em;
+  overflow: hidden;
+}
+.pt-slot-reel {
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+  animation: pt-slot-spin var(--slot-dur, 560ms) cubic-bezier(0.16, 1, 0.28, 1.04) var(--slot-delay, 0ms) both;
+}
+.pt-slot-digit {
+  height: 1.2em;
+  line-height: 1.2em;
+  text-align: center;
+  flex: none;
+}
+@keyframes pt-slot-spin {
+  0% {
+    transform: translateY(0);
+    filter: blur(0.6px);
+  }
+  72% {
+    filter: blur(0.2px);
+  }
+  100% {
+    transform: translateY(var(--slot-end, 0));
+    filter: blur(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pt-slot-reel {
+    animation: none;
+    transform: translateY(var(--slot-end, 0));
   }
 }
 
