@@ -1,5 +1,10 @@
 import type { Transaction } from '../types';
-import type { AdminTxKind } from '../features/admin/transaction-form';
+import {
+  ADMIN_TX_KIND_LABELS,
+  deriveAdminTxKind,
+  type AdminTxKind,
+} from '../features/admin/transaction-form';
+import { normalizeLedgerName } from '../features/ledger/use-ledger';
 
 export const CSV_TEMPLATE_HEADERS = [
   '类型',
@@ -544,3 +549,132 @@ export function parseLedgerImport(text: string): CsvParseResult {
 export const parseRawLedgerText = (text: string): Transaction[] => {
   return parseLedgerImport(text).transactions;
 };
+
+export interface CsvExportRow {
+  id: string;
+  kind: AdminTxKind;
+  kindLabel: string;
+  date: string;
+  amount: string;
+  member: string;
+  category: string;
+  subcategory: string;
+  title: string;
+  ledger: string;
+  to_ledger: string;
+  csvLine: string;
+}
+
+export interface CsvExportResult {
+  csvText: string;
+  headers: readonly string[];
+  rows: CsvExportRow[];
+  summary: CsvParseSummary;
+  validation: {
+    compatible: boolean;
+    parsedCount: number;
+    issues: CsvImportIssue[];
+  };
+}
+
+/**
+ * 按 RFC 4180 转义单个 CSV 单元格，并将换行符/制表符规范为空格，
+ * 确保导出结果可被 parseLedgerImport 100% 无损回导。
+ */
+export function escapeCsvCell(raw: string): string {
+  const normalized = raw.replace(/[\r\n\t]+/g, ' ').trim();
+  if (!normalized) return '';
+  if (/[",]/.test(normalized)) {
+    return `"${normalized.replace(/"/g, '""')}"`;
+  }
+  return normalized;
+}
+
+/**
+ * 将交易列表序列化为与 CSV 导入完全一致的 9 列标准格式：
+ * 类型,日期,金额,成员,主分类,二级分类,备注,账本,转入账本
+ * 并自动执行一次导入回环校验，返回预览行与兼容性结果。
+ */
+export function buildCsvExport(
+  transactions: Transaction[],
+  kindOverrides?: Record<string, AdminTxKind>
+): CsvExportResult {
+  let expense = 0;
+  let income = 0;
+  let transfer = 0;
+
+  const rows: CsvExportRow[] = transactions.map((tx) => {
+    const kind = deriveAdminTxKind(tx, kindOverrides?.[tx.id]);
+    const kindLabel = ADMIN_TX_KIND_LABELS[kind];
+    if (kind === 'transfer') transfer += 1;
+    else if (kind === 'expense') expense += 1;
+    else income += 1;
+
+    const numericAmount = Number(tx.amount);
+    const amount = Number.isFinite(numericAmount) ? Math.abs(numericAmount).toFixed(2) : '0.00';
+    const date = (tx.date || '').trim();
+    const ledger = normalizeLedgerName(tx.ledger);
+    const title = (tx.title || '').replace(/[\r\n\t]+/g, ' ').trim();
+
+    const member = kind === 'transfer' ? '' : (tx.member || '').replace(/[\r\n\t]+/g, ' ').trim();
+    const category =
+      kind === 'transfer'
+        ? (tx.category || '').replace(/[\r\n\t]+/g, ' ').trim() || '转账'
+        : (tx.category || '').replace(/[\r\n\t]+/g, ' ').trim();
+    const subcategory =
+      kind === 'transfer'
+        ? (tx.subcategory || '').replace(/[\r\n\t]+/g, ' ').trim() || '内部转账'
+        : (tx.subcategory || '').replace(/[\r\n\t]+/g, ' ').trim();
+    const toLedger =
+      kind === 'transfer' ? (tx.to_ledger || '').replace(/[\r\n\t]+/g, ' ').trim() : '';
+
+    const csvLine = [
+      kindLabel,
+      date,
+      amount,
+      member,
+      category,
+      subcategory,
+      title,
+      ledger,
+      toLedger,
+    ]
+      .map(escapeCsvCell)
+      .join(',');
+
+    return {
+      id: tx.id,
+      kind,
+      kindLabel,
+      date,
+      amount,
+      member,
+      category,
+      subcategory,
+      title,
+      ledger,
+      to_ledger: toLedger,
+      csvLine,
+    };
+  });
+
+  const csvText = [CSV_TEMPLATE_HEADERS.join(','), ...rows.map((r) => r.csvLine)].join('\n');
+  const roundTrip = parseLedgerImport(csvText);
+
+  return {
+    csvText,
+    headers: CSV_TEMPLATE_HEADERS,
+    rows,
+    summary: {
+      total: rows.length,
+      expense,
+      income,
+      transfer,
+    },
+    validation: {
+      compatible: roundTrip.issues.length === 0 && roundTrip.transactions.length === rows.length,
+      parsedCount: roundTrip.transactions.length,
+      issues: roundTrip.issues,
+    },
+  };
+}

@@ -18,6 +18,7 @@ import {
 } from '../../features/admin/transaction-form';
 import { PixelDot, PlatinumWindow } from '../Platinum/PlatinumChrome';
 import { AddTransactionModal } from './AddTransactionModal';
+import { CsvExportModal } from './CsvExportModal';
 import { CsvImportModal } from './CsvImportModal';
 
 interface AdminPanelProps {
@@ -88,6 +89,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [rowKindOverrides, setRowKindOverrides] = useState<Record<string, AdminTxKind>>({});
   const [customLedgers, setCustomLedgers] = useState<string[]>([]);
   const [showParseModal, setShowParseModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const originalMap = useMemo(() => {
     const map = new Map<string, Transaction>();
@@ -507,34 +509,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     await handleRefreshData();
   };
 
-  const handleExportCSV = () => {
-    const headers = ['id', 'date', 'tx_type', 'title', 'amount', 'member', 'category', 'subcategory', 'ledger', 'to_ledger'];
-    const csvLines = [headers.join(',')];
-
-    processedRows.forEach((r) => {
-      const transfer = isTransferTransaction(r);
-      const line = [
-        r.id,
-        r.date,
-        transfer ? 'transfer' : 'normal',
-        `"${(r.title || '').replace(/"/g, '""')}"`,
-        r.amount,
-        `"${(r.member || '').replace(/"/g, '""')}"`,
-        `"${(r.category || '').replace(/"/g, '""')}"`,
-        `"${(r.subcategory || '').replace(/"/g, '""')}"`,
-        `"${normalizeLedgerName(r.ledger).replace(/"/g, '""')}"`,
-        `"${(transfer ? (r.to_ledger || '') : '').replace(/"/g, '""')}"`,
-      ].join(',');
-      csvLines.push(line);
+  const handleExportedCsv = useCallback((info: { count: number; fileName: string }) => {
+    setStatusMsg({
+      type: 'success',
+      text: `已导出 ${info.count} 条标准 CSV 记录：${info.fileName}`,
     });
-
-    const blob = new Blob(['﻿' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `receipt_ledger_export_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -636,7 +616,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 CSV导入
               </button>
-              <button type="button" className="pt-btn tab" onClick={handleExportCSV}>
+              <button
+                type="button"
+                className="pt-btn tab"
+                onClick={() => setShowExportModal(true)}
+              >
                 CSV导出
               </button>
               <button
@@ -1251,6 +1235,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         onClose={() => setShowParseModal(false)}
         availableLedgers={availableLedgers}
         onImport={handleImportCsvRows}
+      />
+
+      {/* ── Modal 3: CSV Export Preview & Confirm ── */}
+      <CsvExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        allRows={rows}
+        filteredRows={processedRows}
+        selectedIds={selectedIds}
+        isFiltered={Boolean(searchQuery.trim())}
+        rowKindOverrides={rowKindOverrides}
+        onExported={handleExportedCsv}
       />
 
       <AddTransactionModal

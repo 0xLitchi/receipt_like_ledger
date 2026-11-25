@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { Transaction } from '../types';
 import {
+  CSV_TEMPLATE_HEADERS,
   buildCsvDemoTemplate,
+  buildCsvExport,
   parseLedgerImport,
   parseRawLedgerText,
 } from './parser';
@@ -208,5 +211,133 @@ describe('parseLedgerImport (standard CSV & validation)', () => {
     expect(result.issues[2].message).toContain('不能相同');
     expect(result.issues[3].message).toContain('无法识别的类型');
     expect(result.issues[4].message).toContain('金额');
+  });
+});
+
+describe('buildCsvExport (import-compatible standard CSV)', () => {
+  it('exports expense, income, and transfer rows matching CSV_TEMPLATE_HEADERS and round-trips losslessly', () => {
+    const sample: Transaction[] = [
+      {
+        id: 't1',
+        date: '2026-11-19',
+        title: '牛肉面, "加蛋"\t打包\n备注',
+        amount: -38.5,
+        member: '荔枝',
+        category: '餐饮',
+        subcategory: '午餐',
+        ledger: 'Default',
+        tx_type: 'normal',
+        to_ledger: '',
+      },
+      {
+        id: 't2',
+        date: '2026-11-18',
+        title: '11月工资',
+        amount: 15000,
+        member: '扶正',
+        category: '收入',
+        subcategory: '工资',
+        ledger: '',
+        tx_type: 'normal',
+        to_ledger: '',
+      },
+      {
+        id: 't3',
+        date: '2026-11-17',
+        title: '月度定存',
+        amount: 2000,
+        member: '应被清空',
+        category: '转账',
+        subcategory: '内部转账',
+        ledger: 'Default',
+        tx_type: 'transfer',
+        to_ledger: '储蓄',
+      },
+    ];
+
+    const exported = buildCsvExport(sample);
+    expect(exported.headers).toEqual(CSV_TEMPLATE_HEADERS);
+    expect(exported.summary).toEqual({ total: 3, expense: 1, income: 1, transfer: 1 });
+    expect(exported.validation.compatible).toBe(true);
+    expect(exported.validation.issues).toHaveLength(0);
+    expect(exported.csvText.split('\n')[0]).toBe(CSV_TEMPLATE_HEADERS.join(','));
+
+    // Re-import exported CSV text and verify every field round-trips cleanly
+    const reimported = parseLedgerImport(exported.csvText);
+    expect(reimported.detectedFormat).toBe('csv-header');
+    expect(reimported.issues).toHaveLength(0);
+    expect(reimported.transactions).toHaveLength(3);
+
+    expect(reimported.transactions[0]).toMatchObject({
+      tx_type: 'normal',
+      date: '2026-11-19',
+      amount: -38.5,
+      member: '荔枝',
+      category: '餐饮',
+      subcategory: '午餐',
+      title: '牛肉面, "加蛋" 打包 备注',
+      ledger: 'Default',
+      to_ledger: '',
+    });
+
+    expect(reimported.transactions[1]).toMatchObject({
+      tx_type: 'normal',
+      date: '2026-11-18',
+      amount: 15000,
+      member: '扶正',
+      category: '收入',
+      subcategory: '工资',
+      title: '11月工资',
+      ledger: 'Default',
+      to_ledger: '',
+    });
+
+    expect(reimported.transactions[2]).toMatchObject({
+      tx_type: 'transfer',
+      date: '2026-11-17',
+      amount: 2000,
+      member: '',
+      category: '转账',
+      subcategory: '内部转账',
+      title: '月度定存',
+      ledger: 'Default',
+      to_ledger: '储蓄',
+    });
+  });
+
+  it('flags incompatible rows (zero amount or invalid transfer) during export self-check', () => {
+    const sample: Transaction[] = [
+      {
+        id: 'bad_1',
+        date: '2026-11-19',
+        title: '零金额草稿',
+        amount: 0,
+        member: '荔枝',
+        category: '餐饮',
+        subcategory: '午餐',
+        ledger: 'Default',
+        tx_type: 'normal',
+        to_ledger: '',
+      },
+      {
+        id: 'bad_2',
+        date: '2026-11-18',
+        title: '缺目标账本',
+        amount: 500,
+        member: '',
+        category: '转账',
+        subcategory: '内部转账',
+        ledger: 'Default',
+        tx_type: 'transfer',
+        to_ledger: '',
+      },
+    ];
+
+    const exported = buildCsvExport(sample, { bad_1: 'income' });
+    expect(exported.rows[0].kind).toBe('income');
+    expect(exported.validation.compatible).toBe(false);
+    expect(exported.validation.issues).toHaveLength(2);
+    expect(exported.validation.issues[0].lineNumber).toBe(2);
+    expect(exported.validation.issues[1].lineNumber).toBe(3);
   });
 });
