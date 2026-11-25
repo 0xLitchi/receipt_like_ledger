@@ -52,10 +52,23 @@ function readFontSpecAndPadding(container: HTMLElement): {
   };
 }
 
+function getFontSpecKey(spec: LiveColumnFontSpec): string {
+  return [
+    spec.whoFontSize,
+    spec.whoDotWidth,
+    spec.whoInnerGap,
+    spec.ccFontSize,
+    spec.pgFontSize,
+    spec.amtFontSize,
+    spec.amtFontWeight,
+  ].join('|');
+}
+
 /**
  * Dynamically measures visible transaction rows and sets `--col-who`, `--col-cc`, and
  * `--live-gap` CSS custom properties on the `.pt-live-list` container.
- * Recomputes automatically on data changes, container resize, and web font load completion.
+ * Recomputes automatically on data changes, container resize, breakpoint font-size changes,
+ * and web font load completion.
  */
 export function useLiveColumnWidths(
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -63,6 +76,8 @@ export function useLiveColumnWidths(
 ): { hideWho: boolean } {
   const [fontEpoch, setFontEpoch] = useState(0);
   const naturalRef = useRef<Omit<LiveColumnNaturalWidths, 'innerWidth'> | null>(null);
+  const fontSpecKeyRef = useRef<string>('');
+  const samplesRef = useRef<readonly LiveRowTextSample[]>(samples);
   const hideWho = samples.length > 0 && samples.every((s) => s.isTransfer);
 
   // Re-measure once web fonts (e.g. Fusion Pixel woff2) finish loading
@@ -83,15 +98,18 @@ export function useLiveColumnWidths(
 
   // Apply adaptive CSS variables before paint whenever rows or fonts change
   useIsomorphicLayoutEffect(() => {
+    samplesRef.current = samples;
     const el = containerRef.current;
     if (!el || samples.length === 0) {
       naturalRef.current = null;
+      fontSpecKeyRef.current = '';
       return;
     }
 
     const { spec, paddingX } = readFontSpecAndPadding(el);
     const natural = measureLiveNaturalWidths(samples, spec);
     naturalRef.current = natural;
+    fontSpecKeyRef.current = getFontSpecKey(spec);
     if (!natural) return;
 
     const innerWidth = Math.max(0, el.clientWidth - paddingX);
@@ -102,19 +120,25 @@ export function useLiveColumnWidths(
     el.style.setProperty('--live-gap', `${layout.gap}px`);
   }, [containerRef, samples, fontEpoch]);
 
-  // Re-allocate column widths smoothly on container resize without re-measuring text
+  // Re-allocate column widths smoothly on container resize; re-measure only if responsive font spec changed
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
 
     const observer = new ResizeObserver(() => {
-      const natural = naturalRef.current;
+      const currentSamples = samplesRef.current;
+      if (currentSamples.length === 0) return;
+
+      const { spec, paddingX } = readFontSpecAndPadding(el);
+      const specKey = getFontSpecKey(spec);
+      let natural = naturalRef.current;
+      if (!natural || specKey !== fontSpecKeyRef.current) {
+        natural = measureLiveNaturalWidths(currentSamples, spec);
+        naturalRef.current = natural;
+        fontSpecKeyRef.current = specKey;
+      }
       if (!natural) return;
-      const firstRow = el.querySelector<HTMLElement>('.pt-live-row');
-      const paddingX = firstRow
-        ? (parseFloat(getComputedStyle(firstRow).paddingLeft) || 0) +
-          (parseFloat(getComputedStyle(firstRow).paddingRight) || 0)
-        : 24;
+
       const innerWidth = Math.max(0, el.clientWidth - paddingX);
       const layout = computeAdaptiveLiveColumns({ innerWidth, ...natural });
 

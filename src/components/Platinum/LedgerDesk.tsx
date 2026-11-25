@@ -280,49 +280,49 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
 
   return (
     <div className="pt-desk">
-      {/* ── Window 1: Main Overview (Matches exe.v2core.com/stats top window) ── */}
-      <PlatinumWindow
-        title={`Ledger${ledgerTitleSuffix}${monthTitleSuffix}`}
-        onClose={onRefresh}
-        closeTitle="刷新数据"
-      >
-        {/* Ledger & Date Range Strip */}
-        <div className="pt-strip">
-          <PlatinumSelect
-            value={selectedLedger}
-            options={ledgerOptions}
-            onChange={handleLedgerChange}
-            ariaLabel="选择账本"
-            placeholder="全部账本"
-            minWidth={76}
-            compact
-          />
-          <PlatinumSelect
-            value={selectedMonth}
-            options={yearMonthOptions}
-            onChange={handleYearMonthChange}
-            ariaLabel="选择年月"
-            placeholder={allMonths.length > 0 ? '选择年月' : '暂无数据'}
-            minWidth={98}
-            compact
-          />
+      <div className="pt-desk-side">
+        {/* ── Window 1: Main Overview (Matches exe.v2core.com/stats top window) ── */}
+        <PlatinumWindow
+          title={`Ledger${ledgerTitleSuffix}${monthTitleSuffix}`}
+          onClose={onRefresh}
+          closeTitle="刷新数据"
+        >
+          {/* Ledger & Date Range Strip */}
+          <div className="pt-strip">
+            <PlatinumSelect
+              value={selectedLedger}
+              options={ledgerOptions}
+              onChange={handleLedgerChange}
+              ariaLabel="选择账本"
+              placeholder="全部账本"
+              minWidth={76}
+              compact
+            />
+            <PlatinumSelect
+              value={selectedMonth}
+              options={yearMonthOptions}
+              onChange={handleYearMonthChange}
+              ariaLabel="选择年月"
+              placeholder={allMonths.length > 0 ? '选择年月' : '暂无数据'}
+              minWidth={98}
+              compact
+            />
 
-          <span
-            style={{
-              marginLeft: 'auto',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              fontSize: 11,
-              color: '#333',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <button type="button" className="pt-btn compact" onClick={onOpenAdmin}>
-              后台
-            </button>
-          </span>
-        </div>
+            <span
+              style={{
+                marginLeft: 'auto',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                color: '#333',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <button type="button" className="pt-btn compact" onClick={onOpenAdmin}>
+                后台
+              </button>
+            </span>
+          </div>
 
         {/* Active Filter Chips Strip (shown only when filtered) */}
         {hasActiveFilters && (
@@ -385,16 +385,8 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
             )}
             <button
               type="button"
+              className="pt-chips-clear"
               onClick={() => onPatchFilters({ category: 'ALL', member: 'ALL', type: 'ALL', search: '' })}
-              style={{
-                marginLeft: 'auto',
-                background: 'none',
-                border: 0,
-                color: 'var(--hl)',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-                fontSize: 11,
-              }}
             >
               清除全部
             </button>
@@ -485,42 +477,45 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
         </div>
       </PlatinumWindow>
 
-      {/* ── Window 3: Transactions Feed (Matches exe.v2core.com/stats Live window) ── */}
-      <PlatinumWindow title="账单明细 · Transactions">
-        <div className="pt-strip">
-          {visibleTypeTabs.map((tp) => {
-            const label =
-              tp === 'ALL'
-                ? '全部'
-                : tp === 'EXPENSE'
-                ? '支出'
-                : tp === 'INCOME'
-                ? '收入'
-                : '转账';
-            return (
-              <button
-                key={tp}
-                type="button"
-                className={`pt-btn tab${filters.type === tp ? ' on' : ''}`}
-                aria-pressed={filters.type === tp}
-                onClick={() => onPatchFilters({ type: tp })}
-              >
-                {label}
-              </button>
-            );
-          })}
+      </div>
 
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555' }}>
-            共 {stats.count} 笔
-          </span>
-        </div>
+      <div className="pt-desk-main">
+        {/* ── Window 3: Transactions Feed (Matches exe.v2core.com/stats Live window) ── */}
+        <PlatinumWindow title="账单明细 · Transactions">
+          <div className="pt-strip">
+            {visibleTypeTabs.map((tp) => {
+              const label =
+                tp === 'ALL'
+                  ? '全部'
+                  : tp === 'EXPENSE'
+                  ? '支出'
+                  : tp === 'INCOME'
+                  ? '收入'
+                  : '转账';
+              return (
+                <button
+                  key={tp}
+                  type="button"
+                  className={`pt-btn tab${filters.type === tp ? ' on' : ''}`}
+                  aria-pressed={filters.type === tp}
+                  onClick={() => onPatchFilters({ type: tp })}
+                >
+                  {label}
+                </button>
+              );
+            })}
 
-        <div ref={liveListRef} className={`pt-live-list${hideWho ? ' no-who' : ''}`}>
-          {dateGroups.length === 0 ? (
-            <div style={{ padding: '32px 12px', textAlign: 'center', color: '#777', fontSize: 12 }}>
-              当前筛选条件下暂无记账明细
-            </div>
-          ) : (
+            <span className="pt-strip-meta">
+              共 {stats.count} 笔
+            </span>
+          </div>
+
+          <div ref={liveListRef} className={`pt-live-list${hideWho ? ' no-who' : ''}`}>
+            {dateGroups.length === 0 ? (
+              <div className="pt-empty-state">
+                当前筛选条件下暂无记账明细
+              </div>
+            ) : (
             dateGroups.map((group) => (
               <React.Fragment key={group.date}>
                 <div className="pt-live-group-header">
@@ -636,17 +631,8 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
 
                         {isActive && (
                           <div className="pt-inspector">
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                marginBottom: 6,
-                                paddingBottom: 4,
-                                borderBottom: '1px solid #ddd',
-                              }}
-                            >
-                              <b style={{ fontSize: 12 }}>
+                            <div className="pt-inspector-head">
+                              <b className="pt-inspector-title">
                                 {noteText ||
                                   (isTransfer ? `${rowCatLabel} · ${transferLedgerLabel}` : cat) ||
                                   '交易详情'}
@@ -659,14 +645,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                 收起
                               </button>
                             </div>
-                            <div
-                              style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                                gap: '4px 16px',
-                                fontSize: 11,
-                              }}
-                            >
+                            <div className="pt-inspector-grid">
                               <div>
                                 <span style={{ color: '#666' }}>日期: </span>
                                 <span style={{ fontFamily: 'var(--font-mono)' }}>{tx.date}</span>
@@ -725,16 +704,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                 </div>
                               )}
                             </div>
-                            <div
-                              style={{
-                                marginTop: 6,
-                                paddingTop: 4,
-                                borderTop: '1px dashed #ccc',
-                                fontSize: 10,
-                                color: '#777',
-                                fontFamily: 'var(--font-mono)',
-                              }}
-                            >
+                            <div className="pt-inspector-id">
                               ID: {tx.sourceId || tx.id}
                             </div>
                           </div>
@@ -779,7 +749,8 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
             {accessBadge}
           </span>
         </div>
-      </PlatinumWindow>
+        </PlatinumWindow>
+      </div>
     </div>
   );
 };

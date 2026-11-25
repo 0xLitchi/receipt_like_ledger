@@ -585,7 +585,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               borderBottom: '1px solid #262626',
               background: statusMsg.type === 'success' ? '#dcfce7' : '#fee2e2',
               color: statusMsg.type === 'success' ? '#166534' : '#991b1b',
-              fontSize: 11,
               fontWeight: 'bold',
             }}
           >
@@ -925,7 +924,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 {loadingLogs ? '加载中…' : '刷新日志'}
               </button>
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555' }}>
+              <span className="pt-strip-meta">
                 共 {filteredLogs.length} 条
               </span>
             </div>
@@ -966,14 +965,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     ) : (
                       filteredLogs.map((l) => (
                         <tr key={l.id}>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'nowrap' }}>
+                          <td style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                             {l.timestamp}
                           </td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{l.source}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 'bold' }}>
+                          <td style={{ fontFamily: 'var(--font-mono)' }}>{l.source}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>
                             {l.action}
                           </td>
-                          <td style={{ fontSize: 11, wordBreak: 'break-all' }}>{l.details}</td>
+                          <td style={{ wordBreak: 'break-all' }}>{l.details}</td>
                         </tr>
                       ))
                     )}
@@ -1009,7 +1008,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 {loadingApiLogs ? '加载中…' : '刷新请求日志'}
               </button>
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555' }}>
+              <span className="pt-strip-meta">
                 共 {filteredApiLogs.length} 条
               </span>
             </div>
@@ -1053,26 +1052,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     ) : (
                       filteredApiLogs.map((l) => (
                         <tr key={l.id}>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'nowrap' }}>
+                          <td style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                             {l.timestamp}
                           </td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 'bold' }}>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>
                             {l.method}
                           </td>
                           <td
                             style={{
                               fontFamily: 'var(--font-mono)',
-                              fontSize: 11,
                               fontWeight: 'bold',
                               color: l.status_code >= 400 ? '#991b1b' : '#166534',
                             }}
                           >
                             {l.status_code}
                           </td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{l.endpoint}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{l.ip_address}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{l.execution_ms}ms</td>
-                          <td style={{ fontSize: 11, wordBreak: 'break-all' }}>{l.payload_summary}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)' }}>{l.endpoint}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)' }}>{l.ip_address}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)' }}>{l.execution_ms}ms</td>
+                          <td style={{ wordBreak: 'break-all' }}>{l.payload_summary}</td>
                         </tr>
                       ))
                     )}
