@@ -527,11 +527,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   return (
-    <div className="pt-desk" style={{ maxWidth: 1120 }}>
+    <div className="pt-admin-desk">
       <PlatinumWindow
         title="Admin Console · 账本管理后台"
         onClose={onClose}
         closeTitle="返回账本"
+        className="pt-admin-window"
+        frameClassName="pt-admin-frame"
       >
         {/* Top Navigation Tab Strip */}
         <div className="pt-strip">
@@ -577,6 +579,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* Status Banner */}
         {statusMsg && (
           <div
+            className="pt-admin-banner"
             style={{
               padding: '6px 12px',
               borderBottom: '1px solid #262626',
@@ -600,7 +603,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="筛选日期 / 备注 / 成员 / 分类 / 金额 / 账本…"
-                style={{ width: 240, maxWidth: '100%' }}
+                style={{ width: 'clamp(220px, 22vw, 360px)', maxWidth: '100%' }}
               />
               <button
                 type="button"
@@ -656,11 +659,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
             </div>
 
-            <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
-              <table className="pt-table">
+            <div className="pt-admin-table-wrap">
+              <table className="pt-table pt-admin-data-table">
                 <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                   <tr>
-                    <th style={{ width: 28, textAlign: 'center' }}>
+                    <th style={{ width: 32, textAlign: 'center' }}>
                       <input
                         type="checkbox"
                         checked={isAllFilteredSelected}
@@ -668,31 +671,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         aria-label="全选"
                       />
                     </th>
-                    <th style={{ width: 68, cursor: 'pointer' }} onClick={() => handleSort('tx_type')}>
+                    <th style={{ width: 72, cursor: 'pointer' }} onClick={() => handleSort('tx_type')}>
                       类型{sortIndicator('tx_type')}
                     </th>
-                    <th style={{ width: 102, cursor: 'pointer' }} onClick={() => handleSort('date')}>
+                    <th style={{ width: 106, cursor: 'pointer' }} onClick={() => handleSort('date')}>
                       日期{sortIndicator('date')}
                     </th>
-                    <th style={{ width: 78, cursor: 'pointer' }} onClick={() => handleSort('member')}>
+                    <th
+                      style={{ width: 'clamp(84px, 7.5vw, 140px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('member')}
+                    >
                       成员{sortIndicator('member')}
                     </th>
-                    <th style={{ width: 84, cursor: 'pointer' }} onClick={() => handleSort('category')}>
+                    <th
+                      style={{ width: 'clamp(84px, 7.5vw, 140px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('category')}
+                    >
                       主分类{sortIndicator('category')}
                     </th>
-                    <th style={{ width: 84, cursor: 'pointer' }} onClick={() => handleSort('subcategory')}>
+                    <th
+                      style={{ width: 'clamp(88px, 8vw, 150px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('subcategory')}
+                    >
                       子分类{sortIndicator('subcategory')}
                     </th>
-                    <th style={{ minWidth: 130, cursor: 'pointer' }} onClick={() => handleSort('title')}>
+                    <th style={{ minWidth: 180, cursor: 'pointer' }} onClick={() => handleSort('title')}>
                       备注{sortIndicator('title')}
                     </th>
-                    <th style={{ width: 96, cursor: 'pointer' }} onClick={() => handleSort('amount')}>
+                    <th
+                      style={{ width: 'clamp(96px, 8vw, 136px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('amount')}
+                    >
                       金额{sortIndicator('amount')}
                     </th>
-                    <th style={{ width: 96, cursor: 'pointer' }} onClick={() => handleSort('ledger')}>
+                    <th
+                      style={{ width: 'clamp(98px, 8.5vw, 150px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('ledger')}
+                    >
                       账本(转出){sortIndicator('ledger')}
                     </th>
-                    <th style={{ width: 96, cursor: 'pointer' }} onClick={() => handleSort('to_ledger')}>
+                    <th
+                      style={{ width: 'clamp(98px, 8.5vw, 150px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('to_ledger')}
+                    >
                       转入账本{sortIndicator('to_ledger')}
                     </th>
                   </tr>
@@ -894,7 +915,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 value={logSearchQuery}
                 onChange={(e) => setLogSearchQuery(e.target.value)}
                 placeholder="筛选动作 / 来源 / 详情…"
-                style={{ width: 240, maxWidth: '100%' }}
+                style={{ width: 'clamp(220px, 22vw, 360px)', maxWidth: '100%' }}
               />
               <button
                 type="button"
@@ -910,7 +931,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {logsError ? (
-              <div style={{ padding: 24, textAlign: 'center' }}>
+              <div className="pt-admin-panel-body" style={{ textAlign: 'center' }}>
                 <p style={{ color: '#991b1b', fontWeight: 'bold', margin: '0 0 8px' }}>
                   日志加载失败: {logsError}
                 </p>
@@ -919,14 +940,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
-                <table className="pt-table">
+              <div className="pt-admin-table-wrap">
+                <table className="pt-table pt-admin-log-table">
                   <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                     <tr>
-                      <th style={{ width: 150 }}>时间</th>
-                      <th style={{ width: 70 }}>来源</th>
-                      <th style={{ width: 90 }}>动作</th>
-                      <th>详情</th>
+                      <th style={{ width: 158 }}>时间</th>
+                      <th style={{ width: 84 }}>来源</th>
+                      <th style={{ width: 100 }}>动作</th>
+                      <th style={{ minWidth: 240 }}>详情</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -978,7 +999,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 value={apiLogSearchQuery}
                 onChange={(e) => setApiLogSearchQuery(e.target.value)}
                 placeholder="筛选方法 / 路径 / 状态码 / IP…"
-                style={{ width: 240, maxWidth: '100%' }}
+                style={{ width: 'clamp(220px, 22vw, 360px)', maxWidth: '100%' }}
               />
               <button
                 type="button"
@@ -994,7 +1015,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {apiLogsError ? (
-              <div style={{ padding: 24, textAlign: 'center' }}>
+              <div className="pt-admin-panel-body" style={{ textAlign: 'center' }}>
                 <p style={{ color: '#991b1b', fontWeight: 'bold', margin: '0 0 8px' }}>
                   请求日志加载失败: {apiLogsError}
                 </p>
@@ -1003,17 +1024,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
-                <table className="pt-table">
+              <div className="pt-admin-table-wrap">
+                <table className="pt-table pt-admin-reqlog-table">
                   <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                     <tr>
-                      <th style={{ width: 145 }}>时间</th>
-                      <th style={{ width: 64 }}>方法</th>
-                      <th style={{ width: 60 }}>状态</th>
-                      <th style={{ width: 140 }}>路径</th>
-                      <th style={{ width: 110 }}>IP</th>
-                      <th style={{ width: 64 }}>耗时</th>
-                      <th>摘要</th>
+                      <th style={{ width: 155 }}>时间</th>
+                      <th style={{ width: 68 }}>方法</th>
+                      <th style={{ width: 64 }}>状态</th>
+                      <th style={{ width: 160 }}>路径</th>
+                      <th style={{ width: 124 }}>IP</th>
+                      <th style={{ width: 70 }}>耗时</th>
+                      <th style={{ minWidth: 220 }}>摘要</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1069,8 +1090,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* ==================== TAB 4: GENERAL ==================== */}
         {activeTab === 'general' && (
-          <div style={{ padding: 16 }}>
-            <table className="pt-table" style={{ maxWidth: 640 }}>
+          <div className="pt-admin-panel-body">
+            <table className="pt-table" style={{ maxWidth: 720 }}>
               <tbody>
                 <tr>
                   <th style={{ width: 160 }}>界面风格</th>

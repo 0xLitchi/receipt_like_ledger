@@ -967,3 +967,81 @@ textarea.pt-input {
   border-color: var(--hl);
   background: #eef2ff;
 }
+
+/* ── Full-Viewport Admin Console Layout ── */
+.pt-admin-desk {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 440px;
+  padding: 8px 10px 10px;
+  padding-top: max(8px, env(safe-area-inset-top));
+  padding-right: max(10px, env(safe-area-inset-right));
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  padding-left: max(10px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+}
+.pt-admin-window {
+  flex: 1 1 0;
+  min-height: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pt-admin-window > .pt-titlebar {
+  flex: none;
+}
+.pt-admin-frame {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pt-admin-frame > .pt-strip,
+.pt-admin-frame > .pt-statusbar,
+.pt-admin-banner {
+  flex: none;
+}
+.pt-admin-table-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+}
+.pt-admin-table-wrap .pt-table th:first-child,
+.pt-admin-table-wrap .pt-table td:first-child {
+  border-left: 0;
+}
+.pt-admin-table-wrap .pt-table th:last-child,
+.pt-admin-table-wrap .pt-table td:last-child {
+  border-right: 0;
+}
+.pt-admin-table-wrap .pt-table thead th {
+  border-top: 0;
+}
+.pt-admin-data-table {
+  min-width: 960px;
+}
+.pt-admin-log-table {
+  min-width: 680px;
+}
+.pt-admin-reqlog-table {
+  min-width: 820px;
+}
+.pt-admin-panel-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+@media (max-width: 560px) {
+  .pt-admin-desk {
+    padding: 4px;
+    padding-top: max(4px, env(safe-area-inset-top));
+    padding-right: max(4px, env(safe-area-inset-right));
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+    padding-left: max(4px, env(safe-area-inset-left));
+  }
+}
