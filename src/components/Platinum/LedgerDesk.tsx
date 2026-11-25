@@ -132,7 +132,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     setExpandedId(null);
   }, [selectedMonth, selectedLedger]);
 
-  // Category breakdown: precise to subcategory level, excludes transfers
+  // Category breakdown: 杂项 aggregates by subcategory, other categories aggregate by main category (excludes transfers)
   const categoryRows = useMemo<BreakdownRow[]>(() => {
     if (filters.type === 'TRANSFER') return [];
 

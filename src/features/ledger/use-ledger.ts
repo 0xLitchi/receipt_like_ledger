@@ -55,15 +55,17 @@ export const categoryLabel = (t: Pick<Transaction, 'category' | 'subcategory'>):
 };
 
 /**
- * 汇总键：精确到二级分类（主分类/二级分类），无二级分类时回退主分类。
+ * 汇总键：“杂项”按二级分类汇总（如 "杂项/麻将"），其余按一级分类汇总。
  * 用于分类统计面板及「点击分类 → 过滤明细」的匹配。
  */
 export const summaryKey = (
   t: Pick<Transaction, 'category' | 'subcategory' | 'tx_type' | 'to_ledger'>
 ): string => {
-  const main = (t.category || '').trim() || (isTransferTransaction(t) ? '转账' : '其它');
+  if (isTransferTransaction(t)) return (t.category || '').trim() || '转账';
+  const main = (t.category || '').trim() || '其它';
   const sub = (t.subcategory || '').trim();
-  return sub ? `${main}/${sub}` : main;
+  if (main === '杂项' && sub) return `杂项/${sub}`;
+  return main;
 };
 
 /**

@@ -68,10 +68,14 @@ describe('filterTransactions', () => {
     expect(filterTransactions(rows, { ...base, type: 'EXPENSE' })).toHaveLength(1);
   });
 
-  it('filters by exact subcategory summary key', () => {
+  it('filters by summary key (杂项 splits by subcategory)', () => {
     expect(filterTransactions(rows, { ...base, category: '杂项/麻将' })).toHaveLength(1);
-    expect(filterTransactions(rows, { ...base, category: '餐饮/早餐' })).toHaveLength(1);
-    expect(filterTransactions(rows, { ...base, category: '餐饮' })).toHaveLength(0);
+    expect(filterTransactions(rows, { ...base, category: '杂项' })).toHaveLength(0);
+  });
+
+  it('filters by main category for non-杂项 rows', () => {
+    expect(filterTransactions(rows, { ...base, category: '餐饮' })).toHaveLength(1);
+    expect(filterTransactions(rows, { ...base, category: '餐饮/早餐' })).toHaveLength(0);
   });
 
   it('filters by member and keyword', () => {
@@ -85,15 +89,27 @@ describe('filterTransactions', () => {
 });
 
 describe('summaryKey', () => {
-  it('is precise to subcategory for all categories', () => {
-    expect(summaryKey(t({ category: '餐饮', subcategory: '早餐' }))).toBe('餐饮/早餐');
-    expect(summaryKey(t({ category: '住房', subcategory: '房租' }))).toBe('住房/房租');
-    expect(summaryKey(t({ category: '杂项', subcategory: '麻将' }))).toBe('杂项/麻将');
+  it('uses main category for non-杂项 rows', () => {
+    expect(summaryKey(t({ category: '餐饮', subcategory: '早餐' }))).toBe('餐饮');
+    expect(summaryKey(t({ category: '住房', subcategory: '房租' }))).toBe('住房');
+    expect(summaryKey(t({ category: '收入', subcategory: '工资' }))).toBe('收入');
   });
 
-  it('falls back to main category when subcategory is empty', () => {
+  it('splits 杂项 by subcategory', () => {
+    expect(summaryKey(t({ category: '杂项', subcategory: '麻将' }))).toBe('杂项/麻将');
+    expect(summaryKey(t({ category: '杂项', subcategory: '日用' }))).toBe('杂项/日用');
+  });
+
+  it('falls back to bare 杂项 or 其它 when category/subcategory is empty', () => {
     expect(summaryKey(t({ category: '杂项', subcategory: '' }))).toBe('杂项');
     expect(summaryKey(t({ category: '餐饮', subcategory: '' }))).toBe('餐饮');
+    expect(summaryKey(t({ category: '', subcategory: '' }))).toBe('其它');
+  });
+
+  it('handles transfers without appending subcategory', () => {
+    expect(
+      summaryKey(t({ tx_type: 'transfer', to_ledger: '储蓄', category: '转账', subcategory: '储蓄划转' }))
+    ).toBe('转账');
   });
 });
 
