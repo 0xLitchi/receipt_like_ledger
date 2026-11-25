@@ -87,6 +87,7 @@ interface PlatinumSelectProps {
   placeholder?: string;
   disabled?: boolean;
   minWidth?: number;
+  compact?: boolean;
 }
 
 /**
@@ -102,6 +103,7 @@ export const PlatinumSelect: React.FC<PlatinumSelectProps> = ({
   placeholder = '—',
   disabled = false,
   minWidth = 84,
+  compact = false,
 }) => {
   const [open, setOpen] = useState(false);
   const [highlightedIdx, setHighlightedIdx] = useState(-1);
@@ -180,7 +182,7 @@ export const PlatinumSelect: React.FC<PlatinumSelectProps> = ({
       <button
         ref={triggerRef}
         type="button"
-        className={`pt-select${open ? ' open' : ''}`}
+        className={`pt-select${compact ? ' compact' : ''}${open ? ' open' : ''}`}
         disabled={isDisabled}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
@@ -190,14 +192,14 @@ export const PlatinumSelect: React.FC<PlatinumSelectProps> = ({
       >
         <span className="pt-select-label">{selectedOption ? selectedOption.label : placeholder}</span>
         <span className="pt-select-arrows" aria-hidden="true">
-          <svg viewBox="0 0 7 11" width="7" height="11">
+          <svg viewBox="0 0 7 11" width={compact ? 6 : 7} height={compact ? 9 : 11}>
             <path d="M3.5 0L7 4H0zM3.5 11L0 7h7z" fill="currentColor" />
           </svg>
         </span>
       </button>
 
       {open && options.length > 0 && (
-        <div className="pt-menu" role="listbox" aria-label={ariaLabel}>
+        <div className={`pt-menu${compact ? ' compact' : ''}`} role="listbox" aria-label={ariaLabel}>
           {options.map((opt, idx) => {
             const isSelected = opt.value === value;
             const isHighlighted = idx === highlightedIdx;

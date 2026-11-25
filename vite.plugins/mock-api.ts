@@ -17,7 +17,7 @@ interface MockTx {
 const sample: MockTx[] = [
   { id: 't0', title: '早餐·豆浆油条', date: '2026-10-20', amount: -12.5, member: '荔枝', category: '餐饮', subcategory: '早餐', ledger: 'Default', tx_type: 'normal', to_ledger: '' },
   { id: 't1', title: '超市采购', date: '2026-10-20', amount: -238.9, member: '扶正', category: '杂项', subcategory: '日用', ledger: 'Default', tx_type: 'normal', to_ledger: '' },
-  { id: 't2', title: '月度定存', date: '2026-10-16', amount: 2000, member: '荔枝', category: '转账', subcategory: '', ledger: 'Default', tx_type: 'transfer', to_ledger: '储蓄' },
+  { id: 't2', title: '月度定存', date: '2026-10-16', amount: 2000, member: '', category: '转账', subcategory: '储蓄划转', ledger: 'Default', tx_type: 'transfer', to_ledger: '储蓄' },
   { id: 't3', title: '房租', date: '2026-10-05', amount: -3900, member: '荔枝', category: '住房', subcategory: '押金', ledger: 'Default', tx_type: 'normal', to_ledger: '' },
   { id: 't4', title: '本月工资', date: '2026-10-10', amount: 12800, member: '扶正', category: '收入', subcategory: '工资', ledger: 'Default', tx_type: 'normal', to_ledger: '' },
   { id: 't5', title: '奶茶', date: '2026-10-18', amount: -18, member: '荔枝', category: '餐饮', subcategory: '饮料', ledger: 'Default', tx_type: 'normal', to_ledger: '' },
@@ -100,9 +100,11 @@ export function mockApi(): Plugin {
                 title: String(body.title ?? ''),
                 date: String(body.date ?? new Date().toISOString().split('T')[0]),
                 amount: isTransfer ? Math.abs(Number(body.amount) || 0) : Number(body.amount) || 0,
-                member: String(body.member ?? '默认'),
+                member: isTransfer ? '' : String(body.member ?? '默认'),
                 category: String(body.category ?? (isTransfer ? '转账' : '其它')),
-                subcategory: String(body.subcategory ?? ''),
+                subcategory: isTransfer
+                  ? String(body.subcategory ?? '').trim() || '内部转账'
+                  : String(body.subcategory ?? ''),
                 ledger: String(body.ledger ?? 'Default') || 'Default',
                 tx_type: isTransfer ? 'transfer' : 'normal',
                 to_ledger: isTransfer ? String(body.to_ledger ?? '') : '',
@@ -124,9 +126,11 @@ export function mockApi(): Plugin {
                   title: String(body.title ?? ''),
                   date: String(body.date ?? store[idx].date),
                   amount: isTransfer ? Math.abs(Number(body.amount) || 0) : Number(body.amount) || 0,
-                  member: String(body.member ?? '默认'),
+                  member: isTransfer ? '' : String(body.member ?? '默认'),
                   category: String(body.category ?? (isTransfer ? '转账' : '其它')),
-                  subcategory: String(body.subcategory ?? ''),
+                  subcategory: isTransfer
+                    ? String(body.subcategory ?? '').trim() || '内部转账'
+                    : String(body.subcategory ?? ''),
                   ledger: String(body.ledger ?? 'Default') || 'Default',
                   tx_type: isTransfer ? 'transfer' : 'normal',
                   to_ledger: isTransfer ? String(body.to_ledger ?? '') : '',

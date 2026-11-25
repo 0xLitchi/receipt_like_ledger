@@ -26,3 +26,4 @@ dist-ssr
 # OpenChamber screenshots
 .openchamber/
 .wrangler/
+.dev.vars

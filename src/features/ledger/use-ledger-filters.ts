@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { LedgerFilters, LedgerType } from '../../types';
 
 const DEFAULT_FILTERS: LedgerFilters = {
-  ledger: 'Default',
+  ledger: 'ALL',
   month: '',
   member: 'ALL',
   category: 'ALL',

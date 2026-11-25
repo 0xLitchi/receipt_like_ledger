@@ -5,7 +5,37 @@ export interface SharedEnv {
   ADMIN_PASSWORD?: string;
   ACCESS_TOKEN?: string;
   ALLOWED_ORIGINS?: string;
+  DB_TABLE_PREFIX?: string;
 }
+
+export interface TableNames {
+  prefix: string;
+  transactions: string;
+  activityLogs: string;
+  apiRequestLogs: string;
+  adminSessions: string;
+  appSettings: string;
+}
+
+const SAFE_TABLE_PREFIX_RE = /^[a-z][a-z0-9_]{0,15}$/i;
+
+export const resolveTablePrefix = (rawPrefix?: string | null): string => {
+  const cleaned = cleanSecretString(rawPrefix);
+  if (!cleaned) return '';
+  return SAFE_TABLE_PREFIX_RE.test(cleaned) ? cleaned : '';
+};
+
+export const getTableNames = (env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>): TableNames => {
+  const prefix = resolveTablePrefix(env?.DB_TABLE_PREFIX);
+  return {
+    prefix,
+    transactions: `${prefix}transactions`,
+    activityLogs: `${prefix}activity_logs`,
+    apiRequestLogs: `${prefix}api_request_logs`,
+    adminSessions: `${prefix}admin_sessions`,
+    appSettings: `${prefix}app_settings`,
+  };
+};
 
 export interface TransactionRow {
   id: string;
@@ -94,9 +124,13 @@ export const getCorsHeaders = (request: Request, env: SharedEnv): Record<string,
 };
 
 // 活动日志表（数据变更审计，幂等建表）
-export const ensureActivityLogsTable = async (db: D1Database): Promise<void> => {
+export const ensureActivityLogsTable = async (
+  db: D1Database,
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>
+): Promise<void> => {
+  const { activityLogs } = getTableNames(env);
   await db.prepare(
-    `CREATE TABLE IF NOT EXISTS activity_logs (
+    `CREATE TABLE IF NOT EXISTS ${activityLogs} (
       id TEXT PRIMARY KEY,
       timestamp TEXT NOT NULL,
       source TEXT NOT NULL,
@@ -111,14 +145,16 @@ export const recordActivityLog = async (
   db: D1Database,
   source: 'web' | 'api' | 'import',
   action: 'create' | 'update' | 'delete' | 'batch_save',
-  details: string
+  details: string,
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>
 ): Promise<void> => {
   try {
-    await ensureActivityLogsTable(db);
+    await ensureActivityLogsTable(db, env);
+    const { activityLogs } = getTableNames(env);
     const id = `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const timestamp = new Date().toISOString();
     await db.prepare(
-      `INSERT INTO activity_logs (id, timestamp, source, action, details) VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO ${activityLogs} (id, timestamp, source, action, details) VALUES (?, ?, ?, ?, ?)`
     ).bind(id, timestamp, source, action, details).run();
   } catch (e) {
     console.warn('Failed to record log', e);
@@ -126,9 +162,13 @@ export const recordActivityLog = async (
 };
 
 // API 请求日志表 (Req Log 幂等建表)
-export const ensureApiRequestLogsTable = async (db: D1Database): Promise<void> => {
+export const ensureApiRequestLogsTable = async (
+  db: D1Database,
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>
+): Promise<void> => {
+  const { apiRequestLogs } = getTableNames(env);
   await db.prepare(
-    `CREATE TABLE IF NOT EXISTS api_request_logs (
+    `CREATE TABLE IF NOT EXISTS ${apiRequestLogs} (
       id TEXT PRIMARY KEY,
       timestamp TEXT NOT NULL,
       method TEXT NOT NULL,
@@ -157,11 +197,13 @@ export const recordApiRequestLog = async (
     tokenUsed?: string;
     payloadSummary?: string;
     executionMs?: number;
-  }
+  },
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>
 ): Promise<void> => {
   if (!db) return;
   try {
-    await ensureApiRequestLogsTable(db);
+    await ensureApiRequestLogsTable(db, env);
+    const { apiRequestLogs } = getTableNames(env);
     const id = `apilog_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const timestamp = new Date().toISOString();
     const tokenMasked = logData.tokenUsed
@@ -169,7 +211,7 @@ export const recordApiRequestLog = async (
       : 'none';
 
     await db.prepare(
-      `INSERT INTO api_request_logs
+      `INSERT INTO ${apiRequestLogs}
        (id, timestamp, method, endpoint, status_code, success, ip_address, user_agent, token_used, payload_summary, execution_ms)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
@@ -191,9 +233,13 @@ export const recordApiRequestLog = async (
 };
 
 // 管理员会话表（幂等建表）
-export const ensureAdminSessionsTable = async (db: D1Database): Promise<void> => {
+export const ensureAdminSessionsTable = async (
+  db: D1Database,
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>
+): Promise<void> => {
+  const { adminSessions } = getTableNames(env);
   await db.prepare(
-    `CREATE TABLE IF NOT EXISTS admin_sessions (
+    `CREATE TABLE IF NOT EXISTS ${adminSessions} (
       token TEXT PRIMARY KEY,
       expires_at DATETIME NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -202,11 +248,16 @@ export const ensureAdminSessionsTable = async (db: D1Database): Promise<void> =>
 };
 
 // 校验会话 token 是否有效
-export const isValidSessionToken = async (db: D1Database, token: string): Promise<boolean> => {
+export const isValidSessionToken = async (
+  db: D1Database,
+  token: string,
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>
+): Promise<boolean> => {
   if (!token) return false;
   try {
-    await ensureAdminSessionsTable(db);
-    const row = await db.prepare('SELECT expires_at FROM admin_sessions WHERE token = ?')
+    await ensureAdminSessionsTable(db, env);
+    const { adminSessions } = getTableNames(env);
+    const row = await db.prepare(`SELECT expires_at FROM ${adminSessions} WHERE token = ?`)
       .bind(token)
       .first() as { expires_at?: string } | null;
     if (!row || !row.expires_at) return false;
@@ -236,55 +287,70 @@ export const isAdminAuthorized = async (
       url.searchParams.get('admin_token')
   );
   if (token && db) {
-    return isValidSessionToken(db, token);
+    return isValidSessionToken(db, token, env);
   }
   return false;
 };
 
 // 签发会话 token（默认 7 天有效）
-export const createAdminSession = async (db: D1Database, ttlMs = 7 * 24 * 60 * 60 * 1000): Promise<string> => {
-  await ensureAdminSessionsTable(db);
+export const createAdminSession = async (
+  db: D1Database,
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>,
+  ttlMs = 7 * 24 * 60 * 60 * 1000
+): Promise<string> => {
+  await ensureAdminSessionsTable(db, env);
+  const { adminSessions } = getTableNames(env);
   const token = `sess_${crypto.randomUUID().replace(/-/g, '')}${Math.random().toString(36).substring(2, 10)}`;
   const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-  await db.prepare('INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?)').bind(token, expiresAt).run();
+  await db.prepare(`INSERT INTO ${adminSessions} (token, expires_at) VALUES (?, ?)`).bind(token, expiresAt).run();
   return token;
 };
 
 // 删除会话（登出）
-export const deleteAdminSession = async (db: D1Database, token: string): Promise<void> => {
+export const deleteAdminSession = async (
+  db: D1Database,
+  token: string,
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>
+): Promise<void> => {
   if (!token) return;
   try {
-    await db.prepare('DELETE FROM admin_sessions WHERE token = ?').bind(token).run();
+    const { adminSessions } = getTableNames(env);
+    await db.prepare(`DELETE FROM ${adminSessions} WHERE token = ?`).bind(token).run();
   } catch (e) {
     console.warn('Failed to delete session token', e);
   }
 };
 
-// 幂等补齐 transactions 表的转账扩展字段（兼容存量 D1 库）
-let transferColumnsEnsured = false;
+// 幂等补齐 transactions 表的转账扩展字段（兼容存量 D1 库；按表名缓存避免跨前缀跳过）
+const ensuredTransferTables = new Set<string>();
 
-export const ensureTransactionTransferColumns = async (db: D1Database): Promise<void> => {
-  if (transferColumnsEnsured) return;
+export const ensureTransactionTransferColumns = async (
+  db: D1Database,
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>
+): Promise<void> => {
+  const { transactions } = getTableNames(env);
+  if (ensuredTransferTables.has(transactions)) return;
   try {
-    const { results } = await db.prepare('PRAGMA table_info(transactions)').all<{ name: string }>();
+    const { results } = await db.prepare(`PRAGMA table_info(${transactions})`).all<{ name: string }>();
     const cols = new Set((results || []).map((c) => c.name));
+    if (cols.size === 0) return;
     if (!cols.has('tx_type')) {
       try {
-        await db.prepare("ALTER TABLE transactions ADD COLUMN tx_type TEXT DEFAULT 'normal'").run();
+        await db.prepare(`ALTER TABLE ${transactions} ADD COLUMN tx_type TEXT DEFAULT 'normal'`).run();
       } catch {
         // 并发请求已添加时忽略
       }
     }
     if (!cols.has('to_ledger')) {
       try {
-        await db.prepare("ALTER TABLE transactions ADD COLUMN to_ledger TEXT DEFAULT ''").run();
+        await db.prepare(`ALTER TABLE ${transactions} ADD COLUMN to_ledger TEXT DEFAULT ''`).run();
       } catch {
         // 并发请求已添加时忽略
       }
     }
-    transferColumnsEnsured = true;
+    ensuredTransferTables.add(transactions);
   } catch (e) {
-    console.warn('Failed to ensure transfer columns on transactions', e);
+    console.warn(`Failed to ensure transfer columns on ${transactions}`, e);
   }
 };
 
@@ -292,14 +358,16 @@ export const ensureTransactionTransferColumns = async (db: D1Database): Promise<
 export const insertTransactionsBatch = async (
   db: D1Database,
   body: unknown,
-  source: 'web' | 'api'
+  source: 'web' | 'api',
+  env?: Pick<SharedEnv, 'DB_TABLE_PREFIX'>
 ): Promise<{ success: boolean; status: number; message?: string; data?: TransactionRow | TransactionRow[]; summaryText?: string }> => {
   const rawItems = Array.isArray(body) ? body : [body];
   if (rawItems.length === 0) {
     return { success: false, status: 400, message: '请求体不能为空' };
   }
 
-  await ensureTransactionTransferColumns(db);
+  await ensureTransactionTransferColumns(db, env);
+  const { transactions } = getTableNames(env);
 
   const insertedList: TransactionRow[] = [];
   const summaryParts: string[] = [];
@@ -325,7 +393,7 @@ export const insertTransactionsBatch = async (
       return { success: false, status: 400, message: `金额字段 amt/amount 非法: ${String(rawAmt)}` };
     }
 
-    const member = item.tag !== undefined ? String(item.tag) : (item.member !== undefined ? String(item.member) : '默认');
+    let member = item.tag !== undefined ? String(item.tag) : (item.member !== undefined ? String(item.member) : '默认');
 
     let category = item.category !== undefined ? String(item.category) : '其它';
     let subcategory = item.subcategory !== undefined ? String(item.subcategory) : '';
@@ -351,13 +419,17 @@ export const insertTransactionsBatch = async (
 
     if (txType === 'transfer') {
       amount = Math.abs(amount);
+      member = '';
       if (!category || category === '其它') {
         category = '转账';
+      }
+      if (!subcategory) {
+        subcategory = '内部转账';
       }
     }
 
     await db.prepare(
-      `INSERT INTO transactions (id, title, date, amount, member, category, subcategory, ledger, tx_type, to_ledger)
+      `INSERT INTO ${transactions} (id, title, date, amount, member, category, subcategory, ledger, tx_type, to_ledger)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(id, title, date, amount, member, category, subcategory, ledger, txType, txType === 'transfer' ? toLedger : '').run();
 
@@ -382,7 +454,7 @@ export const insertTransactionsBatch = async (
     // 记录活动日志
     const logPrefix = txType === 'transfer' ? `新增转账 (${ledger}→${toLedger})` : '新增账目';
     const logDetails = `${logPrefix}: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}) 日期:${date}`;
-    await recordActivityLog(db, source, 'create', logDetails);
+    await recordActivityLog(db, source, 'create', logDetails, env);
   }
 
   return {

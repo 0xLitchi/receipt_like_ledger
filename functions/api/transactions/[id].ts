@@ -3,6 +3,7 @@ import {
   ensureTransactionTransferColumns,
   getClientIp,
   getCorsHeaders,
+  getTableNames,
   insertTransactionsBatch,
   isAdminAuthorized,
   recordActivityLog,
@@ -57,7 +58,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       tokenUsed: urlToken,
       payloadSummary: errorMsg,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
 
     return new Response(
       JSON.stringify({ success: false, message: errorMsg }),
@@ -87,7 +88,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       tokenUsed: urlToken,
       payloadSummary: errorMsg,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
 
     return new Response(
       JSON.stringify({ success: false, message: errorMsg }),
@@ -110,7 +111,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     };
 
     const source: 'web' | 'api' = isTokenAuthorized ? 'api' : 'web';
-    const result = await insertTransactionsBatch(env.DB, item, source);
+    const result = await insertTransactionsBatch(env.DB, item, source, env);
 
     await recordApiRequestLog(env.DB, {
       method: 'GET',
@@ -122,7 +123,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       tokenUsed: urlToken,
       payloadSummary: result.summaryText || result.message || 'GET 追加账目',
       executionMs: Date.now() - startTime,
-    });
+    }, env);
 
     return new Response(JSON.stringify(result), {
       status: result.status,
@@ -140,7 +141,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       tokenUsed: urlToken,
       payloadSummary: `系统异常: ${message}`,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
 
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
@@ -178,7 +179,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       tokenUsed: urlToken,
       payloadSummary: errorMsg,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
 
     return new Response(
       JSON.stringify({ success: false, message: errorMsg }),
@@ -196,7 +197,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const body = await request.json() as unknown;
     const source: 'web' | 'api' = isTokenAuthorized ? 'api' : 'web';
-    const result = await insertTransactionsBatch(env.DB, body, source);
+    const result = await insertTransactionsBatch(env.DB, body, source, env);
 
     await recordApiRequestLog(env.DB, {
       method: 'POST',
@@ -208,7 +209,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       tokenUsed: urlToken,
       payloadSummary: result.summaryText || result.message || 'POST 追加账目',
       executionMs: Date.now() - startTime,
-    });
+    }, env);
 
     return new Response(JSON.stringify(result), {
       status: result.status,
@@ -226,7 +227,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       tokenUsed: urlToken,
       payloadSummary: `解析 Body 或插入失败: ${message}`,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
 
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
@@ -256,7 +257,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       tokenUsed: request.headers.get('X-Admin-Token') || '',
       payloadSummary: '未授权：更新账目被拒绝',
       executionMs: Date.now() - startTime,
-    });
+    }, env);
     return new Response(JSON.stringify({ success: false, message: '未授权：管理员凭证错误或未配置' }), {
       status: 401,
       headers: jsonHeaders(request, env),
@@ -271,14 +272,15 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    await ensureTransactionTransferColumns(env.DB);
+    await ensureTransactionTransferColumns(env.DB, env);
+    const { transactions } = getTableNames(env);
     const body = await request.json() as Record<string, unknown>;
     const title = typeof body.title === 'string' ? body.title : '';
     const date = typeof body.date === 'string' ? body.date : '';
     let amount = Number(body.amount);
-    const member = typeof body.member === 'string' ? body.member : '默认';
+    let member = typeof body.member === 'string' ? body.member : '默认';
     let category = typeof body.category === 'string' ? body.category : '其它';
-    const subcategory = typeof body.subcategory === 'string' ? body.subcategory : '';
+    let subcategory = typeof body.subcategory === 'string' ? body.subcategory : '';
     const ledger = typeof body.ledger === 'string' && body.ledger.trim() ? body.ledger.trim() : 'Default';
     const rawToLedger = typeof body.to_ledger === 'string' ? body.to_ledger.trim() : '';
     const rawTxType = typeof body.tx_type === 'string' ? body.tx_type.trim().toLowerCase() : '';
@@ -288,11 +290,13 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
 
     if (txType === 'transfer') {
       amount = Math.abs(amount);
+      member = '';
       if (!category || category === '其它') category = '转账';
+      if (!subcategory) subcategory = '内部转账';
     }
 
     await env.DB.prepare(
-      `UPDATE transactions
+      `UPDATE ${transactions}
        SET title = ?, date = ?, amount = ?, member = ?, category = ?, subcategory = ?, ledger = ?, tx_type = ?, to_ledger = ?
        WHERE id = ?`
     ).bind(title, date, amount, member, category, subcategory, ledger, txType, toLedger, id).run();
@@ -301,7 +305,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
     const catLabel = subcategory ? `${category}/${subcategory}` : category;
     const transferTag = txType === 'transfer' ? ` [${ledger}→${toLedger}]` : '';
     const logDetails = `更新账目 [${id}]: [${title || '无备注'}] ￥${amount.toFixed(2)} (${member} | ${catLabel}${transferTag}) 日期:${date}`;
-    await recordActivityLog(env.DB, 'web', 'update', logDetails);
+    await recordActivityLog(env.DB, 'web', 'update', logDetails, env);
 
     await recordApiRequestLog(env.DB, {
       method: 'PUT',
@@ -313,7 +317,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       tokenUsed: request.headers.get('X-Admin-Token') || '',
       payloadSummary: `amt:${amount}, desc:"${title}", tag:"${member}", type:"${catLabel}"${transferTag}, date:${date}`,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
 
     return new Response(JSON.stringify({ success: true, message: 'Transaction updated' }), {
       headers: jsonHeaders(request, env),
@@ -330,7 +334,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       tokenUsed: request.headers.get('X-Admin-Token') || '',
       payloadSummary: `更新失败: ${message}`,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
       headers: jsonHeaders(request, env),
@@ -359,7 +363,7 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
       tokenUsed: request.headers.get('X-Admin-Token') || '',
       payloadSummary: `未授权：删除账目 ${id} 被拒绝`,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
     return new Response(JSON.stringify({ success: false, message: '未授权：管理员凭证错误或未配置' }), {
       status: 401,
       headers: jsonHeaders(request, env),
@@ -374,9 +378,10 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
   }
 
   try {
+    const { transactions } = getTableNames(env);
     let targetTitle = id;
     try {
-      const existing = await env.DB.prepare('SELECT title, amount FROM transactions WHERE id = ?')
+      const existing = await env.DB.prepare(`SELECT title, amount FROM ${transactions} WHERE id = ?`)
         .bind(id)
         .first<Pick<TransactionRow, 'title' | 'amount'>>();
       if (existing) {
@@ -386,13 +391,13 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
       // ignore
     }
 
-    const result = await env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run();
+    const result = await env.DB.prepare(`DELETE FROM ${transactions} WHERE id = ?`).bind(id).run();
     const changed = result.meta?.changes ?? 0;
 
     // 记录删除日志
     const logDetails = `删除账目 ID ${id}: ${targetTitle}`;
     if (changed > 0) {
-      await recordActivityLog(env.DB, 'web', 'delete', logDetails);
+      await recordActivityLog(env.DB, 'web', 'delete', logDetails, env);
     }
 
     await recordApiRequestLog(env.DB, {
@@ -405,7 +410,7 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
       tokenUsed: request.headers.get('X-Admin-Token') || '',
       payloadSummary: changed > 0 ? logDetails : `删除失败：账目 ${id} 不存在`,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
 
     // 记录不存在时明确返回 404，避免前端把“没删掉”当成成功
     if (changed === 0) {
@@ -430,7 +435,7 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
       tokenUsed: request.headers.get('X-Admin-Token') || '',
       payloadSummary: `删除失败: ${message}`,
       executionMs: Date.now() - startTime,
-    });
+    }, env);
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
       headers: jsonHeaders(request, env),

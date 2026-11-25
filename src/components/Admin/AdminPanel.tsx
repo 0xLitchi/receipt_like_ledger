@@ -8,8 +8,18 @@ import {
   isTransferTransaction,
   normalizeLedgerName,
 } from '../../features/ledger/use-ledger';
-import { parseRawLedgerText } from '../../utils/parser';
+import {
+  ADMIN_TX_KIND_LABELS,
+  applyAdminTxKind,
+  applyAmountForKind,
+  deriveAdminTxKind,
+  findInvalidTransfer,
+  type AdminTxKind,
+} from '../../features/admin/transaction-form';
 import { PixelDot, PlatinumWindow } from '../Platinum/PlatinumChrome';
+import { AddTransactionModal } from './AddTransactionModal';
+import { CsvExportModal } from './CsvExportModal';
+import { CsvImportModal } from './CsvImportModal';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -19,6 +29,8 @@ interface AdminPanelProps {
   onBatchSave: (items: Transaction[], deletedIds: string[]) => Promise<void>;
   onLogout: () => void;
 }
+
+const CREATE_LEDGER_OPTION = '__CREATE_LEDGER__';
 
 const describeLogError = (e: unknown): string => {
   if (e instanceof ApiError) {
@@ -73,10 +85,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [apiLogsError, setApiLogsError] = useState<string | null>(null);
   const [apiLogSearchQuery, setApiLogSearchQuery] = useState('');
 
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [rowKindOverrides, setRowKindOverrides] = useState<Record<string, AdminTxKind>>({});
+  const [customLedgers, setCustomLedgers] = useState<string[]>([]);
   const [showParseModal, setShowParseModal] = useState(false);
-  const [rawText, setRawText] = useState('');
-  const [parseStep, setParseStep] = useState<'input' | 'preview'>('input');
-  const [parsedPreviewList, setParsedPreviewList] = useState<Transaction[]>([]);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const originalMap = useMemo(() => {
     const map = new Map<string, Transaction>();
@@ -89,6 +102,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setRows(JSON.parse(JSON.stringify(transactions)));
       setDeletedIds([]);
       setSelectedIds(new Set());
+      setRowKindOverrides({});
       setStatusMsg(null);
     }
   }, [isOpen, transactions]);
@@ -204,67 +218,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
   }, [rows, deletedIds, originalMap, getRowChangeStatus]);
 
-  const availableLedgers = useMemo(() => buildAvailableLedgers(rows), [rows]);
+  const availableLedgers = useMemo(() => {
+    const base = buildAvailableLedgers(rows);
+    if (customLedgers.length === 0) return base;
+    const extras = new Set(base.filter((l) => l !== 'Default'));
+    customLedgers.forEach((l) => {
+      const trimmed = l.trim();
+      if (trimmed && trimmed !== 'Default') extras.add(trimmed);
+    });
+    return ['Default', ...Array.from(extras).sort((a, b) => a.localeCompare(b, 'zh-CN'))];
+  }, [rows, customLedgers]);
 
-  const handleCellChange = useCallback((id: string, field: keyof Transaction, value: string) => {
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.id !== id) return r;
-        if (field === 'tx_type') {
-          const nextType: TransactionKind = value === 'transfer' ? 'transfer' : 'normal';
-          return {
-            ...r,
-            tx_type: nextType,
-            amount: nextType === 'transfer' ? Math.abs(r.amount) : r.amount,
-            category:
-              nextType === 'transfer' && (!r.category || r.category === '杂项' || r.category === '其它')
-                ? '转账'
-                : r.category,
-            to_ledger: nextType === 'transfer' ? r.to_ledger || '' : '',
-          };
-        }
-        return {
-          ...r,
-          [field]: field === 'amount' ? (value === '' ? 0 : parseFloat(value) || 0) : value,
-        };
-      })
-    );
+  const handleKindChange = useCallback((id: string, nextKind: AdminTxKind) => {
+    setRowKindOverrides((prev) => ({ ...prev, [id]: nextKind }));
+    setRows((prev) => prev.map((r) => (r.id === id ? applyAdminTxKind(r, nextKind) : r)));
   }, []);
 
-  const handleAddRow = () => {
-    const newId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const newRow: Transaction = {
-      id: newId,
-      date: new Date().toISOString().split('T')[0],
-      member: '荔枝',
-      category: '杂项',
-      subcategory: '',
-      title: '',
-      amount: 0,
-      ledger: 'Default',
-      tx_type: 'normal',
-      to_ledger: '',
-    };
-    setRows((prev) => [newRow, ...prev]);
-  };
+  const handleCellChange = useCallback(
+    (id: string, field: keyof Transaction, value: string) => {
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.id !== id) return r;
+          if (field === 'amount') {
+            const kind = deriveAdminTxKind(r, rowKindOverrides[id]);
+            return {
+              ...r,
+              amount: applyAmountForKind(kind, value),
+            };
+          }
+          return {
+            ...r,
+            [field]: value,
+          };
+        })
+      );
+    },
+    [rowKindOverrides]
+  );
 
-  const handleAddTransferRow = () => {
-    const newId = `new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const defaultTarget = availableLedgers.find((l) => l !== 'Default') || '';
-    const newRow: Transaction = {
-      id: newId,
-      date: new Date().toISOString().split('T')[0],
-      member: '荔枝',
-      category: '转账',
-      subcategory: '',
-      title: '',
-      amount: 0,
-      ledger: 'Default',
-      tx_type: 'transfer',
-      to_ledger: defaultTarget,
-    };
+  const handleLedgerSelectChange = useCallback(
+    (id: string, field: 'ledger' | 'to_ledger', nextVal: string) => {
+      if (nextVal === CREATE_LEDGER_OPTION) {
+        const created = window.prompt('请输入新账本名称：')?.trim();
+        if (!created) return;
+        setCustomLedgers((prev) => (prev.includes(created) ? prev : [...prev, created]));
+        handleCellChange(id, field, created);
+        return;
+      }
+      handleCellChange(id, field, nextVal);
+    },
+    [handleCellChange]
+  );
+
+  const handleAddTransactionFromModal = useCallback((newRow: Transaction) => {
+    const kind = deriveAdminTxKind(newRow);
+    setRowKindOverrides((prev) => ({ ...prev, [newRow.id]: kind }));
     setRows((prev) => [newRow, ...prev]);
-  };
+    setStatusMsg({
+      type: 'success',
+      text: `已新增 1 条${ADMIN_TX_KIND_LABELS[kind]}记录至待保存区，请点击“保存变动”提交。`,
+    });
+  }, []);
 
   const handleToggleSelectAll = (filteredRows: Transaction[]) => {
     const allFilteredIds = filteredRows.map((r) => r.id);
@@ -313,8 +327,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     let result = [...rows];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      result = result.filter(
-        (r) =>
+      result = result.filter((r) => {
+        const kind = deriveAdminTxKind(r, rowKindOverrides[r.id]);
+        const kindText = `${ADMIN_TX_KIND_LABELS[kind]} ${kind}`;
+        return (
           (r.title || '').toLowerCase().includes(q) ||
           (r.member || '').toLowerCase().includes(q) ||
           (r.category || '').toLowerCase().includes(q) ||
@@ -322,13 +338,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           (r.date || '').toLowerCase().includes(q) ||
           (r.ledger || '').toLowerCase().includes(q) ||
           (r.to_ledger || '').toLowerCase().includes(q) ||
-          (isTransferTransaction(r) ? '转账 transfer' : '收支 normal').includes(q) ||
+          kindText.includes(q) ||
           String(r.amount).includes(q)
-      );
+        );
+      });
     }
 
     if (sortField) {
       result.sort((a, b) => {
+        if (sortField === 'tx_type') {
+          const kindA = ADMIN_TX_KIND_LABELS[deriveAdminTxKind(a, rowKindOverrides[a.id])];
+          const kindB = ADMIN_TX_KIND_LABELS[deriveAdminTxKind(b, rowKindOverrides[b.id])];
+          return sortAsc
+            ? kindA.localeCompare(kindB, 'zh-CN')
+            : kindB.localeCompare(kindA, 'zh-CN');
+        }
         const valA = a[sortField] ?? '';
         const valB = b[sortField] ?? '';
         if (typeof valA === 'number' && typeof valB === 'number') {
@@ -340,7 +364,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       });
     }
     return result;
-  }, [rows, searchQuery, sortField, sortAsc]);
+  }, [rows, searchQuery, sortField, sortAsc, rowKindOverrides]);
 
   const filteredLogs = useMemo(() => {
     if (!logSearchQuery.trim()) return logs;
@@ -368,33 +392,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   }, [apiLogs, apiLogSearchQuery]);
 
-  const handleStartParsePreview = () => {
-    if (!rawText.trim()) {
-      alert('请先粘贴需要解析的账单文本数据');
-      return;
-    }
-    const parsed = parseRawLedgerText(rawText);
-    if (parsed.length === 0) {
-      alert('未能成功解析数据，请检查文本格式');
-      return;
-    }
-    setParsedPreviewList(parsed);
-    setParseStep('preview');
-  };
+  const handleImportCsvRows = useCallback((importedRows: Transaction[]) => {
+    if (importedRows.length === 0) return;
+    const kindPatch: Record<string, AdminTxKind> = {};
+    let expenseCount = 0;
+    let incomeCount = 0;
+    let transferCount = 0;
 
-  const handleConfirmImportParsedData = () => {
-    if (parsedPreviewList.length === 0) return;
-    setRows((prev) => [...parsedPreviewList, ...prev]);
-    setRawText('');
-    setParsedPreviewList([]);
-    setParseStep('input');
-    setShowParseModal(false);
+    importedRows.forEach((row) => {
+      const kind = deriveAdminTxKind(row);
+      kindPatch[row.id] = kind;
+      if (kind === 'transfer') transferCount += 1;
+      else if (kind === 'expense') expenseCount += 1;
+      else incomeCount += 1;
+    });
+
+    setRowKindOverrides((prev) => ({ ...prev, ...kindPatch }));
+    setRows((prev) => [...importedRows, ...prev]);
+
+    const parts: string[] = [];
+    if (expenseCount > 0) parts.push(`支出 ${expenseCount}`);
+    if (incomeCount > 0) parts.push(`收入 ${incomeCount}`);
+    if (transferCount > 0) parts.push(`转账 ${transferCount}`);
+
     setStatusMsg({
       type: 'success',
-      text: `已导入 ${parsedPreviewList.length} 条记录至编辑区，请点击“保存变动”提交。`,
+      text: `已导入 ${importedRows.length} 条记录至编辑区（${parts.join(' · ')}），请点击“保存变动”提交。`,
     });
-    setTimeout(() => setStatusMsg(null), 3500);
-  };
+  }, []);
 
   const handleConfirmSaveAllChanges = async () => {
     if (pendingChanges.totalCount === 0) {
@@ -407,14 +432,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       ...pendingChanges.modified.map((m) => m.current),
     ];
 
-    const invalidTransfer = changedItems.find((item) => {
-      if (!isTransferTransaction(item)) return false;
-      const from = normalizeLedgerName(item.ledger);
-      const to = (item.to_ledger || '').trim();
-      return !to || from === to;
-    });
-    if (invalidTransfer) {
-      setSaveError('存在无效的转账记录：请填写「转入账本」，且不能与「账本」相同。');
+    const transferValidationError = findInvalidTransfer(changedItems);
+    if (transferValidationError) {
+      setSaveError(transferValidationError);
       return;
     }
 
@@ -489,34 +509,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     await handleRefreshData();
   };
 
-  const handleExportCSV = () => {
-    const headers = ['id', 'date', 'tx_type', 'title', 'amount', 'member', 'category', 'subcategory', 'ledger', 'to_ledger'];
-    const csvLines = [headers.join(',')];
-
-    processedRows.forEach((r) => {
-      const transfer = isTransferTransaction(r);
-      const line = [
-        r.id,
-        r.date,
-        transfer ? 'transfer' : 'normal',
-        `"${(r.title || '').replace(/"/g, '""')}"`,
-        r.amount,
-        `"${(r.member || '').replace(/"/g, '""')}"`,
-        `"${(r.category || '').replace(/"/g, '""')}"`,
-        `"${(r.subcategory || '').replace(/"/g, '""')}"`,
-        `"${normalizeLedgerName(r.ledger).replace(/"/g, '""')}"`,
-        `"${(transfer ? (r.to_ledger || '') : '').replace(/"/g, '""')}"`,
-      ].join(',');
-      csvLines.push(line);
+  const handleExportedCsv = useCallback((info: { count: number; fileName: string }) => {
+    setStatusMsg({
+      type: 'success',
+      text: `已导出 ${info.count} 条标准 CSV 记录：${info.fileName}`,
     });
-
-    const blob = new Blob(['﻿' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `receipt_ledger_export_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -529,11 +527,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   return (
-    <div className="pt-desk" style={{ maxWidth: 1120 }}>
+    <div className="pt-admin-desk">
       <PlatinumWindow
         title="Admin Console · 账本管理后台"
         onClose={onClose}
         closeTitle="返回账本"
+        className="pt-admin-window"
+        frameClassName="pt-admin-frame"
       >
         {/* Top Navigation Tab Strip */}
         <div className="pt-strip">
@@ -579,6 +579,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* Status Banner */}
         {statusMsg && (
           <div
+            className="pt-admin-banner"
             style={{
               padding: '6px 12px',
               borderBottom: '1px solid #262626',
@@ -602,25 +603,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="筛选日期 / 备注 / 成员 / 分类 / 金额 / 账本…"
-                style={{ width: 240, maxWidth: '100%' }}
+                style={{ width: 'clamp(220px, 22vw, 360px)', maxWidth: '100%' }}
               />
-              <button type="button" className="pt-btn tab" onClick={handleAddRow}>
+              <button
+                type="button"
+                className="pt-btn tab"
+                onClick={() => setShowAddModal(true)}
+              >
                 + 新增行
-              </button>
-              <button type="button" className="pt-btn tab" onClick={handleAddTransferRow}>
-                + 新增转账
               </button>
               <button
                 type="button"
                 className="pt-btn tab"
-                onClick={() => {
-                  setParseStep('input');
-                  setShowParseModal(true);
-                }}
+                onClick={() => setShowParseModal(true)}
               >
                 CSV导入
               </button>
-              <button type="button" className="pt-btn tab" onClick={handleExportCSV}>
+              <button
+                type="button"
+                className="pt-btn tab"
+                onClick={() => setShowExportModal(true)}
+              >
                 CSV导出
               </button>
               <button
@@ -656,17 +659,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
             </div>
 
-            <datalist id="admin-ledger-options">
-              {availableLedgers.map((l) => (
-                <option key={l} value={l} />
-              ))}
-            </datalist>
-
-            <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
-              <table className="pt-table">
+            <div className="pt-admin-table-wrap">
+              <table className="pt-table pt-admin-data-table">
                 <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                   <tr>
-                    <th style={{ width: 28, textAlign: 'center' }}>
+                    <th style={{ width: 32, textAlign: 'center' }}>
                       <input
                         type="checkbox"
                         checked={isAllFilteredSelected}
@@ -674,32 +671,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         aria-label="全选"
                       />
                     </th>
-                    <th style={{ width: 42, textAlign: 'center' }}>状态</th>
-                    <th style={{ width: 68, cursor: 'pointer' }} onClick={() => handleSort('tx_type')}>
+                    <th style={{ width: 72, cursor: 'pointer' }} onClick={() => handleSort('tx_type')}>
                       类型{sortIndicator('tx_type')}
                     </th>
-                    <th style={{ width: 102, cursor: 'pointer' }} onClick={() => handleSort('date')}>
+                    <th style={{ width: 106, cursor: 'pointer' }} onClick={() => handleSort('date')}>
                       日期{sortIndicator('date')}
                     </th>
-                    <th style={{ width: 78, cursor: 'pointer' }} onClick={() => handleSort('member')}>
+                    <th
+                      style={{ width: 'clamp(84px, 7.5vw, 140px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('member')}
+                    >
                       成员{sortIndicator('member')}
                     </th>
-                    <th style={{ width: 84, cursor: 'pointer' }} onClick={() => handleSort('category')}>
+                    <th
+                      style={{ width: 'clamp(84px, 7.5vw, 140px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('category')}
+                    >
                       主分类{sortIndicator('category')}
                     </th>
-                    <th style={{ width: 84, cursor: 'pointer' }} onClick={() => handleSort('subcategory')}>
+                    <th
+                      style={{ width: 'clamp(88px, 8vw, 150px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('subcategory')}
+                    >
                       子分类{sortIndicator('subcategory')}
                     </th>
-                    <th style={{ minWidth: 130, cursor: 'pointer' }} onClick={() => handleSort('title')}>
+                    <th style={{ minWidth: 180, cursor: 'pointer' }} onClick={() => handleSort('title')}>
                       备注{sortIndicator('title')}
                     </th>
-                    <th style={{ width: 96, cursor: 'pointer' }} onClick={() => handleSort('amount')}>
+                    <th
+                      style={{ width: 'clamp(96px, 8vw, 136px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('amount')}
+                    >
                       金额{sortIndicator('amount')}
                     </th>
-                    <th style={{ width: 88, cursor: 'pointer' }} onClick={() => handleSort('ledger')}>
+                    <th
+                      style={{ width: 'clamp(98px, 8.5vw, 150px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('ledger')}
+                    >
                       账本(转出){sortIndicator('ledger')}
                     </th>
-                    <th style={{ width: 88, cursor: 'pointer' }} onClick={() => handleSort('to_ledger')}>
+                    <th
+                      style={{ width: 'clamp(98px, 8.5vw, 150px)', cursor: 'pointer' }}
+                      onClick={() => handleSort('to_ledger')}
+                    >
                       转入账本{sortIndicator('to_ledger')}
                     </th>
                   </tr>
@@ -707,14 +721,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <tbody>
                   {processedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
+                      <td colSpan={10} style={{ textAlign: 'center', padding: 24, color: '#666' }}>
                         暂无匹配的交易记录
                       </td>
                     </tr>
                   ) : (
                     processedRows.map((row) => {
                       const status = getRowChangeStatus(row);
-                      const isTransfer = isTransferTransaction(row);
+                      const rowKind = deriveAdminTxKind(row, rowKindOverrides[row.id]);
+                      const isTransfer = rowKind === 'transfer';
+                      const kindColor =
+                        rowKind === 'transfer'
+                          ? 'var(--transfer)'
+                          : rowKind === 'income'
+                          ? 'var(--income)'
+                          : 'var(--expense)';
                       const bg =
                         status === 'added'
                           ? '#dcfce7'
@@ -733,34 +754,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               onChange={() => handleToggleSelectRow(row.id)}
                             />
                           </td>
-                          <td
-                            style={{
-                              textAlign: 'center',
-                              fontSize: 10,
-                              fontFamily: 'var(--font-mono)',
-                              color:
-                                status === 'added'
-                                  ? '#166534'
-                                  : status === 'modified'
-                                  ? '#854d0e'
-                                  : '#777',
-                            }}
-                          >
-                            {status === 'added' ? 'NEW' : status === 'modified' ? 'MOD' : '—'}
-                          </td>
                           <td>
                             <select
                               className="pt-input"
                               style={{
                                 width: '100%',
                                 padding: '0 4px',
-                                color: isTransfer ? 'var(--transfer)' : undefined,
-                                fontWeight: isTransfer ? 'bold' : undefined,
+                                color: kindColor,
+                                fontWeight: 'bold',
                               }}
-                              value={isTransfer ? 'transfer' : 'normal'}
-                              onChange={(e) => handleCellChange(row.id, 'tx_type', e.target.value)}
+                              value={rowKind}
+                              onChange={(e) =>
+                                handleKindChange(row.id, e.target.value as AdminTxKind)
+                              }
                             >
-                              <option value="normal">收支</option>
+                              <option value="expense">支出</option>
+                              <option value="income">收入</option>
                               <option value="transfer">转账</option>
                             </select>
                           </td>
@@ -777,8 +786,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <input
                               type="text"
                               className="pt-input"
-                              style={{ width: '100%' }}
-                              value={row.member}
+                              style={{
+                                width: '100%',
+                                background: isTransfer ? '#f0f0f0' : '#fff',
+                                color: isTransfer ? '#999' : undefined,
+                              }}
+                              disabled={isTransfer}
+                              placeholder={isTransfer ? '—' : ''}
+                              value={isTransfer ? '' : row.member}
                               onChange={(e) => handleCellChange(row.id, 'member', e.target.value)}
                             />
                           </td>
@@ -813,47 +828,64 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <input
                               type="number"
                               step="0.01"
-                              min={isTransfer ? 0 : undefined}
+                              min={rowKind === 'expense' ? undefined : 0}
                               className="pt-input"
                               style={{
                                 width: '100%',
                                 textAlign: 'right',
                                 fontFamily: 'var(--font-mono)',
-                                color: isTransfer
-                                  ? 'var(--transfer)'
-                                  : row.amount >= 0
-                                  ? 'var(--income)'
-                                  : 'var(--expense)',
+                                color: kindColor,
                               }}
                               value={row.amount}
                               onChange={(e) => handleCellChange(row.id, 'amount', e.target.value)}
                             />
                           </td>
                           <td>
-                            <input
-                              type="text"
-                              list="admin-ledger-options"
+                            <select
                               className="pt-input"
-                              style={{ width: '100%' }}
-                              value={row.ledger || ''}
-                              onChange={(e) => handleCellChange(row.id, 'ledger', e.target.value)}
-                            />
+                              style={{ width: '100%', padding: '0 4px' }}
+                              value={normalizeLedgerName(row.ledger)}
+                              onChange={(e) =>
+                                handleLedgerSelectChange(row.id, 'ledger', e.target.value)
+                              }
+                            >
+                              {availableLedgers.map((l) => (
+                                <option key={l} value={l}>
+                                  {l}
+                                </option>
+                              ))}
+                              <option value={CREATE_LEDGER_OPTION}>+ 新建账本…</option>
+                            </select>
                           </td>
                           <td>
-                            <input
-                              type="text"
-                              list="admin-ledger-options"
+                            <select
                               className="pt-input"
                               style={{
                                 width: '100%',
+                                padding: '0 4px',
                                 background: isTransfer ? '#fff' : '#f0f0f0',
                                 color: isTransfer ? 'var(--transfer)' : '#999',
                               }}
                               disabled={!isTransfer}
-                              placeholder={isTransfer ? '目标账本' : '—'}
                               value={isTransfer ? row.to_ledger || '' : ''}
-                              onChange={(e) => handleCellChange(row.id, 'to_ledger', e.target.value)}
-                            />
+                              onChange={(e) =>
+                                handleLedgerSelectChange(row.id, 'to_ledger', e.target.value)
+                              }
+                            >
+                              {!isTransfer ? (
+                                <option value="">—</option>
+                              ) : (
+                                <>
+                                  {!row.to_ledger && <option value="">目标账本</option>}
+                                  {availableLedgers.map((l) => (
+                                    <option key={l} value={l}>
+                                      {l}
+                                    </option>
+                                  ))}
+                                  <option value={CREATE_LEDGER_OPTION}>+ 新建账本…</option>
+                                </>
+                              )}
+                            </select>
                           </td>
                         </tr>
                       );
@@ -883,7 +915,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 value={logSearchQuery}
                 onChange={(e) => setLogSearchQuery(e.target.value)}
                 placeholder="筛选动作 / 来源 / 详情…"
-                style={{ width: 240, maxWidth: '100%' }}
+                style={{ width: 'clamp(220px, 22vw, 360px)', maxWidth: '100%' }}
               />
               <button
                 type="button"
@@ -899,7 +931,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {logsError ? (
-              <div style={{ padding: 24, textAlign: 'center' }}>
+              <div className="pt-admin-panel-body" style={{ textAlign: 'center' }}>
                 <p style={{ color: '#991b1b', fontWeight: 'bold', margin: '0 0 8px' }}>
                   日志加载失败: {logsError}
                 </p>
@@ -908,14 +940,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
-                <table className="pt-table">
+              <div className="pt-admin-table-wrap">
+                <table className="pt-table pt-admin-log-table">
                   <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                     <tr>
-                      <th style={{ width: 150 }}>时间</th>
-                      <th style={{ width: 70 }}>来源</th>
-                      <th style={{ width: 90 }}>动作</th>
-                      <th>详情</th>
+                      <th style={{ width: 158 }}>时间</th>
+                      <th style={{ width: 84 }}>来源</th>
+                      <th style={{ width: 100 }}>动作</th>
+                      <th style={{ minWidth: 240 }}>详情</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -967,7 +999,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 value={apiLogSearchQuery}
                 onChange={(e) => setApiLogSearchQuery(e.target.value)}
                 placeholder="筛选方法 / 路径 / 状态码 / IP…"
-                style={{ width: 240, maxWidth: '100%' }}
+                style={{ width: 'clamp(220px, 22vw, 360px)', maxWidth: '100%' }}
               />
               <button
                 type="button"
@@ -983,7 +1015,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {apiLogsError ? (
-              <div style={{ padding: 24, textAlign: 'center' }}>
+              <div className="pt-admin-panel-body" style={{ textAlign: 'center' }}>
                 <p style={{ color: '#991b1b', fontWeight: 'bold', margin: '0 0 8px' }}>
                   请求日志加载失败: {apiLogsError}
                 </p>
@@ -992,17 +1024,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto', maxHeight: '68vh', overflowY: 'auto' }}>
-                <table className="pt-table">
+              <div className="pt-admin-table-wrap">
+                <table className="pt-table pt-admin-reqlog-table">
                   <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                     <tr>
-                      <th style={{ width: 145 }}>时间</th>
-                      <th style={{ width: 64 }}>方法</th>
-                      <th style={{ width: 60 }}>状态</th>
-                      <th style={{ width: 140 }}>路径</th>
-                      <th style={{ width: 110 }}>IP</th>
-                      <th style={{ width: 64 }}>耗时</th>
-                      <th>摘要</th>
+                      <th style={{ width: 155 }}>时间</th>
+                      <th style={{ width: 68 }}>方法</th>
+                      <th style={{ width: 64 }}>状态</th>
+                      <th style={{ width: 160 }}>路径</th>
+                      <th style={{ width: 124 }}>IP</th>
+                      <th style={{ width: 70 }}>耗时</th>
+                      <th style={{ minWidth: 220 }}>摘要</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1058,8 +1090,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
         {/* ==================== TAB 4: GENERAL ==================== */}
         {activeTab === 'general' && (
-          <div style={{ padding: 16 }}>
-            <table className="pt-table" style={{ maxWidth: 640 }}>
+          <div className="pt-admin-panel-body">
+            <table className="pt-table" style={{ maxWidth: 720 }}>
               <tbody>
                 <tr>
                   <th style={{ width: 160 }}>界面风格</th>
@@ -1218,123 +1250,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* ── Modal 2: Raw Text Import ── */}
-      {showParseModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 60,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 16,
-            background: 'rgba(0,0,0,0.35)',
-          }}
-        >
-          <div style={{ width: '100%', maxWidth: 640 }}>
-            <PlatinumWindow
-              title="CSV 批量导入 · CSV Import"
-              onClose={() => setShowParseModal(false)}
-            >
-              <div style={{ padding: '12px 14px' }}>
-                {parseStep === 'input' ? (
-                  <>
-                    <p style={{ margin: '0 0 8px', fontSize: 11, color: '#444' }}>
-                      每行一条，支持 Tab 或双空格分隔：
-                      <code>备注  日期(YYYY-MM-DD)  金额  成员  主分类/子分类  账本(转账可写 A→B)</code>
-                    </p>
-                    <textarea
-                      className="pt-input"
-                      rows={10}
-                      style={{ width: '100%' }}
-                      value={rawText}
-                      onChange={(e) => setRawText(e.target.value)}
-                      placeholder="示例：午餐	2026-11-19	-38.5	荔枝	餐饮/午饭	Default"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <p style={{ margin: '0 0 8px', fontSize: 11 }}>
-                      解析成功 <b>{parsedPreviewList.length}</b> 条，确认后将追加到编辑区顶部：
-                    </p>
-                    <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-                      <table className="pt-table">
-                        <thead>
-                          <tr>
-                            <th>日期</th>
-                            <th>成员</th>
-                            <th>分类</th>
-                            <th>备注</th>
-                            <th>金额</th>
-                            <th>账本</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {parsedPreviewList.map((it) => (
-                            <tr key={it.id}>
-                              <td style={{ fontFamily: 'var(--font-mono)' }}>{it.date}</td>
-                              <td>{it.member}</td>
-                              <td>
-                                {it.subcategory ? `${it.category}/${it.subcategory}` : it.category}
-                              </td>
-                              <td>{it.title || '—'}</td>
-                              <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-                                {it.amount}
-                              </td>
-                              <td>
-                                {isTransferTransaction(it)
-                                  ? `${normalizeLedgerName(it.ledger)} → ${it.to_ledger}`
-                                  : it.ledger || 'Default'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
-              </div>
+      {/* ── Modal 2: CSV Batch Import ── */}
+      <CsvImportModal
+        isOpen={showParseModal}
+        onClose={() => setShowParseModal(false)}
+        availableLedgers={availableLedgers}
+        onImport={handleImportCsvRows}
+      />
 
-              <div className="pt-statusbar" style={{ padding: '8px 12px', justifyContent: 'flex-end', gap: 8 }}>
-                {parseStep === 'preview' && (
-                  <button
-                    type="button"
-                    className="pt-btn"
-                    onClick={() => setParseStep('input')}
-                  >
-                    返回修改
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="pt-btn"
-                  onClick={() => setShowParseModal(false)}
-                >
-                  取消
-                </button>
-                {parseStep === 'input' ? (
-                  <button
-                    type="button"
-                    className="pt-btn primary"
-                    onClick={handleStartParsePreview}
-                  >
-                    解析预览
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="pt-btn primary"
-                    onClick={handleConfirmImportParsedData}
-                  >
-                    确认导入 ({parsedPreviewList.length})
-                  </button>
-                )}
-              </div>
-            </PlatinumWindow>
-          </div>
-        </div>
-      )}
+      {/* ── Modal 3: CSV Export Preview & Confirm ── */}
+      <CsvExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        allRows={rows}
+        filteredRows={processedRows}
+        selectedIds={selectedIds}
+        isFiltered={Boolean(searchQuery.trim())}
+        rowKindOverrides={rowKindOverrides}
+        onExported={handleExportedCsv}
+      />
+
+      <AddTransactionModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        existingRows={rows}
+        availableLedgers={availableLedgers}
+        onAdd={handleAddTransactionFromModal}
+      />
 
       {/* ── Floating SQL Execution Success Toast ── */}
       {sqlToast && (

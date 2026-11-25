@@ -2,6 +2,7 @@ import {
   cleanSecretString,
   ensureTransactionTransferColumns,
   getCorsHeaders,
+  getTableNames,
   insertTransactionsBatch,
   isAdminAuthorized,
   readBearerToken,
@@ -63,9 +64,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    await ensureTransactionTransferColumns(env.DB);
+    await ensureTransactionTransferColumns(env.DB, env);
+    const { transactions } = getTableNames(env);
     const { results } = await env.DB.prepare(
-      'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
+      `SELECT * FROM ${transactions} ORDER BY date DESC, created_at DESC`
     ).all<TransactionRow>();
 
     const data = (results || []).map((t) => {
@@ -131,7 +133,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const body = await request.json() as unknown;
     const source: 'web' | 'api' = isTokenAuthorized ? 'api' : 'web';
-    const result = await insertTransactionsBatch(env.DB, body, source);
+    const result = await insertTransactionsBatch(env.DB, body, source, env);
 
     return new Response(JSON.stringify(result), {
       status: result.status,

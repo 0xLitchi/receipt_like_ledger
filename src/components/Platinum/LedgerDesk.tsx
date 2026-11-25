@@ -1,13 +1,17 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import type { DateGroup, LedgerFilters, LedgerType, SummaryStats, Transaction } from '../../types';
 import {
   categoryLabel,
+  computeCategoryBarWidths,
   isTransferTransaction,
   normalizeLedgerName,
   summaryKey,
 } from '../../features/ledger/use-ledger';
+import type { LiveRowTextSample } from '../../features/ledger/live-columns';
+import { useLiveColumnWidths } from '../../features/ledger/use-live-columns';
 import { formatCurrency } from '../../utils/formatters';
 import { PixelDot, PlatinumSelect, PlatinumWindow } from './PlatinumChrome';
+import { SlotNumber } from './SlotNumber';
 import { buildMemberColorMap, memberDotColor } from './colors';
 
 interface LedgerDeskProps {
@@ -16,8 +20,6 @@ interface LedgerDeskProps {
   dateGroups: DateGroup[];
   stats: SummaryStats;
   ledgers: string[];
-  years: string[];
-  monthsByYear: Record<string, string[]>;
   allMonths: string[];
   filters: LedgerFilters;
   onPatchFilters: (next: Partial<LedgerFilters>) => void;
@@ -33,7 +35,6 @@ interface BreakdownRow {
   absVal: number;
   count: number;
   barPct: number;
-  isTransferOnly: boolean;
 }
 
 function formatMonthTab(m: string): string {
@@ -49,8 +50,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
   dateGroups,
   stats,
   ledgers,
-  years,
-  monthsByYear,
   allMonths,
   filters,
   onPatchFilters,
@@ -61,8 +60,18 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
 }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [entryAnimating, setEntryAnimating] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
 
-  const selectedLedger = filters.ledger || 'Default';
+  useEffect(() => {
+    if (!entryAnimating) return;
+    const timer = window.setTimeout(() => setEntryAnimating(false), 1450);
+    return () => window.clearTimeout(timer);
+  }, [entryAnimating]);
+
+  const selectedLedger = filters.ledger || 'ALL';
   const ledgerOptions = useMemo(
     () => [
       { value: 'ALL', label: '全部账本' },
@@ -77,24 +86,14 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     : filters.month && allMonths.includes(filters.month)
     ? filters.month
     : allMonths[0] || '';
-  const selectedYear = isAllMonths ? '' : selectedMonth ? selectedMonth.slice(0, 4) : years[0] || '';
-  const selectedMonthNum = isAllMonths ? '' : selectedMonth ? selectedMonth.slice(5, 7) : '';
 
-  const yearOptions = useMemo(
-    () => years.map((y) => ({ value: y, label: `${y}年` })),
-    [years]
-  );
-
-  const fallbackYearForMonths = selectedYear || years[0] || '';
-  const availableMonthsForYear = useMemo(
-    () => (fallbackYearForMonths ? monthsByYear[fallbackYearForMonths] ?? [] : []),
-    [monthsByYear, fallbackYearForMonths]
-  );
-
-  const monthOptions = useMemo(
-    () => availableMonthsForYear.map((mm) => ({ value: mm, label: `${mm}月` })),
-    [availableMonthsForYear]
-  );
+  const yearMonthOptions = useMemo(() => {
+    const monthItems = allMonths.map((ym) => ({ value: ym, label: formatMonthTab(ym) }));
+    if (isAdmin) {
+      return [{ value: 'ALL', label: '全部' }, ...monthItems];
+    }
+    return monthItems;
+  }, [allMonths, isAdmin]);
 
   const handleLedgerChange = useCallback(
     (newLedger: string) => {
@@ -103,25 +102,11 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     [onPatchFilters]
   );
 
-  const handleYearChange = useCallback(
-    (newYear: string) => {
-      const candidateMonths = monthsByYear[newYear] ?? [];
-      if (candidateMonths.length === 0) return;
-      const nextMonthNum = candidateMonths.includes(selectedMonthNum)
-        ? selectedMonthNum
-        : candidateMonths[0];
-      onPatchFilters({ month: `${newYear}-${nextMonthNum}`, category: 'ALL' });
+  const handleYearMonthChange = useCallback(
+    (newMonth: string) => {
+      onPatchFilters({ month: newMonth, category: 'ALL' });
     },
-    [monthsByYear, selectedMonthNum, onPatchFilters]
-  );
-
-  const handleMonthChange = useCallback(
-    (newMonthNum: string) => {
-      const targetYear = selectedYear || years[0] || '';
-      if (!targetYear) return;
-      onPatchFilters({ month: `${targetYear}-${newMonthNum}`, category: 'ALL' });
-    },
-    [selectedYear, years, onPatchFilters]
+    [onPatchFilters]
   );
 
   // Whether current date/ledger range contains any transfer records
@@ -147,65 +132,117 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
     setExpandedId(null);
   }, [selectedMonth, selectedLedger]);
 
-  // Category breakdown (always based on current ledger + month scope, not filtered by category itself)
+  // Category breakdown: precise to subcategory level, excludes transfers
   const categoryRows = useMemo<BreakdownRow[]>(() => {
+    if (filters.type === 'TRANSFER') return [];
+
     const scope = monthTransactions.filter((t) => {
+      if (isTransferTransaction(t)) return false;
       if (filters.member !== 'ALL' && t.member !== filters.member) return false;
-      const transfer = isTransferTransaction(t);
-      if (filters.type === 'TRANSFER') return transfer;
-      if (filters.type === 'EXPENSE') return !transfer && t.amount < 0;
-      if (filters.type === 'INCOME') return !transfer && t.amount > 0;
+      if (filters.type === 'EXPENSE') return t.amount < 0;
+      if (filters.type === 'INCOME') return t.amount > 0;
       return true;
     });
 
-    const map = new Map<
-      string,
-      { net: number; transferTotal: number; count: number; transferCount: number }
-    >();
+    const map = new Map<string, { net: number; count: number }>();
     scope.forEach((t) => {
       const key = summaryKey(t);
-      const cur = map.get(key) || { net: 0, transferTotal: 0, count: 0, transferCount: 0 };
-      const transfer = isTransferTransaction(t);
-      if (transfer) {
-        cur.transferTotal += hasFullAccess ? Math.abs(t.amount) : 0;
-        cur.transferCount += 1;
-      } else {
-        cur.net += hasFullAccess ? t.amount : 0;
-      }
+      const cur = map.get(key) || { net: 0, count: 0 };
+      cur.net += hasFullAccess ? t.amount : 0;
       cur.count += 1;
       map.set(key, cur);
     });
 
-    const list: BreakdownRow[] = Array.from(map.entries()).map(([name, v]) => {
-      const isTransferOnly = v.transferCount === v.count && v.count > 0;
-      return {
-        name,
-        netTotal: v.net,
-        absVal: isTransferOnly ? v.transferTotal : Math.abs(v.net),
-        count: v.count,
-        barPct: 0,
-        isTransferOnly,
-      };
-    });
+    const list: BreakdownRow[] = Array.from(map.entries()).map(([name, v]) => ({
+      name,
+      netTotal: v.net,
+      absVal: Math.abs(v.net),
+      count: v.count,
+      barPct: 0,
+    }));
 
     list.sort((a, b) => (hasFullAccess ? b.absVal - a.absVal : b.count - a.count));
-    const maxMetric = list.reduce(
-      (m, r) => Math.max(m, hasFullAccess ? r.absVal : r.count),
-      0
+    const widths = computeCategoryBarWidths(
+      list.map((r) => (hasFullAccess ? r.absVal : r.count))
     );
-    list.forEach((r) => {
-      const val = hasFullAccess ? r.absVal : r.count;
-      r.barPct = maxMetric > 0 ? Math.max(val > 0 ? 3 : 0, (val / maxMetric) * 100) : 0;
+    list.forEach((r, idx) => {
+      r.barPct = widths[idx] ?? 0;
     });
 
     return list;
   }, [monthTransactions, filters.member, filters.type, hasFullAccess]);
 
-  // Stable distinct color mapping for each member
+  // Flat index per transaction row (caps entry slot-machine animation to top rows)
+  const rowIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    let idx = 0;
+    for (const group of dateGroups) {
+      for (const item of group.items) {
+        map.set(item.id, idx);
+        idx += 1;
+      }
+    }
+    return map;
+  }, [dateGroups]);
+
+  // Stable distinct color mapping for each member (ignore transfers)
   const memberColorMap = useMemo(
-    () => buildMemberColorMap(allTransactions.map((t) => t.member || '默认')),
+    () =>
+      buildMemberColorMap(
+        allTransactions
+          .filter((t) => !isTransferTransaction(t) && t.member?.trim())
+          .map((t) => t.member.trim())
+      ),
     [allTransactions]
   );
+
+  // Extract visible row text samples for adaptive column width sizing
+  const liveListRef = useRef<HTMLDivElement>(null);
+  const liveRowSamples = useMemo<LiveRowTextSample[]>(() => {
+    const out: LiveRowTextSample[] = [];
+    for (const group of dateGroups) {
+      for (const tx of group.items) {
+        const isTransfer = Boolean(tx.transferLeg) || isTransferTransaction(tx);
+        const isTransferIn = tx.transferLeg === 'in';
+        const isTransferOut = tx.transferLeg === 'out';
+        const legLedger = normalizeLedgerName(tx.ledger);
+        const fromLedger = isTransferIn
+          ? tx.counterpartyLedger || 'Default'
+          : legLedger;
+        const toLedger = isTransferOut
+          ? tx.counterpartyLedger || normalizeLedgerName(tx.to_ledger)
+          : legLedger;
+        const cat = categoryLabel(tx);
+        const rowCatLabel = isTransferIn
+          ? '转账/转入'
+          : isTransferOut
+          ? '转账/转出'
+          : cat || '—';
+        const noteText = hasFullAccess
+          ? (tx.title || '').trim()
+          : tx.title
+          ? '***'
+          : '';
+        const transferLedgerLabel = isTransferOut
+          ? fromLedger
+          : isTransferIn
+          ? toLedger
+          : legLedger;
+
+        out.push({
+          isTransfer,
+          isNonDefaultLedger: legLedger !== 'Default',
+          memberName: tx.member || '默认',
+          categoryLabel: rowCatLabel,
+          noteLabel: isTransfer ? transferLedgerLabel : noteText,
+          amountLabel: hasFullAccess ? formatCurrency(tx.amount, true, false) : '***.**',
+        });
+      }
+    }
+    return out;
+  }, [dateGroups, hasFullAccess]);
+
+  const { hideWho } = useLiveColumnWidths(liveListRef, liveRowSamples);
 
   const hasActiveFilters =
     filters.category !== 'ALL' ||
@@ -240,7 +277,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
       ? ` · ${selectedLedger}`
       : '';
   const monthTitleSuffix = selectedMonth ? ` · ${formatMonthTab(selectedMonth)}` : '';
-  const showTransferTile = stats.totalTransfer > 0 || filters.type === 'TRANSFER';
 
   return (
     <div className="pt-desk">
@@ -257,49 +293,32 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
             options={ledgerOptions}
             onChange={handleLedgerChange}
             ariaLabel="选择账本"
-            placeholder="Default"
-            minWidth={96}
+            placeholder="全部账本"
+            minWidth={76}
+            compact
           />
           <PlatinumSelect
-            value={selectedYear}
-            options={yearOptions}
-            onChange={handleYearChange}
-            ariaLabel="选择年份"
-            placeholder={years.length > 0 ? '年份' : '暂无年份'}
-            minWidth={88}
+            value={selectedMonth}
+            options={yearMonthOptions}
+            onChange={handleYearMonthChange}
+            ariaLabel="选择年月"
+            placeholder={allMonths.length > 0 ? '选择年月' : '暂无数据'}
+            minWidth={98}
+            compact
           />
-          <PlatinumSelect
-            value={selectedMonthNum}
-            options={monthOptions}
-            onChange={handleMonthChange}
-            ariaLabel="选择月份"
-            placeholder={availableMonthsForYear.length > 0 ? '月份' : '暂无月份'}
-            minWidth={74}
-          />
-          {isAdmin && (
-            <button
-              type="button"
-              className={`pt-btn${isAllMonths ? ' on' : ''}`}
-              style={{ minWidth: 0, padding: '2px 10px' }}
-              aria-pressed={isAllMonths}
-              onClick={() => onPatchFilters({ month: 'ALL', category: 'ALL' })}
-            >
-              全部
-            </button>
-          )}
 
           <span
             style={{
               marginLeft: 'auto',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 8,
+              gap: 6,
               fontSize: 11,
               color: '#333',
               whiteSpace: 'nowrap',
             }}
           >
-            <button type="button" className="pt-btn tab" onClick={onOpenAdmin}>
+            <button type="button" className="pt-btn compact" onClick={onOpenAdmin}>
               后台
             </button>
           </span>
@@ -390,7 +409,12 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
               className="tv"
               style={{ color: hasFullAccess ? 'var(--expense)' : '#666' }}
             >
-              {maskVal(-stats.totalExpense)}
+              <SlotNumber
+                text={maskVal(-stats.totalExpense)}
+                animate={entryAnimating && hasFullAccess}
+                delayMs={0}
+                durationMs={560}
+              />
             </div>
           </div>
 
@@ -400,21 +424,14 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
               className="tv"
               style={{ color: hasFullAccess ? 'var(--income)' : '#666' }}
             >
-              {maskVal(stats.totalIncome, true)}
+              <SlotNumber
+                text={maskVal(stats.totalIncome, true)}
+                animate={entryAnimating && hasFullAccess}
+                delayMs={60}
+                durationMs={560}
+              />
             </div>
           </div>
-
-          {showTransferTile && (
-            <div className="pt-tile">
-              <div className="tl">转账</div>
-              <div
-                className="tv"
-                style={{ color: hasFullAccess ? 'var(--transfer)' : '#666' }}
-              >
-                {maskVal(stats.totalTransfer)}
-              </div>
-            </div>
-          )}
         </div>
       </PlatinumWindow>
 
@@ -424,8 +441,9 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
           {categoryRows.length === 0 ? (
             <div className="none">{isAllMonths ? '暂无分类数据' : '本月暂无分类数据'}</div>
           ) : (
-            categoryRows.map((item) => {
+            categoryRows.map((item, idx) => {
               const isSelected = filters.category === item.name;
+              const catAmtText = hasFullAccess ? formatCurrency(item.netTotal, true, false) : '***.**';
               return (
                 <button
                   key={item.name}
@@ -441,7 +459,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                     <span className="bar" style={{ width: `${item.barPct.toFixed(1)}%` }} />
                     <span className="lab-inner">
                       <span className="lab-text">{item.name}</span>
-                      <span className="tag">{item.count}笔</span>
                     </span>
                   </span>
                   <span
@@ -449,18 +466,17 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                     style={{
                       color: !hasFullAccess
                         ? '#666'
-                        : item.isTransferOnly
-                        ? 'var(--transfer)'
                         : item.netTotal >= 0
                         ? 'var(--income)'
                         : 'var(--expense)',
                     }}
                   >
-                    {hasFullAccess
-                      ? item.isTransferOnly
-                        ? formatCurrency(item.absVal, false, false)
-                        : formatCurrency(item.netTotal, true, false)
-                      : '***.**'}
+                    <SlotNumber
+                      text={catAmtText}
+                      animate={entryAnimating && hasFullAccess && idx < 20}
+                      delayMs={Math.min(idx * 22, 220)}
+                      durationMs={500}
+                    />
                   </span>
                 </button>
               );
@@ -499,7 +515,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
           </span>
         </div>
 
-        <div>
+        <div ref={liveListRef} className={`pt-live-list${hideWho ? ' no-who' : ''}`}>
           {dateGroups.length === 0 ? (
             <div style={{ padding: '32px 12px', textAlign: 'center', color: '#777', fontSize: 12 }}>
               当前筛选条件下暂无记账明细
@@ -513,11 +529,23 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
 
                 {group.items.map((tx) => {
                     const isActive = expandedId === tx.id;
-                    const isTransfer = isTransferTransaction(tx);
-                    const fromLedger = normalizeLedgerName(tx.ledger);
-                    const toLedger = (tx.to_ledger || '').trim() || 'Default';
-                    const isNonDefaultLedger = fromLedger !== 'Default';
+                    const isTransfer = Boolean(tx.transferLeg) || isTransferTransaction(tx);
+                    const isTransferIn = tx.transferLeg === 'in';
+                    const isTransferOut = tx.transferLeg === 'out';
+                    const legLedger = normalizeLedgerName(tx.ledger);
+                    const fromLedger = isTransferIn
+                      ? tx.counterpartyLedger || 'Default'
+                      : legLedger;
+                    const toLedger = isTransferOut
+                      ? tx.counterpartyLedger || normalizeLedgerName(tx.to_ledger)
+                      : legLedger;
+                    const isNonDefaultLedger = legLedger !== 'Default';
                     const cat = categoryLabel(tx);
+                    const rowCatLabel = isTransferIn
+                      ? '转账/转入'
+                      : isTransferOut
+                      ? '转账/转出'
+                      : cat || '—';
                     const memberName = tx.member || '默认';
                     const noteText = hasFullAccess
                       ? (tx.title || '').trim()
@@ -526,8 +554,17 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                       : '';
                     const dotColor =
                       memberColorMap.get(memberName) ?? memberDotColor(memberName);
-                    const displayAmount = isTransfer ? Math.abs(tx.amount) : tx.amount;
-                    const transferRoute = `${fromLedger} → ${toLedger}`;
+                    const transferRoute = `${fromLedger} -> ${toLedger}`;
+                    const transferLedgerLabel = isTransferOut
+                      ? fromLedger
+                      : isTransferIn
+                      ? toLedger
+                      : legLedger;
+                    const amountColor = !hasFullAccess
+                      ? '#777'
+                      : tx.amount >= 0
+                      ? 'var(--income)'
+                      : 'var(--expense)';
 
                     return (
                       <React.Fragment key={tx.id}>
@@ -546,50 +583,54 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                             }
                           }}
                         >
-                          <span className="who" title={memberName}>
-                            <PixelDot color={dotColor} />
-                            <span>{memberName}</span>
-                          </span>
+                          {isTransfer ? (
+                            <span className="who" aria-hidden="true" />
+                          ) : (
+                            <span className="who" title={memberName}>
+                              <PixelDot color={dotColor} />
+                              <span>{memberName}</span>
+                            </span>
+                          )}
 
-                          <span className="cc" title={cat || (isTransfer ? '转账' : undefined)}>
-                            {cat || (isTransfer ? '转账' : '—')}
+                          <span className="cc" title={rowCatLabel}>
+                            {rowCatLabel}
                           </span>
 
                           <span
                             className="pg"
-                            title={
-                              isTransfer
-                                ? `${transferRoute}${noteText ? ` · ${noteText}` : ''}`
-                                : noteText || undefined
-                            }
+                            title={isTransfer ? transferLedgerLabel : noteText || undefined}
                           >
-                            {isTransfer && (
-                              <span className="pt-transfer-route">{transferRoute}</span>
+                            {isTransfer ? (
+                              <span className="pt-transfer-route">{transferLedgerLabel}</span>
+                            ) : (
+                              noteText
                             )}
-                            {noteText}
                           </span>
 
                           <span
                             className="amt"
-                            style={{
-                              color: !hasFullAccess
-                                ? '#777'
-                                : isTransfer
-                                ? 'var(--transfer)'
-                                : tx.amount >= 0
-                                ? 'var(--income)'
-                                : 'var(--expense)',
-                            }}
+                            style={{ color: amountColor }}
                             title={hasFullAccess ? '点击复制金额' : undefined}
-                            onClick={(e) => void handleCopyAmount(e, tx.id, displayAmount)}
+                            onClick={(e) => void handleCopyAmount(e, tx.id, tx.amount)}
                           >
-                            {copiedId === tx.id
-                              ? '已复制'
-                              : hasFullAccess
-                              ? isTransfer
-                                ? formatCurrency(displayAmount, false, false)
-                                : formatCurrency(tx.amount, true, false)
-                              : '***.**'}
+                            {copiedId === tx.id ? (
+                              '已复制'
+                            ) : (
+                              <SlotNumber
+                                text={
+                                  hasFullAccess
+                                    ? formatCurrency(tx.amount, true, false)
+                                    : '***.**'
+                                }
+                                animate={
+                                  entryAnimating &&
+                                  hasFullAccess &&
+                                  (rowIndexMap.get(tx.id) ?? 999) < 24
+                                }
+                                delayMs={Math.min((rowIndexMap.get(tx.id) ?? 0) * 16, 260)}
+                                durationMs={480}
+                              />
+                            )}
                           </span>
                         </div>
 
@@ -606,7 +647,9 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                               }}
                             >
                               <b style={{ fontSize: 12 }}>
-                                {noteText || (isTransfer ? `转账 · ${transferRoute}` : cat) || '交易详情'}
+                                {noteText ||
+                                  (isTransfer ? `${rowCatLabel} · ${transferLedgerLabel}` : cat) ||
+                                  '交易详情'}
                               </b>
                               <button
                                 type="button"
@@ -628,27 +671,36 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                 <span style={{ color: '#666' }}>日期: </span>
                                 <span style={{ fontFamily: 'var(--font-mono)' }}>{tx.date}</span>
                               </div>
-                              <div>
-                                <span style={{ color: '#666' }}>成员: </span>
-                                <b>{tx.member || '—'}</b>
-                              </div>
+                              {!isTransfer && (
+                                <div>
+                                  <span style={{ color: '#666' }}>成员: </span>
+                                  <b>{tx.member || '—'}</b>
+                                </div>
+                              )}
                               <div>
                                 <span style={{ color: '#666' }}>类型: </span>
-                                <b>{isTransfer ? '转账' : tx.amount >= 0 ? '收入' : '支出'}</b>
+                                <b>
+                                  {isTransferIn
+                                    ? '转账 · 收入（转入）'
+                                    : isTransferOut
+                                    ? '转账 · 支出（转出）'
+                                    : tx.amount >= 0
+                                    ? '收入'
+                                    : '支出'}
+                                </b>
                               </div>
                               <div>
                                 <span style={{ color: '#666' }}>分类: </span>
-                                <b>{cat || (isTransfer ? '转账' : '—')}</b>
+                                <b>{cat || rowCatLabel}</b>
                               </div>
-                              {isTransfer ? (
+                              <div>
+                                <span style={{ color: '#666' }}>账本: </span>
+                                <span>{legLedger}</span>
+                              </div>
+                              {isTransfer && (
                                 <div>
-                                  <span style={{ color: '#666' }}>转账账本: </span>
-                                  <b style={{ color: 'var(--transfer)' }}>{transferRoute}</b>
-                                </div>
-                              ) : (
-                                <div>
-                                  <span style={{ color: '#666' }}>账本: </span>
-                                  <span>{fromLedger}</span>
+                                  <span style={{ color: '#666' }}>转账路径: </span>
+                                  <span>{transferRoute}</span>
                                 </div>
                               )}
                               <div>
@@ -658,14 +710,12 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                     fontFamily: 'var(--font-mono)',
                                     color: !hasFullAccess
                                       ? '#666'
-                                      : isTransfer
-                                      ? 'var(--transfer)'
                                       : tx.amount >= 0
                                       ? 'var(--income)'
                                       : 'var(--expense)',
                                   }}
                                 >
-                                  {isTransfer ? maskVal(displayAmount) : maskVal(tx.amount, true)}
+                                  {maskVal(tx.amount, true)}
                                 </b>
                               </div>
                               {tx.title && (
@@ -685,7 +735,7 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
                                 fontFamily: 'var(--font-mono)',
                               }}
                             >
-                              ID: {tx.id}
+                              ID: {tx.sourceId || tx.id}
                             </div>
                           </div>
                         )}
@@ -698,49 +748,35 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
         </div>
 
         <div className="pt-statusbar">
-          <span>
-            共计 {stats.count} 笔 · 收入{' '}
-            <span style={{ color: hasFullAccess ? 'var(--income)' : undefined }}>
-              {maskVal(stats.totalIncome, true)}
-            </span>{' '}
-            · 支出{' '}
-            <span style={{ color: hasFullAccess ? 'var(--expense)' : undefined }}>
-              {maskVal(-stats.totalExpense)}
-            </span>
-            {stats.totalTransfer > 0 && (
-              <>
-                {' '}· 转账{' '}
-                <span style={{ color: hasFullAccess ? 'var(--transfer)' : undefined }}>
-                  {maskVal(stats.totalTransfer)}
-                </span>
-              </>
-            )}
-          </span>
+          <b
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: !hasFullAccess
+                ? undefined
+                : stats.netBalance >= 0
+                ? 'var(--income)'
+                : 'var(--expense)',
+            }}
+          >
+            净计:{' '}
+            <SlotNumber
+              text={maskVal(stats.netBalance, true)}
+              animate={entryAnimating && hasFullAccess}
+              delayMs={100}
+              durationMs={560}
+            />
+          </b>
           <span
             style={{
               marginLeft: 'auto',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 10,
+              gap: 4,
               whiteSpace: 'nowrap',
             }}
           >
-            <b
-              style={{
-                fontFamily: 'var(--font-mono)',
-                color: !hasFullAccess
-                  ? undefined
-                  : stats.netBalance >= 0
-                  ? 'var(--income)'
-                  : 'var(--expense)',
-              }}
-            >
-              净计: {maskVal(stats.netBalance, true)}
-            </b>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <PixelDot color={isAdmin ? '#333399' : hasFullAccess ? '#336633' : '#999999'} />
-              {accessBadge}
-            </span>
+            <PixelDot color={isAdmin ? '#333399' : hasFullAccess ? '#336633' : '#999999'} />
+            {accessBadge}
           </span>
         </div>
       </PlatinumWindow>

@@ -1,6 +1,7 @@
 import {
   ensureActivityLogsTable,
   getCorsHeaders,
+  getTableNames,
   isAdminAuthorized,
   type SharedEnv,
 } from './_shared';
@@ -34,10 +35,11 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
   try {
     // 确保表存在
-    await ensureActivityLogsTable(env.DB);
+    await ensureActivityLogsTable(env.DB, env);
+    const { activityLogs } = getTableNames(env);
 
     const { results } = await env.DB.prepare(
-      'SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 200'
+      `SELECT * FROM ${activityLogs} ORDER BY created_at DESC LIMIT 200`
     ).all();
 
     return new Response(JSON.stringify({ success: true, data: results || [] }), {

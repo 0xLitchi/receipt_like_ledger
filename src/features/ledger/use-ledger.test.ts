@@ -5,7 +5,9 @@ import {
   buildFilterOptions,
   buildMonthList,
   categoryLabel,
+  computeCategoryBarWidths,
   computeStats,
+  expandTransactionsForDisplay,
   filterTransactions,
   groupByDate,
   isTransferTransaction,
@@ -66,12 +68,10 @@ describe('filterTransactions', () => {
     expect(filterTransactions(rows, { ...base, type: 'EXPENSE' })).toHaveLength(1);
   });
 
-  it('filters by summary key (杂项 splits by subcategory)', () => {
+  it('filters by exact subcategory summary key', () => {
     expect(filterTransactions(rows, { ...base, category: '杂项/麻将' })).toHaveLength(1);
-  });
-
-  it('filters by main category for non-杂项 rows', () => {
-    expect(filterTransactions(rows, { ...base, category: '餐饮' })).toHaveLength(1);
+    expect(filterTransactions(rows, { ...base, category: '餐饮/早餐' })).toHaveLength(1);
+    expect(filterTransactions(rows, { ...base, category: '餐饮' })).toHaveLength(0);
   });
 
   it('filters by member and keyword', () => {
@@ -85,16 +85,15 @@ describe('filterTransactions', () => {
 });
 
 describe('summaryKey', () => {
-  it('uses category for normal rows', () => {
-    expect(summaryKey(t({ category: '餐饮', subcategory: '早餐' }))).toBe('餐饮');
-  });
-
-  it('splits 杂项 by subcategory', () => {
+  it('is precise to subcategory for all categories', () => {
+    expect(summaryKey(t({ category: '餐饮', subcategory: '早餐' }))).toBe('餐饮/早餐');
+    expect(summaryKey(t({ category: '住房', subcategory: '房租' }))).toBe('住房/房租');
     expect(summaryKey(t({ category: '杂项', subcategory: '麻将' }))).toBe('杂项/麻将');
   });
 
-  it('keeps bare 杂项 without subcategory', () => {
+  it('falls back to main category when subcategory is empty', () => {
     expect(summaryKey(t({ category: '杂项', subcategory: '' }))).toBe('杂项');
+    expect(summaryKey(t({ category: '餐饮', subcategory: '' }))).toBe('餐饮');
   });
 });
 
@@ -228,32 +227,119 @@ describe('ledger & transfer helpers', () => {
     expect(matchesLedgerFilter(xfer, '投资')).toBe(false);
   });
 
-  it('filters transfers separately from income and expense', () => {
+  it('expands transfers into an income leg for to_ledger and an expense leg for ledger without member', () => {
     const rows = [
-      t({ title: '工资', amount: 10000, ledger: 'Default' }),
-      t({ title: '餐费', amount: -50, ledger: 'Default' }),
-      t({ title: '存钱', amount: 2000, ledger: 'Default', tx_type: 'transfer', to_ledger: '储蓄', category: '转账' }),
-      t({ title: '利息', amount: 80, ledger: '储蓄' }),
+      t({ id: 'n1', title: '工资', amount: 10000, ledger: 'Default', category: '收入', subcategory: '工资' }),
+      t({
+        id: 'x1',
+        title: '月度定存',
+        amount: 2000,
+        member: '荔枝',
+        ledger: 'Default',
+        tx_type: 'transfer',
+        to_ledger: '储蓄',
+        category: '转账',
+        subcategory: '储蓄划转',
+      }),
     ];
 
-    expect(filterTransactions(rows, { ...base, type: 'TRANSFER' })).toHaveLength(1);
-    expect(filterTransactions(rows, { ...base, type: 'INCOME' })).toHaveLength(2);
-    expect(filterTransactions(rows, { ...base, type: 'EXPENSE' })).toHaveLength(1);
-    expect(filterTransactions(rows, { ...base, ledger: 'Default' })).toHaveLength(3);
-    expect(filterTransactions(rows, { ...base, ledger: '储蓄' })).toHaveLength(2);
-    expect(filterTransactions(rows, { ...base, ledger: '储蓄', type: 'TRANSFER' })).toHaveLength(1);
+    const expanded = expandTransactionsForDisplay(rows);
+    expect(expanded).toHaveLength(3);
+
+    const [normal, legIn, legOut] = expanded;
+    expect(normal.id).toBe('n1');
+    expect(legIn).toMatchObject({
+      id: 'x1::in',
+      sourceId: 'x1',
+      transferLeg: 'in',
+      ledger: '储蓄',
+      counterpartyLedger: 'Default',
+      amount: 2000,
+      member: '',
+    });
+    expect(legOut).toMatchObject({
+      id: 'x1::out',
+      sourceId: 'x1',
+      transferLeg: 'out',
+      ledger: 'Default',
+      counterpartyLedger: '储蓄',
+      amount: -2000,
+      member: '',
+    });
   });
 
-  it('computes totalTransfer without counting transfers in income or expense', () => {
-    const stats = computeStats([
-      t({ amount: 500 }),
-      t({ amount: -100 }),
-      t({ amount: 1000, tx_type: 'transfer', ledger: 'Default', to_ledger: '储蓄' }),
+  it('filters expanded transfer legs by ledger and type', () => {
+    const rows = expandTransactionsForDisplay([
+      t({ title: '工资', amount: 10000, ledger: 'Default', category: '收入', subcategory: '工资' }),
+      t({ title: '餐费', amount: -50, ledger: 'Default', category: '餐饮', subcategory: '午餐' }),
+      t({ title: '存钱', amount: 2000, ledger: 'Default', tx_type: 'transfer', to_ledger: '储蓄', category: '转账', subcategory: '储蓄划转' }),
+      t({ title: '利息', amount: 80, ledger: '储蓄', category: '收入', subcategory: '理财' }),
     ]);
-    expect(stats.totalIncome).toBe(500);
-    expect(stats.totalExpense).toBe(100);
-    expect(stats.totalTransfer).toBe(1000);
-    expect(stats.netBalance).toBe(400);
-    expect(stats.count).toBe(3);
+
+    expect(filterTransactions(rows, { ...base, type: 'TRANSFER' })).toHaveLength(2);
+    expect(filterTransactions(rows, { ...base, type: 'INCOME' })).toHaveLength(3); // 工资 + 利息 + 储蓄转入
+    expect(filterTransactions(rows, { ...base, type: 'EXPENSE' })).toHaveLength(2); // 餐费 + Default转出
+    expect(filterTransactions(rows, { ...base, ledger: 'Default' })).toHaveLength(3); // 工资 + 餐费 + Default转出
+    expect(filterTransactions(rows, { ...base, ledger: '储蓄' })).toHaveLength(2); // 利息 + 储蓄转入
+    expect(filterTransactions(rows, { ...base, ledger: '储蓄', type: 'TRANSFER' })).toHaveLength(1);
+    expect(filterTransactions(rows, { ...base, ledger: '储蓄', type: 'INCOME' })).toHaveLength(2);
+    expect(filterTransactions(rows, { ...base, ledger: '储蓄', type: 'EXPENSE' })).toHaveLength(0);
+  });
+
+  it('excludes transfers from ALL-ledger stats but counts them as inflow/outflow in single-ledger stats', () => {
+    const rows = expandTransactionsForDisplay([
+      t({ amount: 500, ledger: 'Default', category: '收入', subcategory: '兼职' }),
+      t({ amount: -100, ledger: 'Default', category: '餐饮', subcategory: '晚餐' }),
+      t({ amount: 1000, tx_type: 'transfer', ledger: 'Default', to_ledger: '储蓄', category: '转账', subcategory: '储蓄划转' }),
+      t({ amount: 50, ledger: '储蓄', category: '收入', subcategory: '理财' }),
+    ]);
+
+    const allStats = computeStats(filterTransactions(rows, base), 'ALL');
+    expect(allStats.totalIncome).toBe(550);
+    expect(allStats.totalExpense).toBe(100);
+    expect(allStats.netBalance).toBe(450);
+
+    const defaultStats = computeStats(filterTransactions(rows, { ...base, ledger: 'Default' }), 'Default');
+    expect(defaultStats.totalIncome).toBe(500);
+    expect(defaultStats.totalExpense).toBe(1100);
+    expect(defaultStats.netBalance).toBe(-600);
+
+    const savingsStats = computeStats(filterTransactions(rows, { ...base, ledger: '储蓄' }), '储蓄');
+    expect(savingsStats.totalIncome).toBe(1050);
+    expect(savingsStats.totalExpense).toBe(0);
+    expect(savingsStats.netBalance).toBe(1050);
+
+    // 各账本净计之和等于全部账本净计
+    expect(defaultStats.netBalance + savingsStats.netBalance).toBe(allStats.netBalance);
+  });
+});
+
+describe('computeCategoryBarWidths', () => {
+  it('preserves linear proportions when values have a small dynamic range', () => {
+    const widths = computeCategoryBarWidths([500, 250, 100]);
+    expect(widths[0]).toBeCloseTo(100, 2);
+    expect(widths[1]).toBeCloseTo(50, 2);
+    expect(widths[2]).toBeCloseTo(20, 2);
+  });
+
+  it('produces clear visual separation across multi-order-of-magnitude values without bottom clumping', () => {
+    const values = [26320.27, 3800, 850.82, 293.83, 90.93, 21.53];
+    const widths = computeCategoryBarWidths(values);
+
+    expect(widths[0]).toBeCloseTo(100, 2);
+    // 严格单调递减，且相邻梯度都有明显区分度
+    for (let i = 1; i < widths.length; i++) {
+      expect(widths[i]).toBeLessThan(widths[i - 1] - 3);
+    }
+    // 850 vs 21 之间不再被压成相同极短柱条
+    expect(widths[2] - widths[5]).toBeGreaterThan(15);
+    expect(widths[5]).toBeGreaterThanOrEqual(5.5);
+  });
+
+  it('handles empty, zero, and single-item inputs safely', () => {
+    expect(computeCategoryBarWidths([])).toEqual([]);
+    expect(computeCategoryBarWidths([0, 0])).toEqual([0, 0]);
+    expect(computeCategoryBarWidths([120])).toEqual([100]);
+    expect(computeCategoryBarWidths([100, 0])).toEqual([100, 0]);
   });
 });

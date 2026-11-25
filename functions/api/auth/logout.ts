@@ -14,7 +14,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   );
 
   if (env.DB && token) {
-    await deleteAdminSession(env.DB, token);
+    await deleteAdminSession(env.DB, token, env);
   }
 
   return new Response(JSON.stringify({ success: true, message: 'Logged out' }), {
