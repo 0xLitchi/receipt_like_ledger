@@ -2,6 +2,21 @@
    Platinum Desktop Chrome (inspired by exe.v2core.com/stats / Mac OS 8-9)
    ========================================================================== */
 
+@font-face {
+  font-family: "Fusion Pixel 12px Proportional";
+  src: url("/fonts/fusion-pixel-12px-proportional-zh_hans.otf.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Fusion Pixel 12px Monospaced";
+  src: url("/fonts/fusion-pixel-12px-monospaced-zh_hans.otf.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --black: #262626;
   --g100: #f6f6f6;
@@ -21,22 +36,12 @@
   --danger: #b91c1c;
   --ok: #15803d;
 
-  --font-ui: "Charcoal", "Chicago", "Geneva", "Lucida Grande", "Lucida Sans", Verdana,
-    -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --font-mono: Monaco, "JetBrains Mono", "Courier New", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-ui: "Fusion Pixel 12px Proportional", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+  --font-mono: "Fusion Pixel 12px Monospaced", ui-monospace, SFMono-Regular, Menlo,
+    Monaco, "Courier New", monospace;
 
   font-variant-numeric: tabular-nums;
-}
-
-@font-face {
-  font-family: "Geneva";
-  font-weight: normal;
-  src: local("Geneva");
-}
-@font-face {
-  font-family: "Geneva";
-  font-weight: bold;
-  src: local("Lucida Grande Bold"), local("Lucida Grande");
 }
 
 * {
