@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { tokenStore } from '../lib/api-client';
-import { useTransactionsQuery } from '../lib/queries';
+import { queryKeys, useTransactionsQuery } from '../lib/queries';
+import { queryClient } from '../lib/query-client';
 import {
   buildAvailableLedgers,
   buildAvailableYearMonths,
@@ -24,6 +25,16 @@ export const LedgerPage: React.FC = () => {
 
   const transactions = useMemo(() => data?.data ?? [], [data]);
   const hasFullAccess = data?.hasFullAccess ?? true;
+
+  // 兜底：本地存有会话但服务端仍判为脱敏（token 在别处签发、刚好过期、换过部署），
+  // 自动重拉一次，避免用户必须手动 F5。只触发一次，防止服务端会话无效时死循环。
+  const refetchedForSession = useRef(false);
+  useEffect(() => {
+    if (refetchedForSession.current) return;
+    if (!isAdmin || !data || data.hasFullAccess) return;
+    refetchedForSession.current = true;
+    void refetch();
+  }, [isAdmin, data, refetch]);
 
   // All available ledgers (Default always included)
   const ledgers = useMemo(() => buildAvailableLedgers(transactions), [transactions]);
@@ -147,6 +158,9 @@ export const LedgerPage: React.FC = () => {
         onClose={() => setShowAuthModal(false)}
         onSuccess={() => {
           setShowAuthModal(false);
+          // 登录前缓存的脱敏数据（title='***'、amount=0、hasFullAccess=false）必须丢弃：
+          // staleTime 内 AdminPage 与返回的首页都会直接复用它，导致金额仍被遮罩。
+          queryClient.removeQueries({ queryKey: queryKeys.transactions });
           navigate('/admin');
         }}
       />

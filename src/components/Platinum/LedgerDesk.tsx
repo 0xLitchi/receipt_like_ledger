@@ -505,8 +505,29 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
               );
             })}
 
-            <span className="pt-strip-meta">
-              共 {stats.count} 笔
+            <span className="pt-strip-net">
+              <span>共 {stats.count} 笔</span>
+              <b
+                style={{
+                  color: !hasFullAccess
+                    ? '#666'
+                    : stats.netBalance >= 0
+                    ? 'var(--income)'
+                    : 'var(--expense)',
+                }}
+              >
+                净计:{' '}
+                <SlotNumber
+                  text={maskVal(stats.netBalance, true)}
+                  animate={entryAnimating && hasFullAccess}
+                  delayMs={100}
+                  durationMs={560}
+                />
+              </b>
+              <span className="pt-strip-badge">
+                <PixelDot color={isAdmin ? '#333399' : hasFullAccess ? '#336633' : '#999999'} />
+                {accessBadge}
+              </span>
             </span>
           </div>
 
@@ -717,38 +738,6 @@ export const LedgerDesk: React.FC<LedgerDeskProps> = ({
           )}
         </div>
 
-        <div className="pt-statusbar">
-          <b
-            style={{
-              fontFamily: 'var(--font-mono)',
-              color: !hasFullAccess
-                ? undefined
-                : stats.netBalance >= 0
-                ? 'var(--income)'
-                : 'var(--expense)',
-            }}
-          >
-            净计:{' '}
-            <SlotNumber
-              text={maskVal(stats.netBalance, true)}
-              animate={entryAnimating && hasFullAccess}
-              delayMs={100}
-              durationMs={560}
-            />
-          </b>
-          <span
-            style={{
-              marginLeft: 'auto',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <PixelDot color={isAdmin ? '#333399' : hasFullAccess ? '#336633' : '#999999'} />
-            {accessBadge}
-          </span>
-        </div>
         </PlatinumWindow>
       </div>
     </div>
